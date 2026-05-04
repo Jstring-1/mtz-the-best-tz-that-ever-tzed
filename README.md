@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# mtz.city
 
-## Getting Started
+Hyperlocal info dashboard for Martinez, CA — weather, alerts, news, events, places, civic info.
+Configurable via env vars to retarget any city.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router, TypeScript) — server components, no client JS by default
+- Postgres on Railway — single shared cache, populated by `/api/cron`
+- `postgres` (postgres.js) DB client
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local      # fill in DATABASE_URL + API keys
+npm install
+npm run dev                      # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit `/admin` and click **Run all** once to warm the cache from a cold DB.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Configuring a new location
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Set these env vars on the Railway service (or `.env.local` locally) — restart picks them up:
 
-## Learn More
+| Var | Example | Notes |
+| --- | --- | --- |
+| `SITE_NAME`        | `mtz.city`             | header logo + page titles |
+| `LOCATION_NAME`    | `Martinez, CA`         | shown in copy |
+| `LOCATION_SHORT`   | `Martinez`             | shown in headings |
+| `LAT`              | `38.01`                | drives every weather API |
+| `LON`              | `-122.14`              | "" |
+| `TIMEZONE`         | `America/Los_Angeles`  | IANA tz name |
+| `NOAA_BUOYS`       | `UPBC1,MZXC1`          | optional, comma-separated |
+| `PURPLEAIR_SENSOR` | `156379`               | optional, single sensor id |
+| `NEWS_RSS_URLS`    | `https://…,https://…`  | comma-separated RSS list |
+| `FOURSQUARE_CATEGORIES` | `10000,13000,…`   | comma-separated cat ids |
+| `FOURSQUARE_RADIUS_M`   | `5000`            | search radius in meters |
+| `TICKETMASTER_GENRES`   | `roots,indie,…`   | classification names |
 
-To learn more about Next.js, take a look at the following resources:
+NOAA gridpoint (`MTR/97,114`) is auto-resolved at runtime from `LAT`/`LON` — don't hardcode it.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Background refresh buckets
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`/api/cron?bucket=<5m|15m|1h|4h|12h|all>` runs the matching jobs:
 
-## Deploy on Vercel
+- **5m**  — NOAA active alerts
+- **15m** — WeatherAPI current, PurpleAir, NOAA buoys
+- **1h**  — NOAA forecast/hourly/aviation, WeatherAPI marine/forecast, OpenWeather, WeatherStack, USGS earthquakes, eBird, NOAA WeatherStory
+- **4h**  — News RSS, NOAA water RSS, stocks
+- **12h** — Foursquare places, Ticketmaster events
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Pages render purely from the cache — no live API calls on user-facing routes.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deploy on Railway
+
+1. Service → **+ New** → **GitHub Repo** → pick this repo.
+2. **Variables**: add a Reference for `DATABASE_URL` pointing at the Postgres plugin, then paste the API keys + LOCATION vars.
+3. Build command (auto-detected): `npm run build`.  Start: `npm run start`.
+4. Add Railway cron entries hitting `/api/cron?bucket=…` at the matching cadences.
