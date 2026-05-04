@@ -1,5 +1,6 @@
 import { getFeeds } from '@/lib/cache';
 import { getLocation } from '@/lib/location';
+import { relativeFromUnixSeconds } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -22,7 +23,7 @@ export default async function NewsPage() {
           {feeds.map((f) => (
             <article className="news-item" key={f.ts}>
               <h3><a href={f.link} target="_blank" rel="noopener">{f.title}</a></h3>
-              <div className="meta">{relativeTime(f.ts)} · {hostOf(f.link)}</div>
+              <div className="meta">{relativeFromUnixSeconds(f.ts)} · {hostOf(f.link)}</div>
               <div className="body" dangerouslySetInnerHTML={{ __html: f.body }} />
             </article>
           ))}
@@ -34,16 +35,6 @@ export default async function NewsPage() {
       </div>
     </div>
   );
-}
-
-function relativeTime(ts: string): string {
-  const sec = Number(ts);
-  if (!sec) return '';
-  const diff = Math.floor(Date.now() / 1000) - sec;
-  if (diff < 60)     return `${diff}s ago`;
-  if (diff < 3600)   return `${Math.round(diff / 60)} min ago`;
-  if (diff < 86400)  return `${Math.round(diff / 3600)} hr ago`;
-  return `${Math.round(diff / 86400)} d ago`;
 }
 
 function hostOf(url: string): string {

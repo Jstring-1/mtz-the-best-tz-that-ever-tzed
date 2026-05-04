@@ -1,6 +1,7 @@
 import { getJson, getAllJsonTimestamps } from '@/lib/cache';
 import { getLocation } from '@/lib/location';
 import type { BirdRow, QuakeRow } from '@/lib/types';
+import { relativeFromIso } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -23,7 +24,7 @@ export default async function InfoPage() {
       <p className="muted">Civic info plus rotating eBird notable sightings and recent CA earthquakes.</p>
 
       <h2>Birds spotted nearby
-        {ts['eBird'] && <span className="ts">· eBird notable · checked {ts['eBird']}</span>}
+        {ts['eBird'] && <span className="ts">· eBird notable · checked {relativeFromIso(ts['eBird'])}</span>}
       </h2>
       {birdList.length === 0 ? (
         <div className="empty">No bird sightings cached yet. Run the 1h bucket on <a href="/admin">/admin</a>.</div>
@@ -40,7 +41,7 @@ export default async function InfoPage() {
       )}
 
       <h2>Recent CA earthquakes
-        {ts['USGS_earthquakes'] && <span className="ts">· USGS · checked {ts['USGS_earthquakes']}</span>}
+        {ts['USGS_earthquakes'] && <span className="ts">· USGS · checked {relativeFromIso(ts['USGS_earthquakes'])}</span>}
       </h2>
       {quakeList.length === 0 ? (
         <div className="empty">No earthquake data cached yet. Run the 1h bucket on <a href="/admin">/admin</a>.</div>

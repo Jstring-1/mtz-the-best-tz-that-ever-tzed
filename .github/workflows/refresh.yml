@@ -1,0 +1,56 @@
+name: refresh cache
+
+# Hits /api/cron on the deployed site at the cadences listed below.
+# GitHub schedules drift by a couple of minutes; that's fine for this site.
+#
+# Schedule (UTC):
+#   */15 * * * *   — 5m + 15m buckets (alerts, current conditions, AQ, buoys)
+#   0    * * * *   — 1h bucket  (forecasts, marine, eBird, USGS, etc.)
+#   0 */4 * * *    — 4h bucket  (news RSS, water RSS, stocks)
+#   0 */12 * * *   — 12h bucket (Foursquare places, Ticketmaster events)
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+    - cron: '0 * * * *'
+    - cron: '0 */4 * * *'
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+    inputs:
+      bucket:
+        description: 'Bucket to run'
+        required: true
+        default: 'all'
+        type: choice
+        options: [5m, 15m, 1h, 4h, 12h, all]
+
+permissions:
+  contents: read
+
+env:
+  SITE: https://mtz.city
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Pick buckets for this run
+        id: pick
+        run: |
+          case "${{ github.event.schedule }}" in
+            "*/15 * * * *") echo "buckets=5m 15m"  >> "$GITHUB_OUTPUT" ;;
+            "0 * * * *")    echo "buckets=1h"     >> "$GITHUB_OUTPUT" ;;
+            "0 */4 * * *")  echo "buckets=4h"     >> "$GITHUB_OUTPUT" ;;
+            "0 */12 * * *") echo "buckets=12h"    >> "$GITHUB_OUTPUT" ;;
+            *)              echo "buckets=${{ github.event.inputs.bucket || 'all' }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Hit cron endpoint
+        run: |
+          set -e
+          for b in ${{ steps.pick.outputs.buckets }}; do
+            echo ">>> bucket=$b"
+            curl -sS -fL --max-time 120 "$SITE/api/cron?bucket=$b"
+            echo
+          done

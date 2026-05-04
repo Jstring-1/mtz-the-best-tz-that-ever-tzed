@@ -1,6 +1,7 @@
 import { getLocation } from '@/lib/location';
 import { getJson, getMisc, getNoaaHourly, getAllJsonTimestamps } from '@/lib/cache';
 import type { NoaaAlertsBag, NoaaForecastPeriod, NoaaAlert } from '@/lib/types';
+import { relativeFromIso } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -83,7 +84,7 @@ export default async function WeatherPage() {
         {localAlerts.length > 0 && (
           <>
             <h2>Active alerts (local)
-              {ts['NOAA_alerts'] && <span className="ts">· checked {ts['NOAA_alerts']}</span>}
+              {ts['NOAA_alerts'] && <span className="ts">· checked {relativeFromIso(ts['NOAA_alerts'])}</span>}
             </h2>
             <div className="stack">
               {localAlerts.map((a, i) => (
@@ -108,7 +109,7 @@ export default async function WeatherPage() {
 
         {/* ---- Right now ---- */}
         <h2>Right now in {loc.short}
-          {ts['weatherAPI'] && <span className="ts">· checked {ts['weatherAPI']}</span>}
+          {ts['weatherAPI'] && <span className="ts">· checked {relativeFromIso(ts['weatherAPI'])}</span>}
         </h2>
         <div className="grid grid-auto-sm">
           <Tile cls="hot" label="Temperature" value={cur?.temp_f != null ? `${cur.temp_f}°F` : '—'} sub={cur?.feelslike_f != null ? `Feels like ${cur.feelslike_f}°F` : ''} />
@@ -128,7 +129,7 @@ export default async function WeatherPage() {
         {days.length > 0 && (
           <>
             <h2>7-day forecast
-              {ts['NOAA_gp_forecast'] && <span className="ts">· NOAA · checked {ts['NOAA_gp_forecast']}</span>}
+              {ts['NOAA_gp_forecast'] && <span className="ts">· NOAA · checked {relativeFromIso(ts['NOAA_gp_forecast'])}</span>}
             </h2>
             <div className="grid grid-auto">
               {days.map((d, i) => (

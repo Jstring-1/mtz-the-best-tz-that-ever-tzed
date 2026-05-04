@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getLocation } from '@/lib/location';
 import { getJson, getFeeds } from '@/lib/cache';
+import { relativeFromUnixSeconds } from '@/lib/time';
 import type { NoaaAlertsBag, NoaaForecastPeriod, NoaaAlert } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -68,7 +69,7 @@ export default async function MainPage() {
           ) : feeds.map((f) => (
             <article className="news-item" key={f.ts}>
               <h3><a href={f.link} target="_blank" rel="noopener">{f.title}</a></h3>
-              <div className="meta">{tsAgo(f.ts)}</div>
+              <div className="meta">{relativeFromUnixSeconds(f.ts)}</div>
             </article>
           ))}
         </div>
@@ -87,11 +88,3 @@ export default async function MainPage() {
   );
 }
 
-function tsAgo(ts: string): string {
-  const sec = Number(ts);
-  if (!sec) return '';
-  const diff = Math.floor(Date.now() / 1000) - sec;
-  if (diff < 3600)   return `${Math.max(1, Math.round(diff / 60))} min ago`;
-  if (diff < 86400)  return `${Math.round(diff / 3600)} hr ago`;
-  return `${Math.round(diff / 86400)} d ago`;
-}

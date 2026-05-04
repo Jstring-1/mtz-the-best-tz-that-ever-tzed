@@ -1,6 +1,7 @@
 import { getJson, getAllJsonTimestamps } from '@/lib/cache';
 import type { ShowRow } from '@/lib/types';
 import { getLocation } from '@/lib/location';
+import { relativeFromIso } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -27,7 +28,7 @@ export default async function EventsPage() {
       <h1>Events near {loc.short}</h1>
       <p className="muted">Live music &amp; shows pulled from Ticketmaster within ~80 km, sorted by date.</p>
 
-      {ts['TM_shows'] && <p className="muted" style={{ fontSize: '.8em', marginTop: 8 }}>Cache updated: {ts['TM_shows']}</p>}
+      {ts['TM_shows'] && <p className="muted" style={{ fontSize: '.8em', marginTop: 8 }}>Cache updated {relativeFromIso(ts['TM_shows'])}</p>}
 
       {list.length === 0 ? (
         <div className="empty" style={{ marginTop: 24 }}>

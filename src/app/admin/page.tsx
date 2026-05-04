@@ -1,4 +1,5 @@
 import { getAllJsonTimestamps, getRowCounts } from '@/lib/cache';
+import { relativeFromIso } from '@/lib/time';
 import AdminButtons from './AdminButtons';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ export default async function AdminPage() {
           <thead><tr><th>id</th><th>updated at</th></tr></thead>
           <tbody>
             {Object.entries(timestamps).map(([id, ts]) => (
-              <tr key={id}><td className="k" style={{ color: 'gold' }}>{id}</td><td className="v">{ts}</td></tr>
+              <tr key={id}><td className="k" style={{ color: 'gold' }}>{id}</td><td className="v">{relativeFromIso(ts)} <span className="muted" style={{ fontSize: '.8em' }}>({ts})</span></td></tr>
             ))}
           </tbody>
         </table>
