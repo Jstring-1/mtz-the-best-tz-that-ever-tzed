@@ -341,24 +341,41 @@ async function twelvedataStocks(json: Record<string, unknown>) {
 }
 
 async function foursquarePlaces(json: Record<string, unknown>) {
+  // Foursquare retired the legacy v3 OAuth-style API in 2024.  Service API keys
+  // require the new endpoint, "Bearer" auth prefix, and X-Places-Api-Version header.
+  // Reference: github.com/foursquare/foursquare-places-mcp (official MCP sample).
   const loc = getLocation();
   const qs = `ll=${loc.lat},${loc.lon}&radius=${loc.foursquareRadiusM}&categories=${loc.foursquareCategories}&exclude_all_chains=true&sort=RATING&limit=50`;
-  const headers = { Authorization: process.env.FOURSQUARE_KEY ?? '', Accept: 'application/json' };
-  const text = await fetchText(`https://api.foursquare.com/v3/places/search?${qs}`, { headers });
+  const headers = {
+    Authorization: `Bearer ${process.env.FOURSQUARE_KEY ?? ''}`,
+    'X-Places-Api-Version': '2025-02-05',
+    Accept: 'application/json',
+  };
+  const text = await fetchText(`https://places-api.foursquare.com/places/search?${qs}`, { headers });
   json.four_sq = text;
-  type FsqResp = { results?: Array<{ fsq_id: string; name?: string; location?: { formatted_address?: string; address?: string }; categories?: Array<{ name?: string; icon?: { prefix?: string; suffix?: string } }>; distance?: number }> };
+  type FsqPlace = {
+    fsq_place_id?: string;        // new API
+    fsq_id?: string;              // legacy fallback
+    name?: string;
+    location?: { formatted_address?: string; address?: string };
+    categories?: Array<{ name?: string; icon?: { prefix?: string; suffix?: string } }>;
+    distance?: number;
+  };
+  type FsqResp = { results?: FsqPlace[] };
   let parsed: FsqResp;
   try { parsed = JSON.parse(text) as FsqResp; } catch { return; }
   if (!parsed.results) return;
   const places = [];
   for (const v of parsed.results) {
+    const id = v.fsq_place_id ?? v.fsq_id;
+    if (!id) continue;
     let cats = '', images = '';
     for (const c of v.categories ?? []) {
       cats += `${c.name ?? ''}, `;
       images += `${c.icon?.prefix ?? ''}${c.icon?.suffix ?? ''}, `;
     }
     places.push({
-      fsq_id: v.fsq_id,
+      fsq_id: id,
       name: v.name ?? 'No Name Given',
       addy: v.location?.formatted_address ?? v.location?.address ?? '',
       cats,
