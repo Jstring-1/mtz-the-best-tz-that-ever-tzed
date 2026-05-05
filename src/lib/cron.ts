@@ -387,47 +387,21 @@ async function foursquarePlaces(json: Record<string, unknown>) {
 }
 
 async function ticketmasterEvents(json: Record<string, unknown>) {
+  // We cache the raw event array verbatim — every field Ticketmaster returns
+  // is preserved so the UI can extract whatever it needs (image, ticket URL,
+  // venue address, sales window, classification, etc.) at render time.
+  // No classification filter; we want every category (music + sports +
+  // arts + comedy + …) so the client can offer a filter bar.
   const loc = getLocation();
   const params = new URLSearchParams({
     apikey: process.env.TICKETMASTER_KEY ?? '',
-    size: '190',
+    size: '200',
     geoPoint: `${loc.lat},${loc.lon}`,
-    classificationName: loc.ticketmasterGenres,
+    sort: 'date,asc',
   });
   type TM = { _embedded?: { events?: Array<Record<string, unknown>> } };
   const r = await fetchJson<TM>(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);
-  const events = r._embedded?.events;
-  if (!events?.length) { json.TM_shows = 'No events found.'; return; }
-  const cityShort: Record<string, string> = {
-    'San Francisco': 'SF', 'Sacramento': 'Sac', 'San Jose': 'SJ',
-    'Santa Cruz': 'SC', 'Oakland': 'Oak', 'Berkeley': 'Brkly', 'San Leandro': 'SLndro',
-  };
-  const strip = ['images', 'type', 'id', 'test', 'url', 'locale', 'sales', 'classifications', 'pleaseNote', '_links'];
-  const shows: Record<string, unknown> = {};
-  for (const v of events) {
-    for (const u of strip) delete (v as Record<string, unknown>)[u];
-    const venues = ((v as Record<string, unknown>)._embedded as { venues?: Array<{ city?: { name?: string }; name?: string }> })?.venues ?? [];
-    const venue0 = venues[0] ?? {};
-    let city = venue0.city?.name ?? '';
-    if (cityShort[city]) city = cityShort[city];
-    const name = String((v as { name?: string }).name ?? '');
-    const localDate = ((v as Record<string, unknown>).dates as { start?: { localDate?: string } })?.start?.localDate ?? '';
-    let key = `${localDate}_${name.replace(/ /g, '_')}_${(venue0.name ?? '').replace(/ /g, '_')}`;
-    key = key.replace(/-/g, '_').replace(/['/.;:]/g, '');
-    let dd_stamp = 0;
-    if (localDate) {
-      const [y, m, d] = localDate.split('-').map((s: string) => Number(s));
-      if (y && m && d) dd_stamp = Math.floor(new Date(Date.UTC(y, m - 1, d, 1, 0, 0)).getTime() / 1000);
-    }
-    shows[key] = {
-      date: dd_stamp,
-      band: name,
-      venue: (venue0.name ?? '').replace(/^The /, ''),
-      city,
-      distance: typeof (v as Record<string, unknown>).distance === 'number' ? `${Math.round((v as { distance: number }).distance)}m` : '',
-    };
-  }
-  json.TM_shows = shows;
+  json.TM_shows = r._embedded?.events ?? [];
 }
 
 // ---- Public dispatcher --------------------------------------------------

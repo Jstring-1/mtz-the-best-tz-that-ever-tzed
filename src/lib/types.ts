@@ -92,12 +92,31 @@ export interface QuakeRow {
   url: string;
 }
 
-export interface ShowRow {
-  date: number;
-  band: string;
-  venue: string;
-  city: string;
-  distance: string;
+// Raw Ticketmaster event shape (only the fields we touch — Ticketmaster
+// returns more, and we preserve those untyped on `extra`).
+export interface TmImage  { url?: string; ratio?: string; width?: number; height?: number }
+export interface TmVenue  { name?: string; city?: { name?: string }; state?: { name?: string; stateCode?: string }; address?: { line1?: string; line2?: string }; postalCode?: string; url?: string; location?: { latitude?: string; longitude?: string } }
+export interface TmClassification { primary?: boolean; segment?: { name?: string }; genre?: { name?: string }; subGenre?: { name?: string } }
+export interface TmEvent {
+  id?: string;
+  name?: string;
+  url?: string;
+  pleaseNote?: string;
+  info?: string;
+  distance?: number;
+  units?: string;
+  images?: TmImage[];
+  classifications?: TmClassification[];
+  dates?: {
+    start?: { localDate?: string; localTime?: string; dateTime?: string };
+    timezone?: string;
+    status?: { code?: string };
+  };
+  sales?: {
+    public?: { startDateTime?: string; endDateTime?: string };
+  };
+  priceRanges?: Array<{ type?: string; currency?: string; min?: number; max?: number }>;
+  _embedded?: { venues?: TmVenue[]; attractions?: Array<{ name?: string; url?: string; images?: TmImage[] }> };
 }
 
 export type ApisJsonId =
