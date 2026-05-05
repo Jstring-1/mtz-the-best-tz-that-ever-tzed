@@ -393,11 +393,15 @@ async function ticketmasterEvents(json: Record<string, unknown>) {
   // No classification filter; we want every category (music + sports +
   // arts + comedy + …) so the client can offer a filter bar.
   const loc = getLocation();
+  // Future events only.  Use today's UTC date at 00:00 — Ticketmaster
+  // accepts ISO 8601 with seconds + Z, no millis.
+  const startDateTime = `${new Date().toISOString().slice(0, 10)}T00:00:00Z`;
   const params = new URLSearchParams({
     apikey: process.env.TICKETMASTER_KEY ?? '',
     size: '200',
     geoPoint: `${loc.lat},${loc.lon}`,
     sort: 'date,asc',
+    startDateTime,
   });
   type TM = { _embedded?: { events?: Array<Record<string, unknown>> } };
   const r = await fetchJson<TM>(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);

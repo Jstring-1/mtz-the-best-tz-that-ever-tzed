@@ -23,21 +23,33 @@ export default function EventsList({ events, timezone }: Props) {
   const dlgRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState<TmEvent | null>(null);
 
+  // Drop anything that's already in the past.  Defensive — the cron should
+  // already be filtering on startDateTime — but cache rows can outlive a
+  // schedule change.  Allow 6 hours of grace so events still in progress
+  // tonight don't disappear at midnight UTC.
+  const upcoming = useMemo(() => {
+    const cutoff = Math.floor(Date.now() / 1000) - 6 * 3600;
+    return events.filter((e) => {
+      const ts = toEpoch(e);
+      return ts == null || ts >= cutoff;
+    });
+  }, [events]);
+
   // Derive the set of segments that actually have events so we only render
   // filter buttons for categories present in the data.
   const segments = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const e of events) {
+    for (const e of upcoming) {
       const s = primarySegment(e) || 'Other';
       counts[s] = (counts[s] ?? 0) + 1;
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [events]);
+  }, [upcoming]);
 
   const filtered = useMemo(() => {
-    const list = filter === 'all' ? events : events.filter((e) => (primarySegment(e) || 'Other') === filter);
+    const list = filter === 'all' ? upcoming : upcoming.filter((e) => (primarySegment(e) || 'Other') === filter);
     return [...list].sort((a, b) => (toEpoch(a) ?? 0) - (toEpoch(b) ?? 0));
-  }, [events, filter]);
+  }, [upcoming, filter]);
 
   // Group by month label.
   const groups = useMemo(() => {
@@ -65,7 +77,7 @@ export default function EventsList({ events, timezone }: Props) {
           className={`event-filter ${filter === 'all' ? 'active' : ''}`}
           onClick={() => setFilter('all')}
         >
-          All <span className="count">{events.length}</span>
+          All <span className="count">{upcoming.length}</span>
         </button>
         {segments.map(([seg, count]) => (
           <button
