@@ -19,11 +19,19 @@ interface PurpleAir { sensor?: { 'pm2.5'?: number } }
 
 export default async function WeatherStrip() {
   const loc = getLocation();
-  const [wxNow, wxForecast, purpleAir] = await Promise.all([
-    getJson<WxNow>('weatherAPI'),
-    getJson<WxForecast>('weatherAPI_forecast'),
-    loc.purpleAirSensor ? getJson<PurpleAir>(`purple_air_${loc.purpleAirSensor}`) : Promise.resolve(null),
-  ]);
+  // Defensive: never let a DB hiccup blank out the strip on every page.
+  let wxNow: WxNow | null = null;
+  let wxForecast: WxForecast | null = null;
+  let purpleAir: PurpleAir | null = null;
+  try {
+    [wxNow, wxForecast, purpleAir] = await Promise.all([
+      getJson<WxNow>('weatherAPI'),
+      getJson<WxForecast>('weatherAPI_forecast'),
+      loc.purpleAirSensor ? getJson<PurpleAir>(`purple_air_${loc.purpleAirSensor}`) : Promise.resolve(null),
+    ]);
+  } catch (e) {
+    console.error('WeatherStrip cache read failed:', e);
+  }
 
   const cur = wxNow?.current ?? null;
   const astro = wxForecast?.forecast?.forecastday?.[0]?.astro ?? null;
