@@ -27,6 +27,7 @@
   --link:         cornflowerblue;
   --link-hover:   #fff;
   --hdr-h:        56px;
+  --strip-h:      32px;
   --maxw:         1400px;
   --gap:          12px;
   --radius:       6px;
@@ -59,7 +60,7 @@ p { margin: 0; }
 /* --- Header / nav ------------------------------------------------------- */
 
 .site-hdr {
-  position: fixed; top: 0; left: 0; width: 100%;
+  position: fixed; top: var(--strip-h); left: 0; width: 100%;
   height: var(--hdr-h);
   background: #000;
   border-bottom: 1px solid var(--border);
@@ -88,7 +89,7 @@ p { margin: 0; }
 
 /* --- Page wrapper / typography ----------------------------------------- */
 
-main { padding-top: var(--hdr-h); display: block; }
+main { padding-top: calc(var(--hdr-h) + var(--strip-h)); display: block; }
 .page {
   max-width: var(--maxw);
   margin: 0 auto;
@@ -164,17 +165,25 @@ main { padding-top: var(--hdr-h); display: block; }
 .tile.violet .value { color: var(--accent-violet); }
 
 
-/* --- Top weather strip (under the header on the weather page) --------- */
+/* --- Top weather strip (sits above the site header, every page) ------- */
 
 .wx-strip {
-  display: flex; flex-wrap: wrap;
+  position: fixed; top: 0; left: 0; width: 100%;
+  height: var(--strip-h);
+  background: #000;
+  z-index: 1001;
+  display: flex; flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  gap: 14px; padding: 10px 24px;
+  gap: 10px; padding: 0 16px;
   border-bottom: 1px solid var(--border);
-  font-size: .9em;
+  font-size: .72em;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
 }
-.wx-strip img { height: 26px; }
+.wx-strip::-webkit-scrollbar { display: none; }
+.wx-strip img { height: 18px; }
 .wx-strip .clock { color: wheat; }
 .wx-strip .gold { color: gold; }
 .wx-strip .red { color: indianred; }

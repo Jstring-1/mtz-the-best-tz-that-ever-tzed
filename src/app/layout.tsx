@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Source_Code_Pro, Inter } from 'next/font/google';
 import { getLocation } from '@/lib/location';
 import Header from '@/components/Header';
+import WeatherStrip from '@/components/WeatherStrip';
 import './globals.css';
 
 const mono = Source_Code_Pro({ subsets: ['latin'], weight: ['200', '400', '600', '800'], variable: '--font-mono' });
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${mono.variable} ${sans.variable}`}>
       <body>
+        <WeatherStrip />
         <Header />
         <main>{children}</main>
         <footer className="site-ftr">
