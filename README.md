@@ -8,6 +8,20 @@ Configurable via env vars to retarget any city.
 - Next.js 16 (App Router, TypeScript) — server components, no client JS by default
 - Postgres on Railway — single shared cache, populated by `/api/cron`
 - `postgres` (postgres.js) DB client
+- GitHub Actions (`.github/workflows/refresh.yml`) drives the cron buckets
+
+## UI layout
+
+- **Top weather strip** — fixed at the top of every page, sits above the site
+  header. Reads cached current conditions (temp, wind, humidity, AQI, pressure,
+  sunrise/sunset). Component: `src/components/WeatherStrip.tsx`.
+- **Site header** — logo + nav, fixed below the strip. Component:
+  `src/components/Header.tsx`.
+- **Pages** — `/` (landing, not in nav), `/weather`, `/news`, `/events`,
+  `/places`, `/info`, `/admin` (manual cron triggers, unsecured).
+- One global stylesheet at `src/app/globals.css` — reusable classes only,
+  no CSS modules or Tailwind. CSS variables `--strip-h` and `--hdr-h` size
+  the two fixed bars; `main` pads itself by their sum.
 
 ## Local development
 
@@ -51,10 +65,18 @@ NOAA gridpoint (`MTR/97,114`) is auto-resolved at runtime from `LAT`/`LON` — d
 - **12h** — Foursquare places, Ticketmaster events
 
 Pages render purely from the cache — no live API calls on user-facing routes.
+Ticketmaster events are stored raw (full upstream JSON), filtered/shaped at
+render time. Past events are filtered both at the API call (startDateTime)
+and at render (now − 6h cutoff).
+
+Schedules live in `.github/workflows/refresh.yml`. Manual triggers via
+`/admin`.
 
 ## Deploy on Railway
 
 1. Service → **+ New** → **GitHub Repo** → pick this repo.
 2. **Variables**: add a Reference for `DATABASE_URL` pointing at the Postgres plugin, then paste the API keys + LOCATION vars.
 3. Build command (auto-detected): `npm run build`.  Start: `npm run start`.
-4. Add Railway cron entries hitting `/api/cron?bucket=…` at the matching cadences.
+4. Cron is driven by GitHub Actions (`.github/workflows/refresh.yml`) hitting
+   `https://<your-domain>/api/cron?bucket=…` — no Railway cron needed. Set the
+   `SITE_URL` repo secret to your deployed URL.
