@@ -99,17 +99,17 @@ export default async function WeatherPage() {
           {ts['weatherAPI'] && <span className="ts">· checked {relativeFromIso(ts['weatherAPI'])}</span>}
         </h2>
         <div className="grid grid-auto-sm">
-          <Tile cls="hot" label="Temperature" value={cur?.temp_f != null ? `${cur.temp_f}°F` : '—'} sub={cur?.feelslike_f != null ? `Feels like ${cur.feelslike_f}°F` : ''} />
-          <Tile          label="Conditions"  value={cur?.condition?.text ?? '—'} sub={cur?.cloud != null ? `${cur.cloud}% cloud` : ''} />
-          <Tile cls="green" label="Humidity" value={cur?.humidity != null ? `${cur.humidity}%` : '—'} sub={cur?.dewpoint_f != null ? `Dewpoint ${cur.dewpoint_f}°F` : ''} />
-          <Tile cls="cool"  label="Wind"     value={cur?.wind_mph != null ? `${cur.wind_mph} mph` : '—'} sub={cur?.wind_dir ? `${cur.wind_dir}${cur.gust_mph != null ? ` · gust ${cur.gust_mph}` : ''}` : ''} />
-          <Tile          label="Pressure"   value={cur?.pressure_mb != null ? `${Math.round(cur.pressure_mb)} mb` : '—'} sub={cur?.pressure_in != null ? `${cur.pressure_in} inHg` : ''} />
-          <Tile          label="Visibility" value={cur?.vis_miles != null ? `${cur.vis_miles} mi` : '—'} sub="" />
-          <Tile          label="UV index"   value={cur?.uv != null ? String(cur.uv) : '—'} sub="" />
-          {pa?.['pm2.5'] != null && <Tile cls="green" label="Air quality (PM2.5)" value={String(pa['pm2.5'])} sub="PurpleAir" />}
-          {astro?.sunrise && <Tile          label="Sunrise" value={astro.sunrise} sub="" />}
-          {astro?.sunset  && <Tile cls="violet" label="Sunset" value={astro.sunset} sub="" />}
-          {astro?.moon_phase && <Tile label="Moon" value={astro.moon_phase} sub={astro.moon_illumination != null ? `${astro.moon_illumination}% lit` : ''} />}
+          <Tile cls="wx-temp"     label="Temperature" value={cur?.temp_f != null ? `${cur.temp_f}°F` : '—'} sub={cur?.feelslike_f != null ? `Feels like ${cur.feelslike_f}°F` : ''} />
+          <Tile cls="wx-cond"     label="Conditions"  value={cur?.condition?.text ?? '—'} sub={cur?.cloud != null ? `${cur.cloud}% cloud` : ''} />
+          <Tile cls="wx-humid"    label="Humidity"    value={cur?.humidity != null ? `${cur.humidity}%` : '—'} sub={cur?.dewpoint_f != null ? `Dewpoint ${cur.dewpoint_f}°F` : ''} />
+          <Tile cls="wx-wind"     label="Wind"        value={cur?.wind_mph != null ? `${cur.wind_mph} mph` : '—'} sub={cur?.wind_dir ? `${cur.wind_dir}${cur.gust_mph != null ? ` · gust ${cur.gust_mph}` : ''}` : ''} />
+          <Tile cls="wx-pressure" label="Pressure"    value={cur?.pressure_mb != null ? `${Math.round(cur.pressure_mb)} mb` : '—'} sub={cur?.pressure_in != null ? `${cur.pressure_in} inHg` : ''} />
+          <Tile cls="wx-vis"      label="Visibility"  value={cur?.vis_miles != null ? `${cur.vis_miles} mi` : '—'} sub="" />
+          <Tile cls="wx-uv"       label="UV index"    value={cur?.uv != null ? String(cur.uv) : '—'} sub="" />
+          {pa?.['pm2.5'] != null && <Tile cls="wx-aqi" label="Air quality (PM2.5)" value={String(pa['pm2.5'])} sub="PurpleAir" />}
+          {astro?.sunrise && <Tile cls="wx-sunrise" label="Sunrise" value={astro.sunrise} sub="" />}
+          {astro?.sunset  && <Tile cls="wx-sunset"  label="Sunset"  value={astro.sunset} sub="" />}
+          {astro?.moon_phase && <Tile cls="wx-moon" label="Moon" value={astro.moon_phase} sub={astro.moon_illumination != null ? `${astro.moon_illumination}% lit` : ''} />}
         </div>
 
         {/* ---- 7-day forecast ---- */}

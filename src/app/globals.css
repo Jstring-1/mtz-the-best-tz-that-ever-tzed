@@ -28,7 +28,28 @@
   --link-hover:   #fff;
   --hdr-h:        56px;
   --strip-h:      28px;
+  --hourly-h:     26px;
+  --forecast-h:   26px;
+  --top-stack-h:  calc(var(--strip-h) + var(--hourly-h) + var(--forecast-h));
   --maxw:         1400px;
+
+  /* Weather data palette — one color per data point, used site-wide.
+     Strip, hourly row, forecast row, and weather page tiles all read these. */
+  --wx-date:       wheat;
+  --wx-cond:       gold;
+  --wx-temp:       indianred;
+  --wx-feels:      orange;
+  --wx-wind:       dodgerblue;
+  --wx-humid:      forestgreen;
+  --wx-aqi:        cornflowerblue;
+  --wx-pressure:   peru;
+  --wx-visibility: tan;
+  --wx-uv:         orange;
+  --wx-dewpoint:   mediumseagreen;
+  --wx-sunrise:    gold;
+  --wx-sunset:     violet;
+  --wx-moon:       wheat;
+  --wx-precip:     cornflowerblue;
   --gap:          12px;
   --radius:       6px;
   --mono:         var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -60,7 +81,7 @@ p { margin: 0; }
 /* --- Header / nav ------------------------------------------------------- */
 
 .site-hdr {
-  position: fixed; top: var(--strip-h); left: 0; width: 100%;
+  position: fixed; top: var(--top-stack-h); left: 0; width: 100%;
   height: var(--hdr-h);
   background: #000;
   border-bottom: 1px solid var(--border);
@@ -89,7 +110,7 @@ p { margin: 0; }
 
 /* --- Page wrapper / typography ----------------------------------------- */
 
-main { padding-top: calc(var(--hdr-h) + var(--strip-h)); display: block; }
+main { padding-top: calc(var(--hdr-h) + var(--top-stack-h)); display: block; }
 .page {
   max-width: var(--maxw);
   margin: 0 auto;
@@ -163,6 +184,20 @@ main { padding-top: calc(var(--hdr-h) + var(--strip-h)); display: block; }
 .tile.hot    .value { color: var(--accent-warm); }
 .tile.green  .value { color: var(--accent-green); }
 .tile.violet .value { color: var(--accent-violet); }
+/* Weather data point colors — keep the strip palette consistent on tiles. */
+.tile.wx-temp     .value { color: var(--wx-temp); }
+.tile.wx-feels    .value { color: var(--wx-feels); }
+.tile.wx-wind     .value { color: var(--wx-wind); }
+.tile.wx-humid    .value { color: var(--wx-humid); }
+.tile.wx-aqi      .value { color: var(--wx-aqi); }
+.tile.wx-pressure .value { color: var(--wx-pressure); }
+.tile.wx-vis      .value { color: var(--wx-visibility); }
+.tile.wx-uv       .value { color: var(--wx-uv); }
+.tile.wx-dewpoint .value { color: var(--wx-dewpoint); }
+.tile.wx-sunrise  .value { color: var(--wx-sunrise); }
+.tile.wx-sunset   .value { color: var(--wx-sunset); }
+.tile.wx-moon     .value { color: var(--wx-moon); }
+.tile.wx-cond     .value { color: var(--wx-cond); }
 
 
 /* --- Top weather strip (sits above the site header, every page) ------- */
@@ -186,14 +221,44 @@ main { padding-top: calc(var(--hdr-h) + var(--strip-h)); display: block; }
 .wx-strip::-webkit-scrollbar { display: none; }
 .wx-strip img { height: 16px; }
 .wx-strip .cond { display: inline-flex; align-items: center; gap: 6px; }
-.wx-strip .clock { color: wheat; }
-.wx-strip .gold { color: gold; }
-.wx-strip .red { color: indianred; }
-.wx-strip .green { color: forestgreen; }
-.wx-strip .blue { color: cornflowerblue; }
-.wx-strip .peru { color: peru; }
-.wx-strip .violet { color: violet; }
-.wx-strip .dodger { color: dodgerblue; }
+.wx-strip .clock  { color: var(--wx-date); }
+.wx-strip .gold   { color: var(--wx-cond); }
+.wx-strip .red    { color: var(--wx-temp); }
+.wx-strip .green  { color: var(--wx-humid); }
+.wx-strip .blue   { color: var(--wx-aqi); }
+.wx-strip .peru   { color: var(--wx-pressure); }
+.wx-strip .violet { color: var(--wx-sunset); }
+.wx-strip .dodger { color: var(--wx-wind); }
+
+
+/* --- Hourly + forecast strips (fixed, every page, sit under .wx-strip) - */
+
+.wx-row-hourly, .wx-row-forecast {
+  position: fixed; left: 0; width: 100%;
+  background: #000;
+  z-index: 1001;
+  display: flex; flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: .65em;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.wx-row-hourly   { top: var(--strip-h);                          height: var(--hourly-h); }
+.wx-row-forecast { top: calc(var(--strip-h) + var(--hourly-h));  height: var(--forecast-h); }
+.wx-row-hourly .cell, .wx-row-forecast .cell {
+  display: inline-flex; gap: 5px; align-items: baseline;
+}
+.wx-row-hourly .label, .wx-row-forecast .label {
+  color: var(--text-muted);
+}
+.wx-row-hourly .cell.now { font-weight: 700; }
+.wx-row-hourly .cell.now .label { color: var(--text); }
+/* Inline temp color for strip cells (shared with tiles via --wx-temp). */
+.wx-temp { color: var(--wx-temp); }
 
 
 /* --- Hourly strip ------------------------------------------------------- */
