@@ -185,6 +185,7 @@ main { padding-top: calc(var(--hdr-h) + var(--strip-h)); display: block; }
 }
 .wx-strip::-webkit-scrollbar { display: none; }
 .wx-strip img { height: 16px; }
+.wx-strip .cond { display: inline-flex; align-items: center; gap: 6px; }
 .wx-strip .clock { color: wheat; }
 .wx-strip .gold { color: gold; }
 .wx-strip .red { color: indianred; }

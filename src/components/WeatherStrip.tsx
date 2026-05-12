@@ -42,8 +42,12 @@ export default async function WeatherStrip() {
       <span className="clock">
         {new Date().toLocaleString('en-US', { timeZone: loc.timezone, weekday: 'short', month: 'short', day: 'numeric' })}
       </span>
-      {cur?.condition?.icon && <img src={`https:${cur.condition.icon}`} alt={cur.condition.text ?? ''} />}
-      {cur?.condition?.text && <span className="gold">{cur.condition.text}</span>}
+      {(cur?.condition?.icon || cur?.condition?.text) && (
+        <span className="cond gold">
+          {cur.condition.icon && <img src={`https:${cur.condition.icon}`} alt={cur.condition.text ?? ''} />}
+          {cur.condition.text}
+        </span>
+      )}
       {cur?.temp_f != null && <span className="red">{cur.temp_f}°F</span>}
       {cur?.wind_mph != null && <span className="dodger">Wind {cur.wind_mph}mph {cur.wind_dir ?? ''}</span>}
       {cur?.humidity != null && <span className="green">Humidity {cur.humidity}%</span>}
