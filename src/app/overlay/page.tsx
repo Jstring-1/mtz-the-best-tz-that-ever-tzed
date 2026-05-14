@@ -727,8 +727,11 @@ export default function OverlayPage() {
           <p className="hint">none yet — upload an image, position it, then click <b>Save</b>.</p>
         )}
         {saved.map((s) => {
-          const cx = s.corners.reduce((a, c) => a + c.lat, 0) / s.corners.length;
-          const cy = s.corners.reduce((a, c) => a + c.lng, 0) / s.corners.length;
+          const corners = Array.isArray(s.corners)
+            ? s.corners
+            : (typeof s.corners === 'string' ? (() => { try { return JSON.parse(s.corners as unknown as string) as LatLngLike[]; } catch { return []; } })() : []);
+          const cx = corners.length ? corners.reduce((a, c) => a + c.lat, 0) / corners.length : 0;
+          const cy = corners.length ? corners.reduce((a, c) => a + c.lng, 0) / corners.length : 0;
           return (
             <div key={s.id} className="saved-row">
               <button

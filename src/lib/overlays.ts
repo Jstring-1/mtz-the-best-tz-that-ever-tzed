@@ -35,6 +35,16 @@ async function ensureTable() {
   ensured = true;
 }
 
+// postgres.js usually parses JSONB → object, but config quirks can leave
+// it as a string. Normalise so callers always see an array of corners.
+function normCorners(c: unknown): OverlayCorner[] {
+  if (Array.isArray(c)) return c as OverlayCorner[];
+  if (typeof c === 'string') {
+    try { return JSON.parse(c) as OverlayCorner[]; } catch { return []; }
+  }
+  return [];
+}
+
 export async function listOverlays(): Promise<OverlaySummary[]> {
   await ensureTable();
   const rows = await sql<OverlaySummary[]>`
@@ -42,7 +52,7 @@ export async function listOverlays(): Promise<OverlaySummary[]> {
     FROM overlays
     ORDER BY created_at DESC
   `;
-  return rows;
+  return rows.map((r) => ({ ...r, corners: normCorners(r.corners) }));
 }
 
 export async function getOverlay(id: string): Promise<OverlayRecord | null> {
@@ -51,7 +61,9 @@ export async function getOverlay(id: string): Promise<OverlayRecord | null> {
     SELECT id, name, image_data, mime_type, corners, opacity, mode, created_at
     FROM overlays WHERE id = ${id}
   `;
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  return { ...row, corners: normCorners(row.corners) };
 }
 
 export async function saveOverlay(rec: Omit<OverlayRecord, 'created_at'>): Promise<void> {
