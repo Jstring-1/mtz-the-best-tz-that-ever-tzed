@@ -697,6 +697,73 @@ main { padding-top: calc(var(--hdr-h) + var(--top-stack-h)); display: block; }
   padding: 2px 6px; color: indianred;
 }
 .overlay-page .overlay-controls .img-row .mini.x:hover { background: #401010; color: #fff; }
+
+/* Left sidebar — saved overlays from the DB. */
+.overlay-page .overlay-saved {
+  position: absolute;
+  top: 90px;
+  left: 10px;
+  width: 290px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  background: rgba(0, 0, 0, .82);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  z-index: 100000;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text);
+}
+.overlay-page .overlay-saved h3 {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  margin: 0 0 8px;
+  font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+}
+.overlay-page .overlay-saved .spin { color: gold; }
+.overlay-page .overlay-saved .hint {
+  color: var(--text-muted); font-size: 12px; line-height: 1.4;
+}
+.overlay-page .overlay-saved .err {
+  color: indianred; font-size: 12px; margin: 0 0 8px;
+}
+.overlay-page .overlay-saved .saved-row {
+  display: flex; gap: 4px; align-items: stretch; margin-bottom: 4px;
+}
+.overlay-page .overlay-saved .saved-row .load {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: flex-start; text-align: left;
+  background: #1a1a1a; color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font: inherit; cursor: pointer;
+  overflow: hidden;
+}
+.overlay-page .overlay-saved .saved-row .load:hover {
+  border-color: var(--accent); background: #222;
+}
+.overlay-page .overlay-saved .saved-row .load .name {
+  font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  width: 100%;
+}
+.overlay-page .overlay-saved .saved-row .load .pos {
+  font-size: 11px; color: var(--text-muted);
+  font-family: var(--mono);
+}
+.overlay-page .overlay-saved .saved-row .del {
+  background: transparent; color: indianred;
+  border: 1px solid #401010; border-radius: 3px;
+  padding: 0 8px; cursor: pointer;
+}
+.overlay-page .overlay-saved .saved-row .del:hover {
+  background: #401010; color: #fff;
+}
 .overlay-page .overlay-loading {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;

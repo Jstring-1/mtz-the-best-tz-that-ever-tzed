@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // Loose Leaflet typings — Leaflet from CDN has no static types. We only
 // hit a handful of methods so we describe just what we touch.
 type LatLng = [number, number];
+type LatLngLike = { lat: number; lng: number };
 type LeafletLayer = { addTo: (m: LeafletMap) => LeafletLayer; remove: () => void };
 type TileLayer = LeafletLayer;
 type LeafletMap = {
@@ -31,6 +32,7 @@ type LeafletMap = {
 // methods. We type loosely and call defensively via helpers below.
 type DistortableImage = LeafletLayer & {
   setOpacity: (n: number) => unknown;
+  getCorners?: () => LatLngLike[];
   _image?: HTMLImageElement;
   editing?: Record<string, unknown> & {
     enable?: () => void;
@@ -46,6 +48,7 @@ type LeafletNS = {
   map: (el: HTMLElement) => LeafletMap;
   tileLayer: (url: string, opts: Record<string, unknown>) => TileLayer;
   distortableImageOverlay: (url: string, opts?: Record<string, unknown>) => DistortableImage;
+  latLng: (lat: number, lng: number) => LatLngLike;
 };
 
 declare global { interface Window { L: unknown } }
@@ -66,24 +69,28 @@ const SCRIPTS: string[] = [
   `https://unpkg.com/leaflet-distortableimage@${DI_VER}/dist/leaflet.distortableimage.js`,
 ];
 
-type BaseLayerKey = 'street' | 'satellite' | 'topo';
-const BASE_LAYERS: Record<BaseLayerKey, { url: string; attr: string; maxZoom: number; subdomains?: string }> = {
-  street: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attr: '© OpenStreetMap contributors',
-    maxZoom: 19,
-  },
-  satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attr: 'Tiles © Esri — World Imagery',
-    maxZoom: 19,
-  },
-  topo: {
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attr: '© OpenTopoMap (CC-BY-SA), © OpenStreetMap',
-    maxZoom: 17,
-    subdomains: 'abc',
-  },
+type BaseLayerKey = 'street' | 'satellite' | 'hybrid' | 'topo';
+type TileCfg = { url: string; attr: string; maxZoom: number; subdomains?: string };
+const ESRI_IMAGERY: TileCfg = {
+  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  attr: 'Tiles © Esri — World Imagery',
+  maxZoom: 19,
+};
+const ESRI_ROADS: TileCfg = {
+  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+  attr: 'Roads © Esri',
+  maxZoom: 19,
+};
+const ESRI_LABELS: TileCfg = {
+  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+  attr: 'Labels © Esri',
+  maxZoom: 19,
+};
+const BASE_LAYERS: Record<BaseLayerKey, TileCfg[]> = {
+  street:    [{ url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attr: '© OpenStreetMap contributors', maxZoom: 19 }],
+  satellite: [ESRI_IMAGERY],
+  hybrid:    [ESRI_IMAGERY, ESRI_ROADS, ESRI_LABELS],
+  topo:      [{ url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr: '© OpenTopoMap (CC-BY-SA), © OpenStreetMap', maxZoom: 17, subdomains: 'abc' }],
 };
 
 type Mode = 'distort' | 'scale' | 'rotate' | 'freeRotate' | 'drag' | 'lock';
@@ -96,7 +103,21 @@ interface OverlayItem {
   obj: DistortableImage;
   opacity: number;
   mode: Mode;
+  savedId?: string;   // set after a successful save / on load — links to DB row
+  dirty?: boolean;    // user moved it since last save
 }
+
+// Server-side overlay record (slim — image_data lives only on GET-by-id).
+interface SavedSummary {
+  id: string;
+  name: string;
+  mime_type: string;
+  corners: Array<{ lat: number; lng: number }>;
+  opacity: number;
+  mode: string;
+  created_at: string;
+}
+interface SavedFull extends SavedSummary { image_data: string }
 
 // ---------- Plugin call helpers (defensive — the plugin's API mixes
 // public and underscored methods, and the version pinned to @latest may
@@ -223,7 +244,7 @@ function loadJs(src: string): Promise<void> {
 export default function OverlayPage() {
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
-  const tileLayerRef = useRef<TileLayer | null>(null);
+  const tileLayersRef = useRef<TileLayer[]>([]);
   const itemsRef = useRef<OverlayItem[]>([]);  // mirror for stable event handlers
 
   const [ready, setReady] = useState(false);
@@ -234,6 +255,9 @@ export default function OverlayPage() {
   const [items, setItems] = useState<OverlayItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedSummary[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const [savedError, setSavedError] = useState<string | null>(null);
 
   itemsRef.current = items;
   const active = items.find((it) => it.id === activeId) ?? null;
@@ -277,15 +301,18 @@ export default function OverlayPage() {
   const setTileLayer = (key: BaseLayerKey) => {
     if (!mapRef.current) return;
     const L = window.L as unknown as LeafletNS;
-    const cfg = BASE_LAYERS[key];
-    const layer = L.tileLayer(cfg.url, {
-      maxZoom: cfg.maxZoom,
-      attribution: cfg.attr,
-      subdomains: cfg.subdomains ?? 'abc',
-    });
-    if (tileLayerRef.current) mapRef.current.removeLayer(tileLayerRef.current);
-    layer.addTo(mapRef.current);
-    tileLayerRef.current = layer;
+    // Tear down any previously-mounted base/overlay tile layers.
+    tileLayersRef.current.forEach((l) => mapRef.current!.removeLayer(l));
+    tileLayersRef.current = [];
+    for (const cfg of BASE_LAYERS[key]) {
+      const layer = L.tileLayer(cfg.url, {
+        maxZoom: cfg.maxZoom,
+        attribution: cfg.attr,
+        subdomains: cfg.subdomains ?? 'abc',
+      });
+      layer.addTo(mapRef.current);
+      tileLayersRef.current.push(layer);
+    }
     setBaseLayer(key);
   };
 
@@ -317,6 +344,138 @@ export default function OverlayPage() {
     (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random()}`;
+
+  // -------------------- Saved-overlay (DB) operations -------------------
+
+  const refreshSaved = useCallback(async () => {
+    setSavedLoading(true);
+    setSavedError(null);
+    try {
+      const r = await fetch('/api/overlays', { cache: 'no-store' });
+      if (!r.ok) throw new Error(`GET /api/overlays → ${r.status}`);
+      const list = await r.json() as SavedSummary[];
+      setSaved(list);
+    } catch (e) {
+      setSavedError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavedLoading(false);
+    }
+  }, []);
+
+  // Initial load.
+  useEffect(() => { refreshSaved(); }, [refreshSaved]);
+
+  // Fetch the blob behind a blob: URL, return base64 + mime.
+  async function blobUrlToB64(url: string): Promise<{ b64: string; mime: string }> {
+    const r = await fetch(url);
+    const blob = await r.blob();
+    const buf = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let bin = '';
+    // chunked to avoid call-stack issues on very large images
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+    }
+    return { b64: btoa(bin), mime: blob.type || 'image/png' };
+  }
+
+  function readCorners(obj: DistortableImage): LatLngLike[] | null {
+    try {
+      const c = obj.getCorners?.();
+      if (!c) return null;
+      return c.map((p) => ({ lat: p.lat, lng: p.lng }));
+    } catch { return null; }
+  }
+
+  const saveActive = useCallback(async () => {
+    if (!active) return;
+    const corners = readCorners(active.obj);
+    if (!corners || corners.length !== 4) {
+      setSavedError('Could not read image corners — try clicking the image first.');
+      return;
+    }
+    setSavedLoading(true);
+    setSavedError(null);
+    try {
+      const { b64, mime } = await blobUrlToB64(active.url);
+      const id = active.savedId ?? makeId();
+      const r = await fetch('/api/overlays', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          name: active.name,
+          image_data: b64,
+          mime_type: mime,
+          corners,
+          opacity: active.opacity,
+          mode: active.mode,
+        }),
+      });
+      if (!r.ok) throw new Error(`POST /api/overlays → ${r.status}`);
+      setItems((prev) => prev.map((it) => it.id === active.id ? { ...it, savedId: id, dirty: false } : it));
+      await refreshSaved();
+    } catch (e) {
+      setSavedError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavedLoading(false);
+    }
+  }, [active, refreshSaved]);
+
+  const loadSaved = useCallback(async (id: string) => {
+    if (!mapRef.current) return;
+    setSavedLoading(true);
+    setSavedError(null);
+    try {
+      const r = await fetch(`/api/overlays/${id}`, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`GET /api/overlays/${id} → ${r.status}`);
+      const rec = await r.json() as SavedFull;
+      const L = window.L as unknown as LeafletNS;
+      const url = `data:${rec.mime_type};base64,${rec.image_data}`;
+      const corners = rec.corners.map((c) => L.latLng(c.lat, c.lng));
+      const obj = L.distortableImageOverlay(url, {
+        selected: true,
+        suppressToolbar: false,
+        corners,
+        mode: rec.mode,
+        opacity: rec.opacity,
+      });
+      const item: OverlayItem = {
+        id: makeId(),
+        name: rec.name,
+        url,
+        obj,
+        opacity: rec.opacity,
+        mode: (rec.mode as Mode) || 'scale',
+        savedId: rec.id,
+      };
+      const next = [...itemsRef.current, item];
+      setItems(next);
+      selectItem(item.id, next);
+      // Pan to the loaded overlay's center.
+      const cx = rec.corners.reduce((a, c) => a + c.lat, 0) / rec.corners.length;
+      const cy = rec.corners.reduce((a, c) => a + c.lng, 0) / rec.corners.length;
+      mapRef.current.flyTo([cx, cy], 16);
+    } catch (e) {
+      setSavedError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavedLoading(false);
+    }
+  }, [selectItem]);
+
+  const deleteSaved = useCallback(async (id: string, name: string) => {
+    if (!confirm(`Delete "${name}" from the database? This can't be undone.`)) return;
+    try {
+      const r = await fetch(`/api/overlays/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error(`DELETE → ${r.status}`);
+      await refreshSaved();
+      // Detach savedId from any open item that referenced it.
+      setItems((prev) => prev.map((it) => it.savedId === id ? { ...it, savedId: undefined } : it));
+    } catch (e) {
+      setSavedError(e instanceof Error ? e.message : String(e));
+    }
+  }, [refreshSaved]);
 
   const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
 
@@ -419,12 +578,13 @@ export default function OverlayPage() {
 
         <div className="grp">
           <span className="grp-label">Base</span>
-          {(['street', 'satellite', 'topo'] as BaseLayerKey[]).map((k) => (
+          {(['street', 'satellite', 'hybrid', 'topo'] as BaseLayerKey[]).map((k) => (
             <button
               key={k}
               type="button"
               className={`mini ${baseLayer === k ? 'on' : ''}`}
               onClick={() => setTileLayer(k)}
+              title={k === 'hybrid' ? 'Satellite imagery + roads + labels' : k}
             >{k}</button>
           ))}
         </div>
@@ -489,6 +649,14 @@ export default function OverlayPage() {
                 >{m === 'freeRotate' ? 'free-rot' : m}</button>
               ))}
             </div>
+
+            <button
+              type="button"
+              className="mini"
+              onClick={saveActive}
+              disabled={savedLoading}
+              title="Save this overlay's image, corners, opacity and mode to the database"
+            >{active.savedId ? '⟳ Update saved' : '💾 Save'}</button>
           </>
         )}
 
@@ -498,6 +666,37 @@ export default function OverlayPage() {
 
         <a className="back" href="/">← back</a>
       </div>
+
+      <aside className="overlay-saved">
+        <h3>Saved overlays {savedLoading && <span className="spin">…</span>}</h3>
+        {savedError && <p className="err">{savedError}</p>}
+        {saved.length === 0 && !savedLoading && (
+          <p className="hint">none yet — upload an image, position it, then click <b>Save</b>.</p>
+        )}
+        {saved.map((s) => {
+          const cx = s.corners.reduce((a, c) => a + c.lat, 0) / s.corners.length;
+          const cy = s.corners.reduce((a, c) => a + c.lng, 0) / s.corners.length;
+          return (
+            <div key={s.id} className="saved-row">
+              <button
+                type="button"
+                className="load"
+                onClick={() => loadSaved(s.id)}
+                title={`Load ${s.name}`}
+              >
+                <span className="name">{s.name}</span>
+                <span className="pos">{cx.toFixed(4)}, {cy.toFixed(4)}</span>
+              </button>
+              <button
+                type="button"
+                className="del"
+                onClick={() => deleteSaved(s.id, s.name)}
+                title={`Delete ${s.name}`}
+              >×</button>
+            </div>
+          );
+        })}
+      </aside>
 
       <div ref={mapEl} className="overlay-map" />
       {!ready && !err && <div className="overlay-loading">Loading map…</div>}

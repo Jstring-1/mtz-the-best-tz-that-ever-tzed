@@ -43,5 +43,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/overlay', '/overlay/:path*'],
+  matcher: ['/overlay', '/overlay/:path*', '/api/overlays', '/api/overlays/:path*'],
 };
