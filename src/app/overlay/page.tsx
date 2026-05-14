@@ -27,13 +27,19 @@ type LeafletMap = {
   addLayer: (l: LeafletLayer) => void;
   hasLayer: (l: LeafletLayer) => boolean;
 };
+// Plugin instance — the actual API is a mix of public + underscored
+// methods. We type loosely and call defensively via helpers below.
 type DistortableImage = LeafletLayer & {
-  setOpacity: (n: number) => void;
-  select?: () => void;
-  deselect?: () => void;
-  editing?: {
+  setOpacity: (n: number) => unknown;
+  _image?: HTMLImageElement;
+  editing?: Record<string, unknown> & {
     enable?: () => void;
-    runMode?: (mode: 'distort' | 'scale' | 'rotate' | 'lock' | 'drag' | 'freeRotate') => void;
+    disable?: () => void;
+    setSelected?: (s: boolean) => void;
+    _setMode?: (mode: string) => void;
+    nextMode?: () => void;
+    _mode?: string;
+    _enabled?: boolean;
   };
 };
 type LeafletNS = {
@@ -90,6 +96,56 @@ interface OverlayItem {
   obj: DistortableImage;
   opacity: number;
   mode: Mode;
+}
+
+// ---------- Plugin call helpers (defensive — the plugin's API mixes
+// public and underscored methods, and the version pinned to @latest may
+// drift). Each helper tries several known method names and bails on the
+// first one that's callable.
+
+function callFirst<T>(obj: unknown, names: string[], args: unknown[] = []): T | undefined {
+  if (!obj) return undefined;
+  const o = obj as Record<string, unknown>;
+  for (const n of names) {
+    const fn = o[n];
+    if (typeof fn === 'function') {
+      try { return (fn as (...a: unknown[]) => T).apply(obj, args); }
+      catch (e) { console.warn(`[overlay] ${n} threw`, e); }
+    }
+  }
+  return undefined;
+}
+
+function enableEditing(img: DistortableImage) {
+  if (img.editing?._enabled) return;
+  callFirst(img.editing, ['enable']);
+}
+
+function setSelected(img: DistortableImage, selected: boolean) {
+  if (callFirst(img.editing, ['setSelected'], [selected]) !== undefined) return;
+  callFirst(img.editing, selected ? ['_select', 'select'] : ['_deselect', 'deselect']);
+}
+
+function setMode(img: DistortableImage, mode: string) {
+  // Try direct setters first
+  if (callFirst(img.editing, ['_setMode', 'setMode', 'runMode'], [mode]) !== undefined) return;
+  // Fallback: cycle nextMode() until we land on the requested one.
+  const e = img.editing;
+  if (!e || typeof e.nextMode !== 'function') return;
+  for (let i = 0; i < 8; i++) {
+    if (e._mode === mode) return;
+    e.nextMode();
+  }
+}
+
+// Apply post-add settings — wait for the image element to load so the
+// plugin has finished initialising before we poke at it.
+function whenReady(img: DistortableImage, fn: () => void) {
+  const el = img._image;
+  if (el && el.complete && el.naturalWidth > 0) { fn(); return; }
+  if (el) { el.addEventListener('load', fn, { once: true }); return; }
+  // No image element yet — give the plugin a tick and try again.
+  setTimeout(() => whenReady(img, fn), 50);
 }
 
 function loadCss(href: string) {
@@ -243,11 +299,14 @@ export default function OverlayPage() {
       const onMap = map.hasLayer(it.obj);
       if (it.id === id) {
         if (!onMap) it.obj.addTo(map);
-        try { it.obj.setOpacity(it.opacity); } catch { /* ignore */ }
-        try { it.obj.editing?.runMode?.(it.mode); } catch { /* ignore */ }
-        try { it.obj.select?.(); } catch { /* ignore */ }
+        whenReady(it.obj, () => {
+          enableEditing(it.obj);
+          try { it.obj.setOpacity(it.opacity); } catch { /* ignore */ }
+          setMode(it.obj, it.mode);
+          setSelected(it.obj, true);
+        });
       } else {
-        try { it.obj.deselect?.(); } catch { /* ignore */ }
+        setSelected(it.obj, false);
         if (onMap) it.obj.remove();
       }
     });
@@ -273,7 +332,7 @@ export default function OverlayPage() {
           setImporting(`Rendering ${f.name}…`);
           const urls = await pdfToImageUrls(f);
           urls.forEach((url, i) => {
-            const obj = L.distortableImageOverlay(url, { selected: false, suppressToolbar: false });
+            const obj = L.distortableImageOverlay(url, { selected: true, suppressToolbar: false, mode: 'scale', opacity: 0.6 });
             fresh.push({
               id: makeId(),
               name: urls.length > 1 ? `${f.name} [${i + 1}/${urls.length}]` : f.name,
@@ -282,7 +341,7 @@ export default function OverlayPage() {
           });
         } else {
           const url = URL.createObjectURL(f);
-          const obj = L.distortableImageOverlay(url, { selected: false, suppressToolbar: false });
+          const obj = L.distortableImageOverlay(url, { selected: true, suppressToolbar: false, mode: 'scale', opacity: 0.6 });
           fresh.push({ id: makeId(), name: f.name, url, obj, opacity: 0.6, mode: 'scale' });
         }
       }
@@ -300,12 +359,18 @@ export default function OverlayPage() {
 
   const applyOpacity = (n: number) => {
     if (!active) return;
-    active.obj.setOpacity(n);
+    whenReady(active.obj, () => {
+      try { active.obj.setOpacity(n); } catch (e) { console.warn(e); }
+    });
     setItems((prev) => prev.map((it) => it.id === active.id ? { ...it, opacity: n } : it));
   };
   const applyMode = (m: Mode) => {
     if (!active) return;
-    try { active.obj.editing?.runMode?.(m); } catch { /* ignore */ }
+    whenReady(active.obj, () => {
+      enableEditing(active.obj);
+      setMode(active.obj, m);
+      setSelected(active.obj, true);
+    });
     setItems((prev) => prev.map((it) => it.id === active.id ? { ...it, mode: m } : it));
   };
 
