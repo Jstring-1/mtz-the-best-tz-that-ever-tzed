@@ -70,6 +70,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 img { max-width: 100%; height: auto; }
+/* Leaflet's distortable-image plugin warps an <img> with matrix3d
+   transforms; the global max-width/height above breaks the math and
+   produces stretched garbage. Opt the map's <img> elements out. */
+.leaflet-container img {
+  max-width: none !important;
+  max-height: none !important;
+  width: auto;
+  height: auto;
+}
 a { color: var(--link); text-decoration: none; }
 a:hover { color: var(--link-hover); }
 table { border-collapse: collapse; }
