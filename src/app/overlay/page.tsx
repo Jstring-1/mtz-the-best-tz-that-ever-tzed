@@ -5,8 +5,14 @@
 // Leaflet + plugin are loaded from a CDN at runtime so we don't drag npm
 // dependencies into the main bundle. Nothing here ships unless /overlay
 // is visited.
+//
+// Multi-image: upload as many images as you like. The list of uploaded
+// images appears in the toolbar; clicking one shows just that image with
+// its own remembered opacity / corners / mode. Others are removed from
+// the map but kept in state (Leaflet preserves corners across remove /
+// addTo) so the state is fully isolated per image.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // Loose Leaflet typings — Leaflet from CDN has no static types. We only
 // hit a handful of methods so we describe just what we touch.
@@ -19,10 +25,12 @@ type LeafletMap = {
   getCenter: () => { lat: number; lng: number };
   removeLayer: (l: LeafletLayer) => void;
   addLayer: (l: LeafletLayer) => void;
+  hasLayer: (l: LeafletLayer) => boolean;
 };
 type DistortableImage = LeafletLayer & {
   setOpacity: (n: number) => void;
   select?: () => void;
+  deselect?: () => void;
   editing?: {
     enable?: () => void;
     runMode?: (mode: 'distort' | 'scale' | 'rotate' | 'lock' | 'drag' | 'freeRotate') => void;
@@ -38,6 +46,9 @@ declare global { interface Window { L: unknown } }
 
 const LEAFLET_VER = '1.9.4';
 const DI_VER = 'latest';
+const PDFJS_VER = '3.11.174';                       // last UMD-compatible release
+const PDFJS_MAIN = `https://unpkg.com/pdfjs-dist@${PDFJS_VER}/build/pdf.min.js`;
+const PDFJS_WORKER = `https://unpkg.com/pdfjs-dist@${PDFJS_VER}/build/pdf.worker.min.js`;
 
 const STYLES: string[] = [
   `https://unpkg.com/leaflet@${LEAFLET_VER}/dist/leaflet.css`,
@@ -70,6 +81,16 @@ const BASE_LAYERS: Record<BaseLayerKey, { url: string; attr: string; maxZoom: nu
 };
 
 type Mode = 'distort' | 'scale' | 'rotate' | 'freeRotate' | 'drag' | 'lock';
+const MODES: Mode[] = ['scale', 'rotate', 'freeRotate', 'distort', 'drag', 'lock'];
+
+interface OverlayItem {
+  id: string;
+  name: string;
+  url: string;
+  obj: DistortableImage;
+  opacity: number;
+  mode: Mode;
+}
 
 function loadCss(href: string) {
   if (document.querySelector(`link[href="${href}"]`)) return;
@@ -78,6 +99,53 @@ function loadCss(href: string) {
   l.href = href;
   document.head.appendChild(l);
 }
+// PDF.js loaded lazily — only when a PDF is actually uploaded.
+type PdfJsLib = {
+  GlobalWorkerOptions: { workerSrc: string };
+  getDocument: (src: { data: ArrayBuffer }) => { promise: Promise<PdfDoc> };
+};
+type PdfDoc = { numPages: number; getPage: (n: number) => Promise<PdfPage> };
+type PdfPage = {
+  getViewport: (opts: { scale: number }) => { width: number; height: number };
+  render: (ctx: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => { promise: Promise<void> };
+};
+let pdfjsReady: Promise<PdfJsLib> | null = null;
+async function ensurePdfJs(): Promise<PdfJsLib> {
+  if (pdfjsReady) return pdfjsReady;
+  pdfjsReady = (async () => {
+    await loadJs(PDFJS_MAIN);
+    const lib = (window as unknown as { pdfjsLib?: PdfJsLib }).pdfjsLib;
+    if (!lib) throw new Error('pdfjs failed to load');
+    lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    return lib;
+  })();
+  return pdfjsReady;
+}
+
+// Render every page of a PDF to a PNG blob URL. Caller is responsible
+// for revokeObjectURL when the overlay is removed.
+async function pdfToImageUrls(file: File, scale = 2): Promise<string[]> {
+  const pdfjs = await ensurePdfJs();
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const out: string[] = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('canvas 2d ctx unavailable');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    const url: string = await new Promise((res, rej) =>
+      canvas.toBlob((b) => b ? res(URL.createObjectURL(b)) : rej(new Error('blob failed')), 'image/png')
+    );
+    out.push(url);
+  }
+  return out;
+}
+
 function loadJs(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
@@ -89,7 +157,7 @@ function loadJs(src: string): Promise<void> {
     }
     const s = document.createElement('script');
     s.src = src;
-    s.async = false;       // preserve order
+    s.async = false;
     s.onload = () => { s.dataset.loaded = 'true'; resolve(); };
     s.onerror = () => reject(new Error(`load ${src}`));
     document.body.appendChild(s);
@@ -99,17 +167,20 @@ function loadJs(src: string): Promise<void> {
 export default function OverlayPage() {
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
-  const overlayRef = useRef<DistortableImage | null>(null);
   const tileLayerRef = useRef<TileLayer | null>(null);
+  const itemsRef = useRef<OverlayItem[]>([]);  // mirror for stable event handlers
 
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
-  const [opacity, setOpacity] = useState(0.6);
-  const [mode, setMode] = useState<Mode>('scale');
   const [baseLayer, setBaseLayer] = useState<BaseLayerKey>('street');
-  const [hasImage, setHasImage] = useState(false);
+  const [items, setItems] = useState<OverlayItem[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [importing, setImporting] = useState<string | null>(null);
+
+  itemsRef.current = items;
+  const active = items.find((it) => it.id === activeId) ?? null;
 
   // Load CDN deps once.
   useEffect(() => {
@@ -131,13 +202,22 @@ export default function OverlayPage() {
     if (!ready || !mapEl.current || mapRef.current) return;
     const L = window.L as unknown as LeafletNS;
     const map = L.map(mapEl.current);
-    map.setView([38.0194, -122.1341], 14);  // Martinez default
+    map.setView([38.0194, -122.1341], 14);
     mapRef.current = map;
     setTileLayer('street');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  // Swap base tile layer.
+  // Clean up blob URLs on unmount.
+  useEffect(() => {
+    return () => {
+      itemsRef.current.forEach((it) => {
+        try { it.obj.remove(); } catch { /* ignore */ }
+        URL.revokeObjectURL(it.url);
+      });
+    };
+  }, []);
+
   const setTileLayer = (key: BaseLayerKey) => {
     if (!mapRef.current) return;
     const L = window.L as unknown as LeafletNS;
@@ -153,54 +233,92 @@ export default function OverlayPage() {
     setBaseLayer(key);
   };
 
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f || !mapRef.current) return;
-    const url = URL.createObjectURL(f);
-    const L = window.L as unknown as LeafletNS;
-    if (overlayRef.current) overlayRef.current.remove();
-    const img = L.distortableImageOverlay(url, {
-      selected: true,
-      suppressToolbar: false,
+  // Show only this id; hide all others. Each obj preserves its own corners,
+  // opacity, and mode across remove/addTo cycles.
+  const selectItem = useCallback((id: string | null, list?: OverlayItem[]) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const arr = list ?? itemsRef.current;
+    arr.forEach((it) => {
+      const onMap = map.hasLayer(it.obj);
+      if (it.id === id) {
+        if (!onMap) it.obj.addTo(map);
+        try { it.obj.setOpacity(it.opacity); } catch { /* ignore */ }
+        try { it.obj.editing?.runMode?.(it.mode); } catch { /* ignore */ }
+        try { it.obj.select?.(); } catch { /* ignore */ }
+      } else {
+        try { it.obj.deselect?.(); } catch { /* ignore */ }
+        if (onMap) it.obj.remove();
+      }
     });
-    img.addTo(mapRef.current);
-    overlayRef.current = img;
-    setHasImage(true);
-    // Push opacity + initial mode now that the image is on the map.
-    setTimeout(() => {
-      try { img.setOpacity(opacity); } catch { /* ignore */ }
-      try { img.editing?.runMode?.(mode); } catch { /* ignore */ }
-      try { img.select?.(); } catch { /* ignore */ }
-    }, 50);
-    // Allow re-uploading the same file (input.onChange won't fire on same path).
-    e.target.value = '';
+    setActiveId(id);
+  }, []);
+
+  const makeId = () =>
+    (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`;
+
+  const isPdf = (f: File) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';                              // allow re-picking same file
+    if (!files.length || !mapRef.current) return;
+    const L = window.L as unknown as LeafletNS;
+    const fresh: OverlayItem[] = [];
+    try {
+      for (const f of files) {
+        if (isPdf(f)) {
+          setImporting(`Rendering ${f.name}…`);
+          const urls = await pdfToImageUrls(f);
+          urls.forEach((url, i) => {
+            const obj = L.distortableImageOverlay(url, { selected: false, suppressToolbar: false });
+            fresh.push({
+              id: makeId(),
+              name: urls.length > 1 ? `${f.name} [${i + 1}/${urls.length}]` : f.name,
+              url, obj, opacity: 0.6, mode: 'scale',
+            });
+          });
+        } else {
+          const url = URL.createObjectURL(f);
+          const obj = L.distortableImageOverlay(url, { selected: false, suppressToolbar: false });
+          fresh.push({ id: makeId(), name: f.name, url, obj, opacity: 0.6, mode: 'scale' });
+        }
+      }
+    } catch (e) {
+      console.error('upload failed', e);
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(null);
+    }
+    if (!fresh.length) return;
+    const next = [...itemsRef.current, ...fresh];
+    setItems(next);
+    selectItem(fresh[fresh.length - 1].id, next);
   };
 
   const applyOpacity = (n: number) => {
-    setOpacity(n);
-    overlayRef.current?.setOpacity(n);
+    if (!active) return;
+    active.obj.setOpacity(n);
+    setItems((prev) => prev.map((it) => it.id === active.id ? { ...it, opacity: n } : it));
   };
-
   const applyMode = (m: Mode) => {
-    setMode(m);
-    overlayRef.current?.editing?.runMode?.(m);
+    if (!active) return;
+    try { active.obj.editing?.runMode?.(m); } catch { /* ignore */ }
+    setItems((prev) => prev.map((it) => it.id === active.id ? { ...it, mode: m } : it));
   };
 
-  const recenterImage = () => {
-    // The plugin doesn't expose a "fit to view" helper directly. Easiest
-    // user-facing recenter: drop the existing image and tell the user to
-    // re-upload — but a smoother trick is to re-create with no corners so
-    // the plugin places fresh corners around the current map view.
-    if (!overlayRef.current || !mapRef.current) return;
-    // No-op stub: kept for future implementation. For now, instruct via
-    // hint that scrolling/zooming reframes the work area.
-  };
-
-  const removeImage = () => {
-    if (overlayRef.current) {
-      overlayRef.current.remove();
-      overlayRef.current = null;
-      setHasImage(false);
+  const removeItem = (id: string) => {
+    const it = itemsRef.current.find((x) => x.id === id);
+    if (!it) return;
+    try { it.obj.remove(); } catch { /* ignore */ }
+    URL.revokeObjectURL(it.url);
+    const next = itemsRef.current.filter((x) => x.id !== id);
+    setItems(next);
+    if (activeId === id) {
+      const fallback = next[next.length - 1]?.id ?? null;
+      selectItem(fallback, next);
     }
   };
 
@@ -216,11 +334,8 @@ export default function OverlayPage() {
       if (hit?.lat && hit?.lon) {
         mapRef.current.flyTo([Number(hit.lat), Number(hit.lon)], 15);
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSearching(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setSearching(false); }
   };
 
   return (
@@ -250,30 +365,53 @@ export default function OverlayPage() {
         </div>
 
         <label className="upload-btn">
-          {hasImage ? 'Replace image' : 'Upload image'}
-          <input type="file" accept="image/*" onChange={onFile} />
+          + Upload (image / PDF)
+          <input type="file" accept="image/*,application/pdf,.pdf" multiple onChange={onFile} />
         </label>
+        {importing && <span className="hint" style={{ color: 'gold' }}>{importing}</span>}
 
-        {hasImage && (
+        {items.length > 0 && (
+          <div className="grp grp-images">
+            <span className="grp-label">Images</span>
+            {items.map((it) => (
+              <span key={it.id} className={`img-row ${activeId === it.id ? 'on' : ''}`}>
+                <button
+                  type="button"
+                  className="mini name"
+                  onClick={() => selectItem(it.id)}
+                  title={it.name}
+                >{it.name.length > 22 ? it.name.slice(0, 19) + '…' : it.name}</button>
+                <button
+                  type="button"
+                  className="mini x"
+                  onClick={() => removeItem(it.id)}
+                  title={`Remove ${it.name}`}
+                >×</button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {active && (
           <>
             <div className="grp">
               <span className="grp-label">Opacity</span>
               <input
                 type="range" min={0} max={1} step={0.05}
-                value={opacity}
+                value={active.opacity}
                 onChange={(e) => applyOpacity(Number(e.target.value))}
                 style={{ width: 120 }}
               />
-              <span className="num">{Math.round(opacity * 100)}%</span>
+              <span className="num">{Math.round(active.opacity * 100)}%</span>
             </div>
 
             <div className="grp">
               <span className="grp-label">Mode</span>
-              {(['scale', 'rotate', 'freeRotate', 'distort', 'drag', 'lock'] as Mode[]).map((m) => (
+              {MODES.map((m) => (
                 <button
                   key={m}
                   type="button"
-                  className={`mini ${mode === m ? 'on' : ''}`}
+                  className={`mini ${active.mode === m ? 'on' : ''}`}
                   onClick={() => applyMode(m)}
                   title={
                     m === 'scale'      ? 'Drag corner: scale uniformly'
@@ -286,13 +424,11 @@ export default function OverlayPage() {
                 >{m === 'freeRotate' ? 'free-rot' : m}</button>
               ))}
             </div>
-
-            <button type="button" className="danger" onClick={removeImage}>Remove</button>
           </>
         )}
 
         <span className="hint">
-          Click the image to select · drag corner handles to {mode === 'scale' ? 'scale' : mode === 'distort' ? 'distort' : mode === 'rotate' ? 'rotate' : 'edit'}
+          {active ? `Editing "${active.name}" — other images hidden` : items.length === 0 ? 'Upload one or more images to begin' : 'Select an image from the list'}
         </span>
 
         <a className="back" href="/">← back</a>
