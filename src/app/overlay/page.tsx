@@ -69,7 +69,7 @@ const BASE_LAYERS: Record<BaseLayerKey, { url: string; attr: string; maxZoom: nu
   },
 };
 
-type Mode = 'distort' | 'scale' | 'rotate' | 'drag' | 'lock';
+type Mode = 'distort' | 'scale' | 'rotate' | 'freeRotate' | 'drag' | 'lock';
 
 function loadCss(href: string) {
   if (document.querySelector(`link[href="${href}"]`)) return;
@@ -269,13 +269,21 @@ export default function OverlayPage() {
 
             <div className="grp">
               <span className="grp-label">Mode</span>
-              {(['scale', 'rotate', 'distort', 'drag', 'lock'] as Mode[]).map((m) => (
+              {(['scale', 'rotate', 'freeRotate', 'distort', 'drag', 'lock'] as Mode[]).map((m) => (
                 <button
                   key={m}
                   type="button"
                   className={`mini ${mode === m ? 'on' : ''}`}
                   onClick={() => applyMode(m)}
-                >{m}</button>
+                  title={
+                    m === 'scale'      ? 'Drag corner: scale uniformly'
+                    : m === 'rotate'     ? 'Drag corner: rotate around center'
+                    : m === 'freeRotate' ? 'Free-form rotation handle'
+                    : m === 'distort'    ? 'Drag each corner independently'
+                    : m === 'drag'       ? 'Move only (no resize)'
+                    : 'Read-only — pan/zoom map underneath'
+                  }
+                >{m === 'freeRotate' ? 'free-rot' : m}</button>
               ))}
             </div>
 
