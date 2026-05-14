@@ -489,7 +489,7 @@ export default function OverlayPage() {
       const corners = rec.corners.map((c) => L.latLng(c.lat, c.lng));
       const obj = L.distortableImageOverlay(url, {
         selected: true,
-        suppressToolbar: false,
+        suppressToolbar: true,
         corners,
         mode: rec.mode,
         opacity: rec.opacity,
@@ -544,7 +544,7 @@ export default function OverlayPage() {
           setImporting(`Rendering ${f.name}…`);
           const urls = await pdfToImageUrls(f);
           urls.forEach((url, i) => {
-            const obj = L.distortableImageOverlay(url, { selected: true, suppressToolbar: false, mode: 'scale', opacity: 0.6 });
+            const obj = L.distortableImageOverlay(url, { selected: true, suppressToolbar: true, mode: 'scale', opacity: 0.6 });
             fresh.push({
               id: makeId(),
               name: urls.length > 1 ? `${f.name} [${i + 1}/${urls.length}]` : f.name,
@@ -553,7 +553,7 @@ export default function OverlayPage() {
           });
         } else {
           const url = URL.createObjectURL(f);
-          const obj = L.distortableImageOverlay(url, { selected: true, suppressToolbar: false, mode: 'scale', opacity: 0.6 });
+          const obj = L.distortableImageOverlay(url, { selected: true, suppressToolbar: true, mode: 'scale', opacity: 0.6 });
           fresh.push({ id: makeId(), name: f.name, url, obj, opacity: 0.6, mode: 'scale' });
         }
       }

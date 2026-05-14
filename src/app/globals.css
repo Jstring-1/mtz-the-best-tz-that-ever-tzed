@@ -79,6 +79,18 @@ img { max-width: 100%; height: auto; }
   width: auto;
   height: auto;
 }
+/* Hide the plugin's built-in action toolbar (the giant dark icons in
+   the screenshot) — we drive editing with our own toolbar above. */
+.leaflet-distortable-collection-actions,
+.leaflet-distortable-image-actions,
+.leaflet-toolbar-icon,
+.leaflet-toolbar-tip,
+.leaflet-popup-distortable,
+.leaflet-toolbar,
+.leaflet-toolbar-0,
+.leaflet-toolbar-1 {
+  display: none !important;
+}
 a { color: var(--link); text-decoration: none; }
 a:hover { color: var(--link-hover); }
 table { border-collapse: collapse; }
