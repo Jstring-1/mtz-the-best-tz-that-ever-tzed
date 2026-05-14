@@ -24,6 +24,7 @@ type LeafletMap = {
   setView: (c: LatLng, z: number) => LeafletMap;
   flyTo: (c: LatLng, z: number) => LeafletMap;
   getCenter: () => { lat: number; lng: number };
+  getBounds: () => LeafletBounds;
   removeLayer: (l: LeafletLayer) => void;
   addLayer: (l: LeafletLayer) => void;
   hasLayer: (l: LeafletLayer) => boolean;
@@ -33,6 +34,7 @@ type LeafletMap = {
 type DistortableImage = LeafletLayer & {
   setOpacity: (n: number) => unknown;
   getCorners?: () => LatLngLike[];
+  setCorners?: (corners: LatLngLike[]) => void;
   _image?: HTMLImageElement;
   editing?: Record<string, unknown> & {
     enable?: () => void;
@@ -43,6 +45,12 @@ type DistortableImage = LeafletLayer & {
     _mode?: string;
     _enabled?: boolean;
   };
+};
+type LeafletBounds = {
+  getNorth: () => number;
+  getSouth: () => number;
+  getEast: () => number;
+  getWest: () => number;
 };
 type LeafletNS = {
   map: (el: HTMLElement) => LeafletMap;
@@ -105,6 +113,7 @@ interface OverlayItem {
   mode: Mode;
   savedId?: string;   // set after a successful save / on load — links to DB row
   dirty?: boolean;    // user moved it since last save
+  fitted?: boolean;   // we've already run fitToImageAspect on this item
 }
 
 // Server-side overlay record (slim — image_data lives only on GET-by-id).
@@ -157,6 +166,43 @@ function setMode(img: DistortableImage, mode: string) {
     if (e._mode === mode) return;
     e.nextMode();
   }
+}
+
+// Reset the overlay's four corners to a rectangle matching the image's
+// natural aspect ratio, sized to ~half the current map viewport and
+// centered on it. Call this after the image has loaded. Without this,
+// the plugin uses its default corner placement which can stretch the
+// image into the wrong shape.
+function fitToImageAspect(map: LeafletMap, obj: DistortableImage) {
+  const el = obj._image;
+  if (!el || !el.naturalWidth || !el.naturalHeight) return;
+  const aspect = el.naturalWidth / el.naturalHeight;
+  const L = (window as unknown as { L: LeafletNS }).L;
+  const center = map.getCenter();
+  const b = map.getBounds();
+  const dLat = (b.getNorth() - b.getSouth()) * 0.5;       // viewport half-height in deg
+  const dLng = (b.getEast()  - b.getWest())  * 0.5;       // viewport half-width  in deg
+  // 1 deg lng is shorter than 1 deg lat at our latitudes — correct so the
+  // on-screen aspect of the corner rectangle matches the image's pixel
+  // aspect rather than its lat/lng aspect.
+  const lngScale = Math.max(Math.cos((center.lat * Math.PI) / 180), 1e-6);
+  // Start with half the viewport latitude span as the image's height.
+  let halfLat = dLat * 0.5;
+  let halfLng = (halfLat * aspect) / lngScale;
+  // If that would exceed the viewport horizontally, scale both down.
+  const capLng = dLng * 0.9;
+  if (halfLng > capLng) {
+    const f = capLng / halfLng;
+    halfLat *= f;
+    halfLng *= f;
+  }
+  const corners: LatLngLike[] = [
+    L.latLng(center.lat + halfLat, center.lng - halfLng),  // NW
+    L.latLng(center.lat + halfLat, center.lng + halfLng),  // NE
+    L.latLng(center.lat - halfLat, center.lng - halfLng),  // SW
+    L.latLng(center.lat - halfLat, center.lng + halfLng),  // SE
+  ];
+  try { obj.setCorners?.(corners); } catch (e) { console.warn('setCorners failed', e); }
 }
 
 // Apply post-add settings — wait for the image element to load so the
@@ -328,6 +374,13 @@ export default function OverlayPage() {
         if (!onMap) it.obj.addTo(map);
         whenReady(it.obj, () => {
           enableEditing(it.obj);
+          // Auto-fit corners to the image's true aspect ratio on first
+          // activation of a fresh upload. Skip when corners came from a
+          // saved record (savedId) or we've already fitted.
+          if (!it.fitted && !it.savedId) {
+            fitToImageAspect(map, it.obj);
+            it.fitted = true;
+          }
           try { it.obj.setOpacity(it.opacity); } catch { /* ignore */ }
           setMode(it.obj, it.mode);
           setSelected(it.obj, true);
