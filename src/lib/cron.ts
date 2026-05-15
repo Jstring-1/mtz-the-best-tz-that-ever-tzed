@@ -11,8 +11,8 @@ import {
   upsertNoaaHourly,
 } from './cache';
 
-export type Bucket = '5m' | '15m' | '1h' | '4h' | '12h' | 'all';
-export const BUCKETS: Bucket[] = ['5m', '15m', '1h', '4h', '12h', 'all'];
+export type Bucket = '1m' | '2m' | '5m' | '15m' | '1h' | '4h' | '12h' | 'all';
+export const BUCKETS: Bucket[] = ['1m', '2m', '5m', '15m', '1h', '4h', '12h', 'all'];
 
 const NOAA_LOCAL_CODES = new Set([
   'CAC001','CAC013','CAC033','CAC041','CAC055','CAC067','CAC075','CAC077',
@@ -195,29 +195,6 @@ async function openweather(json: Record<string, unknown>) {
   const loc = getLocation();
   const params = new URLSearchParams({ units: 'imperial', lat: String(loc.lat), lon: String(loc.lon), appid: process.env.OPENWEATHER_KEY ?? '' });
   json.OPEN_weather = await fetchJson(`https://api.openweathermap.org/data/2.5/weather?${params}`);
-}
-
-async function weatherstack(json: Record<string, unknown>) {
-  const loc = getLocation();
-  const params = new URLSearchParams({ access_key: process.env.WEATHERSTACK_KEY ?? '', query: `${loc.lat},${loc.lon}`, units: 'f' });
-  type WS = { current?: Record<string, unknown>; forecast?: Record<string, Record<string, unknown>> };
-  const r = await fetchJson<WS>(`http://api.weatherstack.com/forecast?${params}`);
-  const cur = r.current ?? {};
-  const w: Record<string, unknown> = {
-    temperature: cur.temperature, wind_speed: cur.wind_speed, wind_dir: cur.wind_dir,
-    pressure: cur.pressure, precip: cur.precip, humidity: cur.humidity,
-    cloudcover: cur.cloudcover, uv_index: cur.uv_index, visibility: cur.visibility,
-    weather_icons: (cur.weather_icons as unknown[] | undefined)?.[0] ?? null,
-    weather_descriptions: (cur.weather_descriptions as unknown[] | undefined)?.[0] ?? null,
-    feels_like: cur.feelslike,
-  };
-  const first = r.forecast ? Object.values(r.forecast)[0] : undefined;
-  if (first) {
-    for (const k of ['date', 'mintemp', 'maxtemp', 'avgtemp', 'sunhour']) w[k] = first[k];
-    const astro = first.astro as Record<string, unknown> | undefined;
-    if (astro) for (const [k, v] of Object.entries(astro)) w[k] = v;
-  }
-  json.weatherStack = w;
 }
 
 async function usgsQuakes(json: Record<string, unknown>) {
@@ -499,33 +476,42 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
   const miscBag: Record<string, string> = {};
   const all = bucket === 'all';
 
-  if (bucket === '5m'  || all) {
-    await safe('noaa_alerts', () => noaaAlerts(json), ok, errors);
-    await safe('twelvedata_stocks', () => twelvedataStocks(json), ok, errors);
+  // 1m: hot live data we want as fresh as the source allows. Requires an
+  //     external pinger to truly fire every minute (GitHub Actions floors
+  //     cron schedules at 5 min).
+  if (bucket === '1m' || all) {
+    await safe('weatherapi_current', () => weatherapiCurrent(json), ok, errors);
+    await safe('openweather',        () => openweather(json),       ok, errors);
+  }
+
+  // 2m: AQI — sensor refreshes ~every 2 min.
+  if (bucket === '2m' || all) {
+    await safe('purpleair', () => purpleair(json), ok, errors);
+  }
+
+  if (bucket === '5m' || all) {
+    await safe('noaa_alerts',        () => noaaAlerts(json),        ok, errors);
+    await safe('twelvedata_stocks',  () => twelvedataStocks(json),  ok, errors);
   }
 
   if (bucket === '15m' || all) {
-    await safe('weatherapi_current', () => weatherapiCurrent(json), ok, errors);
-    await safe('purpleair', () => purpleair(json), ok, errors);
     await safe('noaa_buoys', () => noaaBuoys(json), ok, errors);
   }
 
   if (bucket === '1h' || all) {
-    await safe('noaa_forecast', () => noaaForecast(json), ok, errors);
-    await safe('noaa_hourly', () => noaaHourly(json), ok, errors);
-    await safe('noaa_aviation', () => noaaAviation(json), ok, errors);
-    await safe('weatherapi_marine', () => weatherapiMarine(json), ok, errors);
+    await safe('noaa_forecast',       () => noaaForecast(json),       ok, errors);
+    await safe('noaa_hourly',         () => noaaHourly(json),         ok, errors);
+    await safe('noaa_aviation',       () => noaaAviation(json),       ok, errors);
+    await safe('weatherapi_marine',   () => weatherapiMarine(json),   ok, errors);
     await safe('weatherapi_forecast', () => weatherapiForecast(json), ok, errors);
-    await safe('openweather', () => openweather(json), ok, errors);
-    await safe('weatherstack', () => weatherstack(json), ok, errors);
-    await safe('usgs_quakes', () => usgsQuakes(json), ok, errors);
-    await safe('ebird', () => ebird(json), ok, errors);
-    await safe('weather_story', () => weatherStory(miscBag), ok, errors);
+    await safe('usgs_quakes',         () => usgsQuakes(json),         ok, errors);
+    await safe('ebird',               () => ebird(json),              ok, errors);
   }
 
   if (bucket === '4h' || all) {
-    await safe('news_feeds', () => newsFeeds(), ok, errors);
-    await safe('noaa_water_rss', () => noaaWaterRss(xmlBag), ok, errors);
+    await safe('news_feeds',     () => newsFeeds(),                ok, errors);
+    await safe('noaa_water_rss', () => noaaWaterRss(xmlBag),       ok, errors);
+    await safe('weather_story',  () => weatherStory(miscBag),      ok, errors);
   }
 
   if (bucket === '12h' || all) {

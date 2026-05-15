@@ -3,14 +3,23 @@ name: refresh cache
 # Hits /api/cron on the deployed site at the cadences listed below.
 # GitHub schedules drift by a couple of minutes; that's fine for this site.
 #
+# IMPORTANT: GitHub Actions floors cron schedules at 5 minutes. The
+# 1m and 2m buckets are defined in code for true-1-min freshness, but
+# this workflow can only fire them every 5 min. For real 1-min cadence,
+# point an external pinger (e.g. cron-job.org) at:
+#   https://mtz.city/api/cron?bucket=1m   — every 1 minute
+#   https://mtz.city/api/cron?bucket=2m   — every 2 minutes
+#
 # Schedule (UTC):
-#   */15 * * * *   — 5m + 15m buckets (alerts, current conditions, AQ, buoys)
-#   0    * * * *   — 1h bucket  (forecasts, marine, eBird, USGS, etc.)
-#   0 */4 * * *    — 4h bucket  (news RSS, water RSS, stocks)
+#   */5  * * * *   — 1m + 2m + 5m buckets (current wx, AQI, alerts, stocks)
+#   */15 * * * *   — 15m bucket (buoys)
+#   0    * * * *   — 1h bucket  (forecasts, marine, eBird, USGS)
+#   0 */4 * * *    — 4h bucket  (news RSS, water RSS, weather story imagery)
 #   0 */12 * * *   — 12h bucket (Foursquare places, Ticketmaster events)
 
 on:
   schedule:
+    - cron: '*/5 * * * *'
     - cron: '*/15 * * * *'
     - cron: '0 * * * *'
     - cron: '0 */4 * * *'
@@ -22,7 +31,7 @@ on:
         required: true
         default: 'all'
         type: choice
-        options: [5m, 15m, 1h, 4h, 12h, all]
+        options: [1m, 2m, 5m, 15m, 1h, 4h, 12h, all]
 
 permissions:
   contents: read
@@ -39,10 +48,11 @@ jobs:
         id: pick
         run: |
           case "${{ github.event.schedule }}" in
-            "*/15 * * * *") echo "buckets=5m 15m"  >> "$GITHUB_OUTPUT" ;;
-            "0 * * * *")    echo "buckets=1h"     >> "$GITHUB_OUTPUT" ;;
-            "0 */4 * * *")  echo "buckets=4h"     >> "$GITHUB_OUTPUT" ;;
-            "0 */12 * * *") echo "buckets=12h"    >> "$GITHUB_OUTPUT" ;;
+            "*/5 * * * *")  echo "buckets=1m 2m 5m" >> "$GITHUB_OUTPUT" ;;
+            "*/15 * * * *") echo "buckets=15m"      >> "$GITHUB_OUTPUT" ;;
+            "0 * * * *")    echo "buckets=1h"       >> "$GITHUB_OUTPUT" ;;
+            "0 */4 * * *")  echo "buckets=4h"       >> "$GITHUB_OUTPUT" ;;
+            "0 */12 * * *") echo "buckets=12h"      >> "$GITHUB_OUTPUT" ;;
             *)              echo "buckets=${{ github.event.inputs.bucket || 'all' }}" >> "$GITHUB_OUTPUT" ;;
           esac
 

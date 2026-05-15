@@ -6,10 +6,12 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const BUCKETS = [
-  { id: '5m',  desc: 'NOAA active alerts (urgent — every 5 minutes)' },
-  { id: '15m', desc: 'WeatherAPI current, PurpleAir AQ, NOAA buoys (every 15 minutes)' },
-  { id: '1h',  desc: 'NOAA forecast/hourly/aviation, WeatherAPI marine/forecast, OpenWeather, WeatherStack, USGS earthquakes, eBird, NOAA WeatherStory map (every hour)' },
-  { id: '4h',  desc: 'News RSS, NOAA water RSS, stocks (every 4 hours)' },
+  { id: '1m',  desc: 'WeatherAPI current, OpenWeather (every 1 minute — needs external pinger)' },
+  { id: '2m',  desc: 'PurpleAir AQ (every 2 minutes — needs external pinger)' },
+  { id: '5m',  desc: 'NOAA alerts, stocks (every 5 minutes)' },
+  { id: '15m', desc: 'NOAA buoys (every 15 minutes)' },
+  { id: '1h',  desc: 'NOAA forecast/hourly/aviation, WeatherAPI marine/forecast, USGS earthquakes, eBird (every hour)' },
+  { id: '4h',  desc: 'News RSS, NOAA water RSS, NOAA WeatherStory imagery (every 4 hours)' },
   { id: '12h', desc: 'Foursquare places, Ticketmaster events (every 12 hours)' },
   { id: 'all', desc: 'Run every bucket sequentially (manual / cold start)' },
 ];
