@@ -109,7 +109,11 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
               <p style={{ lineHeight: 1.5, marginBottom: 12 }}>{open.description}</p>
             )}
             {(() => {
-              const q = [open.venue, open.city].filter(Boolean).join(', ');
+              // Local scraped events rarely set city; default to Martinez,
+              // CA so Google Maps doesn't aim at another "Luigi's Deli"
+              // across the country.
+              const cityFallback = open.source === 'local' ? 'Martinez, CA' : '';
+              const q = [open.venue, open.city || cityFallback].filter(Boolean).join(', ');
               return q ? <MiniMap query={q} /> : null;
             })()}
             {open.url && (

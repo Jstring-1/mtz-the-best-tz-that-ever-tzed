@@ -418,7 +418,7 @@ async function scrapeSlowHandBBQ(): Promise<LocalEvent[]> {
 // and emit LocalEvent rows with stable per-date ids.
 
 const LUIGI_WEEKS_AHEAD = 8;
-const LUIGI_VENUE = "Luigi's Deli";
+const LUIGI_VENUE = "Luigi's Deli & Market";
 
 async function luigiRecurring(): Promise<LocalEvent[]> {
   const out: LocalEvent[] = [];
