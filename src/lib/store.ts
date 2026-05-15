@@ -52,6 +52,20 @@ async function ensureTables(): Promise<void> {
   `;
   await sql`CREATE INDEX IF NOT EXISTS birds_observed_at_idx ON birds (observed_at)`;
 
+  // Wikipedia summary per species — fetched in the background by the
+  // eBird cron job so the UI never has to wait on the Wikipedia API
+  // when a row is clicked.
+  await sql`
+    CREATE TABLE IF NOT EXISTS bird_wiki (
+      common_name   TEXT PRIMARY KEY,
+      description   TEXT,
+      extract       TEXT,
+      thumbnail_url TEXT,
+      content_url   TEXT,
+      fetched_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+
   await sql`
     CREATE TABLE IF NOT EXISTS quakes (
       id            TEXT PRIMARY KEY,
@@ -186,6 +200,11 @@ export interface StoredBird {
   cnt: number | null;
   lat: number | null;
   lon: number | null;
+  // Joined from bird_wiki — null until the cron's backfill runs.
+  wiki_description?: string | null;
+  wiki_extract?: string | null;
+  wiki_thumbnail?: string | null;
+  wiki_url?: string | null;
 }
 
 export async function upsertBirds(rows: StoredBird[]): Promise<void> {
@@ -211,11 +230,67 @@ export async function upsertBirds(rows: StoredBird[]): Promise<void> {
 export async function listRecentBirds(limit = 60): Promise<StoredBird[]> {
   await ensureTables();
   return await sql<StoredBird[]>`
-    SELECT id, common_name, sci_name, observed_at, place, cnt, lat, lon
-    FROM birds
-    ORDER BY observed_at DESC NULLS LAST
+    SELECT b.id, b.common_name, b.sci_name, b.observed_at, b.place, b.cnt, b.lat, b.lon,
+           w.description   AS wiki_description,
+           w.extract       AS wiki_extract,
+           w.thumbnail_url AS wiki_thumbnail,
+           w.content_url   AS wiki_url
+    FROM birds b
+    LEFT JOIN bird_wiki w ON w.common_name = b.common_name
+    ORDER BY b.observed_at DESC NULLS LAST
     LIMIT ${limit}
   `;
+}
+
+// Backfill Wikipedia summaries for any species we haven't seen yet
+// (or last fetched > 90 days ago). Called from the eBird cron after
+// the sightings upsert. Rate-limited at 200ms per call.
+export async function backfillBirdWikis(commonNames: string[]): Promise<{ fetched: number; skipped: number; failed: number }> {
+  await ensureTables();
+  const unique = Array.from(new Set(commonNames.filter(Boolean)));
+  if (!unique.length) return { fetched: 0, skipped: 0, failed: 0 };
+
+  // Pull the set of species already cached recently.
+  const cached = await sql<{ common_name: string }[]>`
+    SELECT common_name
+    FROM bird_wiki
+    WHERE common_name = ANY(${unique})
+      AND fetched_at > NOW() - INTERVAL '90 days'
+  `;
+  const have = new Set(cached.map((r) => r.common_name));
+  const todo = unique.filter((n) => !have.has(n));
+
+  let fetched = 0, failed = 0;
+  for (const name of todo) {
+    try {
+      const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`, {
+        headers: { 'User-Agent': 'mtz-city/1.0 (bird wiki backfill)' },
+      });
+      if (!r.ok) { failed++; continue; }
+      const j = await r.json() as {
+        description?: string; extract?: string;
+        thumbnail?: { source?: string };
+        content_urls?: { desktop?: { page?: string } };
+      };
+      await sql`
+        INSERT INTO bird_wiki (common_name, description, extract, thumbnail_url, content_url, fetched_at)
+        VALUES (${name}, ${j.description ?? null}, ${j.extract ?? null},
+                ${j.thumbnail?.source ?? null}, ${j.content_urls?.desktop?.page ?? null}, NOW())
+        ON CONFLICT (common_name) DO UPDATE SET
+          description   = EXCLUDED.description,
+          extract       = EXCLUDED.extract,
+          thumbnail_url = EXCLUDED.thumbnail_url,
+          content_url   = EXCLUDED.content_url,
+          fetched_at    = NOW()
+      `;
+      fetched++;
+    } catch { failed++; }
+    // Politeness pause — Wikipedia REST has generous limits but we're
+    // not in a hurry. 200ms × 60 species = 12s, still fine inside one
+    // cron tick.
+    await new Promise((res) => setTimeout(res, 200));
+  }
+  return { fetched, skipped: have.size, failed };
 }
 
 // ---------- Quakes ----------------------------------------------------

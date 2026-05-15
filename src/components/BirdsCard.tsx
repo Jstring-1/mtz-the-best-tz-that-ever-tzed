@@ -11,6 +11,12 @@ export interface BirdSighting {
   count?: number | null;
   lat?: string | number;
   lon?: string | number;
+  // Pre-fetched Wikipedia summary (joined from bird_wiki in store.ts).
+  // Populated by the eBird cron — null until the backfill has run.
+  wiki_description?: string | null;
+  wiki_extract?: string | null;
+  wiki_thumbnail?: string | null;
+  wiki_url?: string | null;
 }
 
 interface WikiSummary {
@@ -29,6 +35,20 @@ export default function BirdsCard({ sightings }: { sightings: BirdSighting[] }) 
 
   useEffect(() => {
     if (!open) { setWiki(null); setError(null); return; }
+    // If the cron backfill already cached the summary, use it directly.
+    if (open.wiki_extract || open.wiki_description) {
+      setWiki({
+        title: open.name,
+        description: open.wiki_description ?? undefined,
+        extract: open.wiki_extract ?? undefined,
+        thumbnail: open.wiki_thumbnail ? { source: open.wiki_thumbnail } : undefined,
+        content_urls: open.wiki_url ? { desktop: { page: open.wiki_url } } : undefined,
+      });
+      setLoading(false);
+      return;
+    }
+    // Fallback: cache miss (new species the cron hasn't picked up yet).
+    // Hit Wikipedia live just this once.
     let cancelled = false;
     setLoading(true);
     setError(null);

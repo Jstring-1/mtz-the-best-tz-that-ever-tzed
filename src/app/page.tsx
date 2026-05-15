@@ -57,6 +57,10 @@ export default async function MainPage() {
     count: b.cnt ?? null,
     lat: b.lat ?? '',
     lon: b.lon ?? '',
+    wiki_description: b.wiki_description ?? null,
+    wiki_extract:     b.wiki_extract ?? null,
+    wiki_thumbnail:   b.wiki_thumbnail ?? null,
+    wiki_url:         b.wiki_url ?? null,
   }));
 
   const quakes: QuakeRow[] = storedQuakes.map((q) => ({

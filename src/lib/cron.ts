@@ -311,8 +311,16 @@ async function ebird(json: Record<string, unknown>) {
   }
   json.eBird = birds;
   if (rows.length) {
-    const { upsertBirds } = await import('./store');
+    const { upsertBirds, backfillBirdWikis } = await import('./store');
     await upsertBirds(rows);
+    // Backfill Wikipedia summaries for any new species so the UI can
+    // serve them without an on-click fetch. Doesn't block on failure.
+    try {
+      const r = await backfillBirdWikis(rows.map((b) => b.common_name));
+      console.log(`[cron] bird_wiki: fetched ${r.fetched}, skipped ${r.skipped}, failed ${r.failed}`);
+    } catch (e) {
+      console.warn('[cron] bird_wiki backfill threw:', e instanceof Error ? e.message : e);
+    }
   }
 }
 
