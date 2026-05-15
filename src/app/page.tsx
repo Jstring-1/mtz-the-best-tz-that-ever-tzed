@@ -1,6 +1,9 @@
 import { getLocation } from '@/lib/location';
-import { getJson, getFeeds, getMisc, getPlaces } from '@/lib/cache';
-import type { NoaaAlertsBag, NoaaAlert, TmEvent, PlaceRow, LocalEvent, Park } from '@/lib/types';
+import { getFeeds, getMisc, getPlaces } from '@/lib/cache';
+import {
+  listUpcomingEvents, listRecentBirds, listRecentQuakes, listParks, listActiveAlerts,
+} from '@/lib/store';
+import type { PlaceRow, NoaaAlert } from '@/lib/types';
 import AlertsCard from '@/components/AlertsCard';
 import NewsCard from '@/components/NewsCard';
 import QuakesCard, { type QuakeRow } from '@/components/QuakesCard';
@@ -9,6 +12,7 @@ import EventsCard, { type UEvent } from '@/components/EventsCard';
 import PlacesCard from '@/components/PlacesCard';
 import ParksCard from '@/components/ParksCard';
 import RadarCard, { type RadarImg } from '@/components/RadarCard';
+import type { Park } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -16,36 +20,83 @@ export const revalidate = 0;
 export default async function MainPage() {
   const loc = getLocation();
 
-  const [alerts, quakesRaw, birdsRaw, tmRaw, localRaw, parksRaw, feeds, misc, places] = await Promise.all([
-    getJson<NoaaAlertsBag>('NOAA_alerts'),
-    getJson<Record<string, QuakeRow>>('USGS_earthquakes'),
-    getJson<Record<string, BirdSighting>>('eBird'),
-    getJson<TmEvent[] | unknown>('TM_shows'),
-    getJson<LocalEvent[]>('local_events'),
-    getJson<Park[]>('local_parks'),
+  const [
+    storedEvents, storedBirds, storedQuakes, storedParks, storedAlerts,
+    feeds, misc, places,
+  ] = await Promise.all([
+    listUpcomingEvents(),
+    listRecentBirds(60),
+    listRecentQuakes(20),
+    listParks(),
+    listActiveAlerts(),
     getFeeds(8),
     getMisc(),
     getPlaces(),
   ]);
 
-  const localAlerts: NoaaAlert[] =
-    alerts && typeof alerts.LOCAL === 'object' ? Object.values(alerts.LOCAL) : [];
+  // Map structured rows back into the UI shapes the cards already expect.
+  const events: UEvent[] = storedEvents.map((e) => ({
+    id: e.id,
+    title: e.title,
+    venue: e.venue ?? '',
+    city: e.city ?? undefined,
+    start_at: e.start_at,
+    url: e.url ?? undefined,
+    description: e.description ?? undefined,
+    image: e.image ?? undefined,
+    source: e.source === 'ticketmaster' ? 'ticketmaster' : 'local',
+    source_label: e.source_label,
+    segment: e.segment ?? undefined,
+    genre: e.genre ?? undefined,
+    pleaseNote: e.please_note ?? undefined,
+  }));
 
-  const quakes: QuakeRow[] = quakesRaw
-    ? Object.entries(quakesRaw).map(([id, q]) => ({ id, ...q }))
-        .sort((a, b) => (b.occurred_at ?? 0) - (a.occurred_at ?? 0))
-    : [];
+  const birds: BirdSighting[] = storedBirds.map((b) => ({
+    name: b.common_name,
+    fancy_name: b.sci_name ?? '',
+    date: b.observed_at ? new Date(b.observed_at * 1000).toISOString().slice(0, 10) : '',
+    place: b.place ?? '',
+    count: b.cnt ?? null,
+    lat: b.lat ?? '',
+    lon: b.lon ?? '',
+  }));
 
-  const birds: BirdSighting[] = birdsRaw ? Object.values(birdsRaw) : [];
+  const quakes: QuakeRow[] = storedQuakes.map((q) => ({
+    id: q.id,
+    magnitude: q.magnitude ?? null,
+    place: q.place,
+    occurred_at: q.occurred_at,
+    url: q.url ?? '',
+  }));
 
-  // Merge Ticketmaster + locally-scraped events into one chronological list.
-  const events: UEvent[] = buildUnifiedEvents(
-    Array.isArray(tmRaw) ? (tmRaw as TmEvent[]) : [],
-    Array.isArray(localRaw) ? localRaw : [],
-  );
+  const parksList: Park[] = storedParks.map((p) => ({
+    id: p.id,
+    name: p.name,
+    url: p.url ?? '',
+    address: p.address ?? undefined,
+    description: p.description ?? undefined,
+    amenities: p.amenities ?? undefined,
+    image: p.image ?? undefined,
+  }));
+
+  // Alerts: card type wants NoaaAlert shape (epoch numbers etc).
+  const localAlerts: NoaaAlert[] = storedAlerts
+    .filter((a) => a.scope === 'LOCAL')
+    .map((a) => ({
+      event: a.event ?? undefined,
+      severity: a.severity ?? undefined,
+      urgency: a.urgency ?? undefined,
+      certainty: a.certainty ?? undefined,
+      status: a.status ?? undefined,
+      NWSheadline: a.headline ?? undefined,
+      areaDesc: a.area_desc ?? undefined,
+      description: a.description ?? undefined,
+      sent: a.sent_at ?? undefined,
+      effective: a.effective_at ?? undefined,
+      expires: a.expires_at ?? undefined,
+    }));
 
   const placesList: PlaceRow[] = places ?? [];
-  const parksList: Park[] = Array.isArray(parksRaw) ? parksRaw : [];
 
   const storyImgs = misc.filter((m) => m.text === 'true' && m.id.startsWith('WeatherStory')).map((m) => m.id);
   const radarImgs: RadarImg[] = [
@@ -71,58 +122,4 @@ export default async function MainPage() {
       <BirdsCard  sightings={birds} />
     </div>
   );
-}
-
-// ---- merge + sort helpers --------------------------------------------
-
-function buildUnifiedEvents(tm: TmEvent[], local: LocalEvent[]): UEvent[] {
-  const cutoff = Math.floor(Date.now() / 1000) - 6 * 3600;
-  const out: UEvent[] = [];
-
-  for (const e of tm) {
-    const ts = tmEpoch(e);
-    if (ts != null && ts < cutoff) continue;
-    const venue = e._embedded?.venues?.[0];
-    out.push({
-      id: `tm-${e.id ?? out.length}`,
-      title: e.name ?? 'Untitled event',
-      venue: venue?.name ?? '',
-      city: venue?.city?.name,
-      start_at: ts,
-      url: e.url,
-      source: 'ticketmaster',
-      source_label: 'Ticketmaster',
-      segment: e.classifications?.[0]?.segment?.name,
-      genre:   e.classifications?.[0]?.genre?.name,
-      pleaseNote: e.pleaseNote,
-    });
-  }
-
-  for (const e of local) {
-    if (e.start_at != null && e.start_at < cutoff) continue;
-    out.push({
-      id: `local-${e.id}`,
-      title: e.title,
-      venue: e.venue,
-      start_at: e.start_at ?? null,
-      url: e.url,
-      description: e.description,
-      image: e.image,
-      source: 'local',
-      source_label: e.source_label,
-    });
-  }
-
-  return out.sort((a, b) => (a.start_at ?? Infinity) - (b.start_at ?? Infinity));
-}
-
-function tmEpoch(e: TmEvent): number | null {
-  const iso = e.dates?.start?.dateTime;
-  if (iso) { const ms = Date.parse(iso); if (!Number.isNaN(ms)) return Math.floor(ms / 1000); }
-  const ld = e.dates?.start?.localDate;
-  if (ld) {
-    const [y, m, d] = ld.split('-').map(Number);
-    if (y && m && d) return Math.floor(Date.UTC(y, m - 1, d, 19) / 1000);
-  }
-  return null;
 }

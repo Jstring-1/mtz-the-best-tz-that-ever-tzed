@@ -111,6 +111,47 @@ async function noaaAlerts(json: Record<string, unknown>) {
     return out;
   };
   json.NOAA_alerts = { LOCAL: flatten(local), 'NOT-LOCAL': flatten(notLocal) };
+  // Mirror into the structured alerts table.
+  const alertRows: Array<{
+    id: string; event: string | null; severity: string | null; urgency: string | null;
+    certainty: string | null; status: string | null; headline: string | null;
+    area_desc: string | null; description: string | null;
+    sent_at: number | null; effective_at: number | null; expires_at: number | null;
+    scope: string;
+  }> = [];
+  const harvest = (bag: Record<string, unknown>, scope: 'LOCAL' | 'NOT-LOCAL') => {
+    for (const [id, fAny] of Object.entries(bag)) {
+      const p = (fAny as { properties: Record<string, unknown> }).properties;
+      const ts = (k: string) => {
+        const v = p[k];
+        if (typeof v !== 'string') return null;
+        const ms = Date.parse(v);
+        return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
+      };
+      const nws = (p.parameters as Record<string, string[]> | undefined)?.NWSheadline?.[0] ?? null;
+      alertRows.push({
+        id,
+        event: (p.event as string | null) ?? null,
+        severity: (p.severity as string | null) ?? null,
+        urgency: (p.urgency as string | null) ?? null,
+        certainty: (p.certainty as string | null) ?? null,
+        status: (p.status as string | null) ?? null,
+        headline: nws ?? (p.headline as string | null) ?? null,
+        area_desc: (p.areaDesc as string | null) ?? null,
+        description: (p.description as string | null) ?? null,
+        sent_at: ts('sent'),
+        effective_at: ts('effective'),
+        expires_at: ts('expires'),
+        scope,
+      });
+    }
+  };
+  harvest(local, 'LOCAL');
+  harvest(notLocal, 'NOT-LOCAL');
+  if (alertRows.length) {
+    const { upsertAlerts } = await import('./store');
+    await upsertAlerts(alertRows);
+  }
 }
 
 async function weatherapiCurrent(json: Record<string, unknown>) {
@@ -201,17 +242,30 @@ async function usgsQuakes(json: Record<string, unknown>) {
   type Q = { features?: { id: string; properties: { place?: string; mag?: number; time?: number; url?: string } }[] };
   const r = await fetchJson<Q>('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.geojson');
   const out: Record<string, unknown> = {};
+  const rows: Array<{ id: string; magnitude: number | null; place: string; occurred_at: number; url: string | null }> = [];
   for (const eq of r.features ?? []) {
     const place = eq.properties.place ?? '';
     if (!place.endsWith('CA')) continue;
+    const occurred_at = Math.round((eq.properties.time ?? 0) / 1000);
     out[eq.id] = {
       magnitude: eq.properties.mag,
       place,
-      occurred_at: Math.round((eq.properties.time ?? 0) / 1000),
+      occurred_at,
       url: eq.properties.url ?? '',
     };
+    rows.push({
+      id: eq.id,
+      magnitude: eq.properties.mag ?? null,
+      place,
+      occurred_at,
+      url: eq.properties.url ?? null,
+    });
   }
   json.USGS_earthquakes = out;
+  if (rows.length) {
+    const { upsertQuakes } = await import('./store');
+    await upsertQuakes(rows);
+  }
 }
 
 async function ebird(json: Record<string, unknown>) {
@@ -227,6 +281,7 @@ async function ebird(json: Record<string, unknown>) {
   if (!Array.isArray(data)) { json.eBird = []; return; }
   data.reverse();
   const birds: Record<string, unknown> = {};
+  const rows: Array<{ id: string; common_name: string; sci_name: string | null; observed_at: number | null; place: string | null; cnt: number | null; lat: number | null; lon: number | null }> = [];
   for (const v of data) {
     if (!v.comName) continue;
     birds[v.comName] = {
@@ -238,18 +293,78 @@ async function ebird(json: Record<string, unknown>) {
       lat: v.lat ?? '',
       lon: v.lng ?? '',
     };
+    // Build a stable per-sighting id. Use the upstream date + comName + place
+    // + lat/lon — same combination eBird treats as one observation.
+    const observed = v.obsDt ? Math.floor(Date.parse(v.obsDt.replace(' ', 'T') + ':00') / 1000) : null;
+    const id = `ebird-${slugId(`${v.comName}-${v.obsDt ?? ''}-${v.locName ?? ''}-${v.lat ?? ''}-${v.lng ?? ''}`)}`;
+    rows.push({
+      id,
+      common_name: v.comName,
+      sci_name: v.sciName ?? null,
+      observed_at: Number.isFinite(observed as number) ? (observed as number) : null,
+      place: v.locName ?? null,
+      cnt: v.howMany ?? null,
+      lat: typeof v.lat === 'number' ? v.lat : null,
+      lon: typeof v.lng === 'number' ? v.lng : null,
+    });
   }
   json.eBird = birds;
+  if (rows.length) {
+    const { upsertBirds } = await import('./store');
+    await upsertBirds(rows);
+  }
+}
+
+function slugId(s: string): string {
+  return s.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase().slice(0, 100);
 }
 
 async function localEvents(json: Record<string, unknown>) {
   const { scrapeAllLocalEvents } = await import('./scrape-events');
-  json['local_events'] = await scrapeAllLocalEvents();
+  const events = await scrapeAllLocalEvents();
+  json['local_events'] = events;
+  // Mirror into the structured events table.
+  const { upsertEvents } = await import('./store');
+  await upsertEvents(events.map((e) => ({
+    id: `local-${e.id}`,
+    source: e.source,
+    source_label: e.source_label,
+    title: e.title,
+    start_at: e.start_at,
+    end_at: e.end_at ?? null,
+    venue: e.venue,
+    city: null,
+    url: e.url,
+    description: e.description ?? null,
+    image: e.image ?? null,
+    segment: null,
+    genre: null,
+    please_note: null,
+    payload: e,
+  })));
 }
 
 async function localParks(json: Record<string, unknown>) {
   const { scrapeAllParks } = await import('./scrape-parks');
-  json['local_parks'] = await scrapeAllParks();
+  const parks = await scrapeAllParks();
+  json['local_parks'] = parks;
+  // Mirror into the structured parks table.
+  const { upsertParks } = await import('./store');
+  await upsertParks(parks.map((p) => ({
+    id: p.id,
+    name: p.name,
+    url: p.url ?? null,
+    address: p.address ?? null,
+    description: p.description ?? null,
+    amenities: p.amenities ?? null,
+    image: p.image ?? null,
+  })));
+}
+
+async function purgeStores() {
+  const { purgeOldRows } = await import('./store');
+  const r = await purgeOldRows();
+  console.log(`[cron] purge: events ${r.events}, birds ${r.birds}, quakes ${r.quakes}, alerts ${r.alerts}`);
 }
 
 async function weatherStory(misc: Record<string, string>) {
@@ -479,7 +594,46 @@ async function ticketmasterEvents(json: Record<string, unknown>) {
   });
   type TM = { _embedded?: { events?: Array<Record<string, unknown>> } };
   const r = await fetchJson<TM>(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);
-  json.TM_shows = r._embedded?.events ?? [];
+  const events = r._embedded?.events ?? [];
+  json.TM_shows = events;
+  // Mirror into the structured events table.
+  const { upsertEvents } = await import('./store');
+  await upsertEvents(events.map((e) => {
+    const tm = e as {
+      id?: string; name?: string; url?: string; pleaseNote?: string;
+      images?: Array<{ url?: string; ratio?: string; width?: number }>;
+      dates?: { start?: { localDate?: string; dateTime?: string } };
+      classifications?: Array<{ segment?: { name?: string }; genre?: { name?: string } }>;
+      _embedded?: { venues?: Array<{ name?: string; city?: { name?: string } }> };
+    };
+    const iso = tm.dates?.start?.dateTime;
+    const ld  = tm.dates?.start?.localDate;
+    let start_at: number | null = null;
+    if (iso) { const ms = Date.parse(iso); if (!Number.isNaN(ms)) start_at = Math.floor(ms / 1000); }
+    else if (ld) {
+      const [y, m, d] = ld.split('-').map(Number);
+      if (y && m && d) start_at = Math.floor(Date.UTC(y, m - 1, d, 19) / 1000);
+    }
+    const venue = tm._embedded?.venues?.[0];
+    const hero = [...(tm.images ?? [])].sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0];
+    return {
+      id: `tm-${tm.id ?? Math.random().toString(36).slice(2)}`,
+      source: 'ticketmaster',
+      source_label: 'Ticketmaster',
+      title: tm.name ?? 'Untitled event',
+      start_at,
+      end_at: null,
+      venue: venue?.name ?? null,
+      city: venue?.city?.name ?? null,
+      url: tm.url ?? null,
+      description: null,
+      image: hero?.url ?? null,
+      segment: tm.classifications?.[0]?.segment?.name ?? null,
+      genre:   tm.classifications?.[0]?.genre?.name ?? null,
+      please_note: tm.pleaseNote ?? null,
+      payload: e,
+    };
+  }));
 }
 
 // ---- Public dispatcher --------------------------------------------------
@@ -536,6 +690,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('foursquare_places',  () => foursquarePlaces(json),   ok, errors);
     await safe('ticketmaster_events',() => ticketmasterEvents(json), ok, errors);
     await safe('local_parks',        () => localParks(json),         ok, errors);
+    await safe('purge_stores',       () => purgeStores(),             ok, errors);
   }
 
   if (Object.keys(json).length)    await upsertJsonMany(json);

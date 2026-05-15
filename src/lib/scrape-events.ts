@@ -328,6 +328,98 @@ async function scrapeSlowHandBBQ(): Promise<LocalEvent[]> {
   return scrapeGenericPage('https://www.slowhandbbq.com/events', 'slowhand', 'Slow Hand BBQ', 'Slow Hand BBQ');
 }
 
+// ----- Luigi's Deli — recurring weekly residencies ---------------------
+// These don't need scraping. The slots are the same every week; we
+// just need to project the next N weeks of Monday and Tuesday dates
+// and emit LocalEvent rows with stable per-date ids.
+
+const LUIGI_WEEKS_AHEAD = 8;
+const LUIGI_VENUE = "Luigi's Deli";
+
+async function luigiRecurring(): Promise<LocalEvent[]> {
+  const out: LocalEvent[] = [];
+  // Iterate from today, walk forward week-by-week. Pacific time is what
+  // people care about — use the local PT offset by computing from a
+  // formatted "today" string in America/Los_Angeles.
+  const todayPT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  for (let w = 0; w < LUIGI_WEEKS_AHEAD; w++) {
+    const monday  = nextWeekday(todayPT, 1, w);          // Mondays
+    const tuesday = nextWeekday(todayPT, 2, w);          // Tuesdays
+    out.push(makeLuigiEvent(monday, 18, 0, {
+      id: `luigi-mon-${ymd(monday)}`,
+      title: 'Open Mic Night',
+      description: 'Hosted by Roy Jeans with sound by Jay Olson. Sign-ups 5:30 PM, music starts 6:00 PM.',
+      url: 'https://luigismartinezmusic.weebly.com/monday-open-mic.html',
+    }));
+    out.push(makeLuigiEvent(tuesday, 18, 30, {
+      id: `luigi-tue-${ymd(tuesday)}`,
+      title: 'Nob Hill Billies',
+      description: 'Live music with the Nob Hill Billies, 6:30–8:30 PM.',
+      url: 'https://luigismartinezmusic.weebly.com/tuesday---nob-hill-billies.html',
+    }, 20, 30),
+    );
+  }
+  return out;
+}
+
+function makeLuigiEvent(
+  date: Date,
+  hour: number, minute: number,
+  extras: { id: string; title: string; description: string; url: string },
+  endHour?: number, endMinute?: number,
+): LocalEvent {
+  // Build the event start moment in Pacific time → epoch sec.
+  const start = ptEpoch(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute);
+  const end   = endHour != null
+    ? ptEpoch(date.getFullYear(), date.getMonth(), date.getDate(), endHour, endMinute ?? 0)
+    : null;
+  return {
+    id: extras.id,
+    source: 'luigi',
+    source_label: LUIGI_VENUE,
+    title: extras.title,
+    start_at: start,
+    end_at: end,
+    venue: LUIGI_VENUE,
+    url: extras.url,
+    description: extras.description,
+  };
+}
+
+// Returns Pacific-time epoch seconds for the given local date/time.
+// Approximates PDT (UTC-7) most of the year; off by 1h during PST
+// (Nov–Mar). Good enough for display.
+function ptEpoch(y: number, m: number, d: number, h: number, mn: number): number {
+  // Determine whether the date falls in DST (rough US rule: 2nd Sun Mar
+  // through 1st Sun Nov). For accuracy across the year, use Intl to
+  // ask "what's UTC offset at America/Los_Angeles for this date?"
+  const test = new Date(Date.UTC(y, m, d, h, mn));
+  const offsetMin = ptOffsetMinutes(test);
+  return Math.floor((Date.UTC(y, m, d, h, mn) - offsetMin * 60_000) / 1000);
+}
+function ptOffsetMinutes(d: Date): number {
+  // Look up the formatted offset string like "GMT-7" or "GMT-8".
+  const s = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    timeZoneName: 'shortOffset',
+  }).formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? 'GMT-8';
+  const m = s.match(/GMT([+-]\d+)(?::(\d+))?/);
+  if (!m) return -8 * 60;
+  return (Number(m[1]) * 60) - (m[1].startsWith('-') ? (Number(m[2] ?? 0)) : -Number(m[2] ?? 0));
+}
+
+// Returns a Date at midnight on the next occurrence of `weekday`
+// (0=Sun..6=Sat), offset by `weekOffset` additional weeks.
+function nextWeekday(from: Date, weekday: number, weekOffset: number): Date {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const diff = ((weekday - d.getDay()) + 7) % 7;
+  d.setDate(d.getDate() + diff + weekOffset * 7);
+  return d;
+}
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ----- public entry ----------------------------------------------------
 
 const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
@@ -337,6 +429,7 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
   ['martinez',       scrapeCityOfMartinez],
   ['roxxonmain',     scrapeRoxxOnMain],
   ['slowhand',       scrapeSlowHandBBQ],
+  ['luigi',          luigiRecurring],
 ];
 
 export async function scrapeAllLocalEvents(): Promise<LocalEvent[]> {
