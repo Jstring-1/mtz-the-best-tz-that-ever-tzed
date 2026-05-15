@@ -644,10 +644,17 @@ const GOOGLE_PLACES_GROUPS: Array<{ name: string; types: string[]; excluded?: st
   { name: 'rec',
     types: ['park', 'tourist_attraction', 'museum', 'library', 'art_gallery'],
   },
-  { name: 'retail',
-    types: ['supermarket', 'pharmacy', 'book_store', 'clothing_store'],
-  },
 ];
+
+// Rectangle scoping the Google Places fetch to downtown Martinez —
+// roughly bounded by the waterfront / marina to the north, Alhambra
+// Valley / Pine St to the south, Talbart St / I-680 to the west,
+// and Pacheco Blvd to the east. Edit these to widen/narrow the
+// search area; lat goes N→positive, lng goes W→negative.
+const DOWNTOWN_BOUNDS = {
+  low:  { latitude: 38.0080, longitude: -122.1485 },  // SW corner
+  high: { latitude: 38.0250, longitude: -122.1275 },  // NE corner
+};
 
 // Name-pattern blocklist for chains that slip past the type filter
 // (most coffee + casual-dining chains aren't tagged "fast_food").
@@ -711,10 +718,7 @@ async function googlePlaces(json: Record<string, unknown>) {
         includedTypes: group.types,
         maxResultCount: 20,
         locationRestriction: {
-          circle: {
-            center: { latitude: loc.lat, longitude: loc.lon },
-            radius: 5000,
-          },
+          rectangle: DOWNTOWN_BOUNDS,
         },
       };
       if (group.excluded?.length) body.excludedTypes = group.excluded;
