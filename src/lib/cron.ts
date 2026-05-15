@@ -353,6 +353,11 @@ async function localEvents(json: Record<string, unknown>) {
   // Old ids matched "martinez-fb-*" / "martinez-jsonld-*"; the new
   // curated rows use "martinez-sig-<slug>".
   await sql`DELETE FROM events WHERE source = 'martinez' AND id NOT LIKE 'martinez-sig-%'`;
+  // Wipe contracosta rows whose start_at is already in the past — the
+  // RSS feed mostly publishes pubDate, not event date, so older runs
+  // of the scraper saddled rows with past dates that then got filtered
+  // out at render time.
+  await sql`DELETE FROM events WHERE source = 'contracosta' AND start_at IS NOT NULL AND start_at < extract(epoch from now() - interval '6 hours')`;
   // Mirror into the structured events table.
   const { upsertEvents } = await import('./store');
   await upsertEvents(events.map((e) => ({

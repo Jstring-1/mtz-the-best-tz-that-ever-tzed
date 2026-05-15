@@ -480,17 +480,23 @@ async function scrapeContraCosta(): Promise<LocalEvent[]> {
   } else if (process.env.MTZ_DEBUG === '1') {
     console.log(`[contracosta] bytes=${xml.length}, items=${items.length}`);
   }
+  const nowSec = Math.floor(Date.now() / 1000);
   return items.map((it, i) => {
     const title = decodeEntities(it.title || 'Event');
     const description = stripHtml(it.description || '');
-    // Try multiple date sources in order: pubDate (rarely the event
-    // date), then a loose match on title, then on description text.
-    const tryDates: Array<number | null> = [
-      it.pubDate ? tsFromIso(it.pubDate) : null,
-      tsFromLooseDate(title),
-      tsFromLooseDate(description),
-    ];
-    const start_at = tryDates.find((t) => t != null) ?? null;
+    // pubDate is when the item was published (almost always the past),
+    // NOT the event date. Prefer dates parsed out of the title or
+    // description text; fall back to pubDate only if it's actually in
+    // the future. Otherwise leave start_at null — the item still shows
+    // in the list under TBA.
+    const fromTitle = tsFromLooseDate(title);
+    const fromDesc  = tsFromLooseDate(description);
+    const fromPub   = it.pubDate ? tsFromIso(it.pubDate) : null;
+    const futureish = (t: number | null) => (t != null && t >= nowSec - 6 * 3600 ? t : null);
+    const start_at = futureish(fromTitle)
+      ?? futureish(fromDesc)
+      ?? futureish(fromPub)
+      ?? null;
     const idSeed = it.guid || it.link || `${title}-${start_at ?? i}`;
     return {
       id: `contracosta-${slugForId(idSeed)}`,

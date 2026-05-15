@@ -1,14 +1,13 @@
 import { getLocation } from '@/lib/location';
 import { getFeeds, getMisc, getPlaces } from '@/lib/cache';
 import {
-  listUpcomingEvents, listRecentBirds, listRecentQuakes, listParks, listActiveAlerts,
+  listUpcomingEvents, listRecentQuakes, listParks, listActiveAlerts,
   listAvailablePets,
 } from '@/lib/store';
 import type { PlaceRow, NoaaAlert } from '@/lib/types';
 import AlertsCard from '@/components/AlertsCard';
 import NewsCard from '@/components/NewsCard';
 import QuakesCard, { type QuakeRow } from '@/components/QuakesCard';
-import BirdsCard, { type BirdSighting } from '@/components/BirdsCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
 import PlacesCard, { type Spot } from '@/components/PlacesCard';
 import PetsCard from '@/components/PetsCard';
@@ -21,11 +20,10 @@ export default async function MainPage() {
   const loc = getLocation();
 
   const [
-    storedEvents, storedBirds, storedQuakes, storedParks, storedAlerts,
+    storedEvents, storedQuakes, storedParks, storedAlerts,
     storedPets, feeds, misc, places,
   ] = await Promise.all([
     listUpcomingEvents(),
-    listRecentBirds(60),
     listRecentQuakes(20),
     listParks(),
     listActiveAlerts(),
@@ -52,20 +50,6 @@ export default async function MainPage() {
     segment: e.segment ?? undefined,
     genre: e.genre ?? undefined,
     pleaseNote: e.please_note ?? undefined,
-  }));
-
-  const birds: BirdSighting[] = storedBirds.map((b) => ({
-    name: b.common_name,
-    fancy_name: b.sci_name ?? '',
-    date: b.observed_at ? new Date(b.observed_at * 1000).toISOString().slice(0, 10) : '',
-    place: b.place ?? '',
-    count: b.cnt ?? null,
-    lat: b.lat ?? '',
-    lon: b.lon ?? '',
-    wiki_description: b.wiki_description ?? null,
-    wiki_extract:     b.wiki_extract ?? null,
-    wiki_thumbnail:   b.wiki_thumbnail ?? null,
-    wiki_url:         b.wiki_url ?? null,
   }));
 
   const quakes: QuakeRow[] = storedQuakes.map((q) => ({
@@ -136,7 +120,6 @@ export default async function MainPage() {
         <RadarCard  imgs={radarImgs} />
         <QuakesCard quakes={quakes}    tz={loc.timezone} />
       </div>
-      <BirdsCard  sightings={birds} />
       <PetsCard   pets={storedPets} />
     </div>
   );
