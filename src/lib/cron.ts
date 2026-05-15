@@ -771,10 +771,16 @@ async function googlePlaces(json: Record<string, unknown>) {
   }
   json.google_places = { scrapedAt, totals: debugRaw, count: collected.length };
 
-  if (collected.length) await upsertPlaces(collected);
-  // Drop any row we didn't refresh in this scrape — the prior
-  // Foursquare entries (different id format) age out automatically.
-  await sql`DELETE FROM places WHERE last_seen < NOW() - INTERVAL '10 minutes'`;
+  if (collected.length) {
+    await upsertPlaces(collected);
+    // Delete every row not in this scrape's result set — wipes out
+    // residual Foursquare rows (different id format) immediately
+    // rather than waiting on last_seen to age out. Skipped when the
+    // collection is empty so a failed API call doesn't nuke the
+    // entire table.
+    const keepIds = collected.map((c) => c.fsq_id);
+    await sql`DELETE FROM places WHERE NOT (fsq_id = ANY(${keepIds}))`;
+  }
   // Same Benicia / regional-entry housekeeping as before, in case the
   // address-based filters above ever miss something.
   await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
