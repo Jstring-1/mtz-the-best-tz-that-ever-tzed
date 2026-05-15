@@ -335,17 +335,89 @@ async function noaaWaterRss(xmlBag: Record<string, string>) {
   }
 }
 
-// Stocks: every 5 minutes, all day, every day. Batches all symbols into
-// one /quote call so it's 1 request per tick. 5m × 288/day = 288/day
-// against twelvedata's 800/day free tier.
-const STOCK_SYMBOLS = ['SPX', 'DJI', 'IXIC', 'GME', 'PSLV'];
+// Stocks: every 5 minutes, all day, every day.
+// Provider: Yahoo Finance's public chart endpoint — no API key, supports
+// indices (^GSPC / ^DJI / ^IXIC) which Twelvedata's free tier gates
+// behind a paid plan, and returns the last-close datapoint after hours
+// instead of going dark. Cache key stays "12D_stocks" so the UI is
+// unchanged. The TWELVEDATA_KEY env var is now unused; leave or remove.
+const STOCK_SYMBOLS = ['^GSPC', '^DJI', '^IXIC', 'GME', 'PSLV'];
+
+interface YahooChartMeta {
+  symbol?: string;
+  shortName?: string;
+  longName?: string;
+  exchangeName?: string;
+  currency?: string;
+  regularMarketPrice?: number;
+  chartPreviousClose?: number;
+  previousClose?: number;
+  regularMarketOpen?: number;
+  regularMarketDayHigh?: number;
+  regularMarketDayLow?: number;
+  regularMarketTime?: number;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  marketState?: string;     // REGULAR | CLOSED | PRE | POST
+}
+
+function fmtEpochAsEt(sec: number): string {
+  try {
+    const d = new Date(sec * 1000);
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', year: 'numeric', month: 'short', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(d) + ' ET';
+  } catch { return ''; }
+}
+
+async function fetchYahooQuote(sym: string): Promise<unknown | null> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`;
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; mtz-city/1.0)' },
+      cache: 'no-store',
+    });
+    if (!r.ok) return null;
+    const j = await r.json() as { chart?: { result?: Array<{ meta?: YahooChartMeta }> } };
+    const meta = j?.chart?.result?.[0]?.meta;
+    if (!meta) return null;
+    const close = Number(meta.regularMarketPrice ?? 0);
+    const prev  = Number(meta.chartPreviousClose ?? meta.previousClose ?? 0);
+    const change = prev ? close - prev : 0;
+    const percent = prev ? (change / prev) * 100 : 0;
+    return {
+      symbol: sym,
+      name: meta.shortName ?? meta.longName ?? sym,
+      exchange: meta.exchangeName ?? '',
+      currency: meta.currency ?? 'USD',
+      datetime: meta.regularMarketTime ? fmtEpochAsEt(meta.regularMarketTime) : '',
+      open:  String(meta.regularMarketOpen   ?? ''),
+      high:  String(meta.regularMarketDayHigh ?? ''),
+      low:   String(meta.regularMarketDayLow  ?? ''),
+      close: String(close),
+      previous_close: String(prev),
+      change: change.toFixed(4),
+      percent_change: percent.toFixed(4),
+      is_market_open: meta.marketState === 'REGULAR',
+      market_state: meta.marketState ?? '',
+      fifty_two_week: {
+        low:  String(meta.fiftyTwoWeekLow  ?? ''),
+        high: String(meta.fiftyTwoWeekHigh ?? ''),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
 
 async function twelvedataStocks(json: Record<string, unknown>) {
-  const params = new URLSearchParams({
-    apikey: process.env.TWELVEDATA_KEY ?? '',
-    symbol: STOCK_SYMBOLS.join(','),
-  });
-  json['12D_stocks'] = await fetchJson(`https://api.twelvedata.com/quote?${params}`);
+  const entries = await Promise.all(
+    STOCK_SYMBOLS.map(async (sym) => [sym, await fetchYahooQuote(sym)] as const),
+  );
+  const map: Record<string, unknown> = {};
+  for (const [sym, q] of entries) if (q) map[sym] = q;
+  json['12D_stocks'] = map;
 }
 
 async function foursquarePlaces(json: Record<string, unknown>) {
