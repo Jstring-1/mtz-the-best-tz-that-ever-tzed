@@ -28,7 +28,11 @@ const COMMON_HEADERS = {
 
 const BASE = 'https://www.cityofmartinez.org';
 const INDEX_URL = `${BASE}/departments/recreation/parks`;
-const PATH_RE = /\/departments\/recreation\/parks\/[A-Za-z0-9_-]+\/?$/;
+// Broader pattern: any same-origin path whose last segment lives under
+// some flavor of "parks/" or "park/". Covers the originally guessed
+// /departments/recreation/parks/<slug> path and any flatter variant the
+// site might actually use (/parks/<slug>, /recreation/parks/<slug>, …).
+const PATH_RE = /\/(?:[A-Za-z0-9_-]+\/)*parks?\/[A-Za-z0-9_-]+\/?$/i;
 
 async function fetchText(url: string): Promise<string | null> {
   try {
@@ -193,9 +197,20 @@ function pickAmenities(html: string): string[] {
 
 export async function scrapeAllParks(): Promise<Park[]> {
   const indexHtml = await fetchText(INDEX_URL);
-  if (!indexHtml) return [];
+  if (!indexHtml) { console.warn('[parks] index fetch returned null'); return []; }
+  console.log(`[parks] index html bytes=${indexHtml.length}`);
   const links = extractParkLinks(indexHtml);
-  if (!links.length) { console.warn('[parks] no park links found on index'); return []; }
+  if (!links.length) {
+    // Diagnostic: how many <a href>s did the page even contain, and what
+    // do the first ~10 hrefs look like?
+    const allHrefs: string[] = [];
+    const re = /<a\b[^>]*\bhref=["']([^"']+)["']/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(indexHtml)) && allHrefs.length < 10) allHrefs.push(m[1]);
+    console.warn(`[parks] no park links found on index — first ${allHrefs.length} hrefs:`, allHrefs);
+    return [];
+  }
+  console.log(`[parks] index: matched ${links.length} park links`);
 
   const out: Park[] = [];
   for (const { url, linkText } of links) {

@@ -14,7 +14,7 @@ export default function PlacesCard({ places }: { places: PlaceRow[] }) {
         <p className="empty">No places cached.</p>
       ) : (
         <div className="stack-sm">
-          {places.slice(0, 12).map((p) => (
+          {places.slice(0, 36).map((p) => (
             <button
               key={p.fsq_id}
               type="button"

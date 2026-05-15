@@ -58,7 +58,7 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
         </p>
       ) : (
         <div className="stack-sm">
-          {shown.slice(0, 12).map((e) => (
+          {shown.slice(0, 36).map((e) => (
             <button
               key={e.id}
               type="button"
