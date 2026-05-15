@@ -568,6 +568,10 @@ async function foursquarePlaces(json: Record<string, unknown>) {
   for (const v of parsed.results) {
     const id = v.fsq_place_id ?? v.fsq_id;
     if (!id) continue;
+    const addy = v.location?.formatted_address ?? v.location?.address ?? '';
+    // Foursquare's radius spills into Benicia across the bridge. Skip
+    // anything whose address is in Benicia — we want Martinez only.
+    if (/\bBenicia\b/i.test(addy)) continue;
     let cats = '', images = '';
     for (const c of v.categories ?? []) {
       cats += `${c.name ?? ''}, `;
@@ -576,13 +580,17 @@ async function foursquarePlaces(json: Record<string, unknown>) {
     places.push({
       fsq_id: id,
       name: v.name ?? 'No Name Given',
-      addy: v.location?.formatted_address ?? v.location?.address ?? '',
+      addy,
       cats,
       dist: v.distance ?? null,
       images,
     });
   }
   if (places.length) await upsertPlaces(places);
+  // Housekeeping: drop any previously-stored Benicia rows. The Foursquare
+  // upsert is keyed on fsq_id so old out-of-area rows linger forever
+  // otherwise; this matches the filter above.
+  await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
 }
 
 async function ticketmasterEvents(json: Record<string, unknown>) {
