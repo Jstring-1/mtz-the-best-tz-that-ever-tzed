@@ -28,9 +28,8 @@
   --link-hover:   #fff;
   --hdr-h:        56px;
   --strip-h:      28px;
-  --hourly-h:     26px;
-  --forecast-h:   26px;
-  --top-stack-h:  calc(var(--strip-h) + var(--hourly-h) + var(--forecast-h));
+  --row2-h:       26px;
+  --top-stack-h:  calc(var(--strip-h) + var(--row2-h));
   --maxw:         1400px;
 
   /* Weather data palette — one color per data point, used site-wide.
@@ -252,67 +251,44 @@ main { padding-top: calc(var(--hdr-h) + var(--top-stack-h)); display: block; }
 .wx-strip .dodger { color: var(--wx-wind); }
 
 
-/* --- Hourly + forecast strips (fixed, every page, sit under .wx-strip) - */
+/* --- Row 2: hourly + forecast as plain text, one combined row --------- */
 
-.wx-row-hourly, .wx-row-forecast {
+.wx-row-2 {
   position: fixed; left: 0; width: 100%;
+  top: var(--strip-h); height: var(--row2-h);
   background: #000;
   z-index: 1001;
   display: flex; flex-wrap: nowrap;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
+  justify-content: flex-start;
+  gap: 12px; padding: 0 14px;
   border-bottom: 1px solid var(--border);
-  font-size: .65em;
+  font-size: .68em;
   line-height: 1;
   white-space: nowrap;
-  overflow: hidden;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
-.wx-row-hourly   { top: var(--strip-h);                          height: var(--hourly-h); }
-.wx-row-forecast { top: calc(var(--strip-h) + var(--hourly-h));  height: var(--forecast-h); }
-.wx-row-hourly .label, .wx-row-forecast .label {
-  color: var(--text-muted);
+.wx-row-2::-webkit-scrollbar { display: none; }
+.wx-row-2 .label { color: var(--text-muted); }
+.wx-row-2 .hf-cell {
+  display: inline-flex; gap: 4px; align-items: baseline;
 }
-
-/* Hourly cells: slim rounded pills, subtle outlines, gold halo for the
-   current hour. Single line: "3pm 72°". */
-.wx-row-hourly .cell {
-  display: inline-flex; gap: 5px; align-items: baseline;
-  padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-elev);
-  transition: background 120ms, border-color 120ms;
-}
-.wx-row-hourly .cell:hover {
-  background: var(--bg-elev-2);
-}
-.wx-row-hourly .cell.now {
-  background: rgba(255, 215, 0, .14);
-  border-color: var(--accent);
-  font-weight: 700;
-}
-.wx-row-hourly .cell.now .label { color: var(--text); }
-
-/* Forecast cells: small rectangular tiles with a colored top accent —
-   day label on top, temp on bottom. Distinct from the hourly pills. */
-.wx-row-forecast .cell {
-  display: inline-flex; gap: 6px; align-items: center;
-  padding: 3px 9px 3px 7px;
-  border-radius: 3px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--wx-temp);
-}
-.wx-row-forecast .cell:hover { background: var(--bg-elev-2); }
-.wx-row-forecast .cell .label {
-  text-transform: uppercase;
-  letter-spacing: .5px;
-  font-size: .9em;
-}
+.wx-row-2 .hf-cell.now { font-weight: 700; }
+.wx-row-2 .hf-cell.now .label { color: var(--text); }
 
 /* Inline temp color for strip cells (shared with tiles via --wx-temp). */
 .wx-temp { color: var(--wx-temp); }
+
+/* Shared divider — used between weather and stocks in the top strip,
+   and between hourly and forecast in row 2. */
+.wx-sep {
+  display: inline-block;
+  width: 1px; height: 60%;
+  background: var(--border);
+  margin: 0 6px;
+  flex: 0 0 auto;
+}
 
 
 /* --- Stocks (main page) ----------------------------------------------- */
@@ -344,6 +320,33 @@ main { padding-top: calc(var(--hdr-h) + var(--top-stack-h)); display: block; }
 .stock-cell.down .pct { color: indianred; }
 .stock-cell.flat { border-left: 3px solid var(--border); }
 .stock-cell.flat .pct { color: var(--text-muted); }
+
+/* Compact inline stock pills used inside .wx-strip — no boxes, just
+   colored text with a small arrow + percent. */
+.wx-strip .stock-mini {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font: inherit;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.wx-strip .stock-mini .sym {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: .9em;
+}
+.wx-strip .stock-mini .pct {
+  font-size: .9em;
+}
+.wx-strip .stock-mini.up   .pct { color: limegreen; }
+.wx-strip .stock-mini.down .pct { color: indianred; }
+.wx-strip .stock-mini.flat .pct { color: var(--text-muted); }
+.wx-strip .stock-mini:hover .sym { color: var(--text); }
 
 .stock-modal {
   background: var(--bg-elev);

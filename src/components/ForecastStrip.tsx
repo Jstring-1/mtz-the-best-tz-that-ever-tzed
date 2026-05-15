@@ -20,16 +20,16 @@ export default async function ForecastStrip() {
   }
 
   return (
-    <section className="wx-row-forecast" aria-label="7-day forecast">
+    <>
       {periods.length === 0
         ? <span className="label">forecast —</span>
         : periods.map((d, i) => (
-          <span key={i} className="cell" title={d.shortForecast ?? ''}>
-            <span className="label">{shortName(d.name)}</span>
+          <span key={i} className="hf-cell" title={d.shortForecast ?? ''}>
+            <span className="label">{shortName(d.name)}</span>{' '}
             <span className="wx-temp">{d.temperature != null ? `${d.temperature}°` : '—'}</span>
           </span>
         ))}
-    </section>
+    </>
   );
 }
 

@@ -28,8 +28,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${mono.variable} ${sans.variable}`}>
       <body>
         <WeatherStrip />
-        <HourlyStrip />
-        <ForecastStrip />
+        <section className="wx-row-2" aria-label="Hourly and 7-day forecast">
+          <HourlyStrip />
+          <span className="wx-sep" aria-hidden />
+          <ForecastStrip />
+        </section>
         <Header />
         <main>{children}</main>
         <footer className="site-ftr">

@@ -44,7 +44,7 @@ function fmt(n: number | null, digits = 2): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-export default function StocksClient({ stocks }: { stocks: StockEntry[] }) {
+export default function StocksClient({ stocks, compact = false }: { stocks: StockEntry[]; compact?: boolean }) {
   const dlgRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState<StockEntry | null>(null);
 
@@ -54,6 +54,37 @@ export default function StocksClient({ stocks }: { stocks: StockEntry[] }) {
     if (open && !d.open) d.showModal();
     if (!open && d.open) d.close();
   }, [open]);
+
+  // Compact: flat inline buttons designed to flow inside .wx-strip — no
+  // wrapper div, no price column, just sym + colored % change.
+  if (compact) {
+    return (
+      <>
+        {stocks.map((s) => {
+          const pct = num(s.quote?.percent_change);
+          const trend = pct == null ? 'flat' : pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+          return (
+            <button
+              key={s.display}
+              type="button"
+              className={`stock-mini ${trend}`}
+              onClick={() => setOpen(s)}
+              title={`${s.name} — click for details`}
+            >
+              <span className="sym">{s.display}</span>
+              <span className="pct">
+                {trend === 'up' ? '▲' : trend === 'down' ? '▼' : '·'}
+                {pct == null ? '—' : `${Math.abs(pct).toFixed(2)}%`}
+              </span>
+            </button>
+          );
+        })}
+        <dialog className="stock-modal" ref={dlgRef} onClose={() => setOpen(null)}>
+          {open && <StockModalBody s={open} onClose={() => setOpen(null)} />}
+        </dialog>
+      </>
+    );
+  }
 
   return (
     <>

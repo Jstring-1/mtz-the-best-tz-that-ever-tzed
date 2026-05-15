@@ -1,5 +1,6 @@
 import { getJson } from '@/lib/cache';
 import { getLocation } from '@/lib/location';
+import StocksStrip from './StocksStrip';
 
 // Top-of-page weather summary, rendered on every page above the site header.
 // Reads from cache only — no fetches on render.
@@ -49,12 +50,15 @@ export default async function WeatherStrip() {
         </span>
       )}
       {cur?.temp_f != null && <span className="red">{cur.temp_f}°F</span>}
-      {cur?.wind_mph != null && <span className="dodger">Wind {cur.wind_mph}mph {cur.wind_dir ?? ''}</span>}
-      {cur?.humidity != null && <span className="green">Humidity {cur.humidity}%</span>}
+      {cur?.wind_mph != null && <span className="dodger">{cur.wind_mph}mph {cur.wind_dir ?? ''}</span>}
+      {cur?.humidity != null && <span className="green">{cur.humidity}%</span>}
       {pa?.['pm2.5'] != null && <span className="blue">AQI {pa['pm2.5']}</span>}
       {cur?.pressure_mb != null && <span className="peru">{Math.round(cur.pressure_mb)} mb</span>}
-      {astro?.sunrise && <span className="gold">Sunrise {astro.sunrise}</span>}
-      {astro?.sunset && <span className="violet">Sunset {astro.sunset}</span>}
+      {astro?.sunrise && <span className="gold">↑{astro.sunrise}</span>}
+      {astro?.sunset && <span className="violet">↓{astro.sunset}</span>}
+
+      <span className="wx-sep" aria-hidden />
+      <StocksStrip compact />
     </section>
   );
 }

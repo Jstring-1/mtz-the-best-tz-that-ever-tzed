@@ -29,20 +29,20 @@ export default async function HourlyStrip() {
   }
 
   return (
-    <section className="wx-row-hourly" aria-label="Next 12 hours">
+    <>
       {cells.length === 0
         ? <span className="label">hourly —</span>
         : cells.map(({ ts, p }) => {
           const now = Math.floor(Date.now() / 1000);
           const isNow = ts <= now && now < ts + 3600;
           return (
-            <span key={ts} className={`cell ${isNow ? 'now' : ''}`} title={p.shortForecast ?? ''}>
-              <span className="label">{fmtHour(ts * 1000, loc.timezone)}</span>
+            <span key={ts} className={`hf-cell ${isNow ? 'now' : ''}`} title={p.shortForecast ?? ''}>
+              <span className="label">{fmtHour(ts * 1000, loc.timezone)}</span>{' '}
               <span className="wx-temp">{p.temperature != null ? `${p.temperature}°` : '—'}</span>
             </span>
           );
         })}
-    </section>
+    </>
   );
 }
 

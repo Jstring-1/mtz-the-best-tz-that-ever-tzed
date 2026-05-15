@@ -12,7 +12,7 @@ const SYMBOLS: Array<{ display: string; tdSymbol: string; name: string; yahooId:
   { display: 'PSLV',  tdSymbol: 'PSLV', name: 'Sprott Physical Silver',     yahooId: 'PSLV'    },
 ];
 
-export default async function StocksStrip() {
+export default async function StocksStrip({ compact = false }: { compact?: boolean } = {}) {
   const raw = await getJson<Record<string, TwelveQuote> | TwelveQuote | null>('12D_stocks');
   if (!raw || typeof raw !== 'object') return null;
 
@@ -29,5 +29,5 @@ export default async function StocksStrip() {
     quote:     map[s.tdSymbol] ?? map[s.display] ?? null,
   }));
 
-  return <StocksClient stocks={stocks} />;
+  return <StocksClient stocks={stocks} compact={compact} />;
 }
