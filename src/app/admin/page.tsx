@@ -25,7 +25,7 @@ export default async function AdminPage() {
   return (
     <div className="page admin">
       <h1>Admin</h1>
-      <p className="muted">Manually trigger background refresh buckets. In production these are hit by Railway cron at the matching cadence; pages render purely from cached DB rows.</p>
+      <p className="muted">Manually trigger background refresh buckets. In production these tick automatically via the inline scheduler (src/instrumentation.ts); pages render purely from cached DB rows.</p>
 
       <h2>Cron buckets</h2>
       <AdminButtons buckets={BUCKETS} />

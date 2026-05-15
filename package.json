@@ -6,7 +6,6 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "start:worker": "node scripts/worker.mjs",
     "lint": "eslint"
   },
   "dependencies": {

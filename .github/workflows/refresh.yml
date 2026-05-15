@@ -1,26 +1,11 @@
-name: refresh cache
+name: refresh cache (manual only)
 
-# Hits /api/cron on the deployed site at the cadences listed below.
-# GitHub schedules drift by a couple of minutes; that's fine for this site.
-#
-# The 1m and 2m buckets are NOT scheduled here — GitHub Actions floors
-# cron at 5 min. Those are owned by the long-running worker service
-# (scripts/worker.mjs) deployed alongside the web service on Railway.
-#
-# Schedule (UTC):
-#   */5  * * * *   — 5m bucket  (alerts, stocks)
-#   */15 * * * *   — 15m bucket (buoys)
-#   0    * * * *   — 1h bucket  (forecasts, marine, eBird, USGS)
-#   0 */4 * * *    — 4h bucket  (news RSS, water RSS, weather story imagery)
-#   0 */12 * * *   — 12h bucket (Foursquare places, Ticketmaster events)
+# Background refreshes are owned by the in-process scheduler in
+# src/instrumentation.ts — same pattern SeaDisco uses. This workflow is
+# kept as a manual escape hatch via workflow_dispatch only; if the
+# inline scheduler dies you can fire any bucket from the Actions UI.
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
-    - cron: '*/15 * * * *'
-    - cron: '0 * * * *'
-    - cron: '0 */4 * * *'
-    - cron: '0 */12 * * *'
   workflow_dispatch:
     inputs:
       bucket:
@@ -41,23 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Pick buckets for this run
-        id: pick
-        run: |
-          case "${{ github.event.schedule }}" in
-            "*/5 * * * *")  echo "buckets=5m"       >> "$GITHUB_OUTPUT" ;;
-            "*/15 * * * *") echo "buckets=15m"      >> "$GITHUB_OUTPUT" ;;
-            "0 * * * *")    echo "buckets=1h"       >> "$GITHUB_OUTPUT" ;;
-            "0 */4 * * *")  echo "buckets=4h"       >> "$GITHUB_OUTPUT" ;;
-            "0 */12 * * *") echo "buckets=12h"      >> "$GITHUB_OUTPUT" ;;
-            *)              echo "buckets=${{ github.event.inputs.bucket || 'all' }}" >> "$GITHUB_OUTPUT" ;;
-          esac
-
       - name: Hit cron endpoint
         run: |
           set -e
-          for b in ${{ steps.pick.outputs.buckets }}; do
-            echo ">>> bucket=$b"
-            curl -sS -fL --max-time 120 "$SITE/api/cron?bucket=$b"
-            echo
-          done
+          b="${{ github.event.inputs.bucket }}"
+          echo ">>> bucket=$b"
+          curl -sS -fL --max-time 120 "$SITE/api/cron?bucket=$b"
+          echo
