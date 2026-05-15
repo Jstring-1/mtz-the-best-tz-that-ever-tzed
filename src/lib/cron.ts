@@ -644,6 +644,9 @@ const GOOGLE_PLACES_GROUPS: Array<{ name: string; types: string[]; excluded?: st
   { name: 'rec',
     types: ['park', 'tourist_attraction', 'museum', 'library', 'art_gallery'],
   },
+  { name: 'retail',
+    types: ['supermarket', 'pharmacy', 'book_store', 'clothing_store'],
+  },
 ];
 
 // Rectangle scoping the Google Places fetch to downtown Martinez —
