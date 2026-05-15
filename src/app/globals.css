@@ -1041,9 +1041,25 @@ main { padding-top: var(--top-stack-h); display: block; }
 .place-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .place-row .sub  { font-size: .82em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Parks */
+/* Parks (still used by the merged Spot row inside PlacesCard) */
 .park-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .park-row .sub  { font-size: .82em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.place-row .tag {
+  display: inline-block;
+  font-size: .65em;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: middle;
+  font-weight: 700;
+}
+.place-row .tag-park {
+  background: rgba(34, 139, 34, .25);
+  color: limegreen;
+  border: 1px solid forestgreen;
+}
 .park-amenities {
   list-style: none;
   margin: 0; padding: 0;

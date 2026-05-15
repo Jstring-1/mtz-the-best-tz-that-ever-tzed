@@ -599,6 +599,8 @@ async function ticketmasterEvents(json: Record<string, unknown>) {
     apikey: process.env.TICKETMASTER_KEY ?? '',
     size: '200',
     geoPoint: `${loc.lat},${loc.lon}`,
+    radius: '50',          // miles
+    unit: 'miles',
     sort: 'date,asc',
     startDateTime,
   });
@@ -644,6 +646,9 @@ async function ticketmasterEvents(json: Record<string, unknown>) {
       payload: e,
     };
   }));
+  // Drop any TM rows we didn't refresh in this scrape — typically
+  // out-of-radius events stored before the radius limit landed.
+  await sql`DELETE FROM events WHERE source = 'ticketmaster' AND last_seen < NOW() - INTERVAL '5 minutes'`;
 }
 
 // ---- Public dispatcher --------------------------------------------------

@@ -9,10 +9,8 @@ import NewsCard from '@/components/NewsCard';
 import QuakesCard, { type QuakeRow } from '@/components/QuakesCard';
 import BirdsCard, { type BirdSighting } from '@/components/BirdsCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
-import PlacesCard from '@/components/PlacesCard';
-import ParksCard from '@/components/ParksCard';
+import PlacesCard, { type Spot } from '@/components/PlacesCard';
 import RadarCard, { type RadarImg } from '@/components/RadarCard';
-import type { Park } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -69,15 +67,28 @@ export default async function MainPage() {
     url: q.url ?? '',
   }));
 
-  const parksList: Park[] = storedParks.map((p) => ({
-    id: p.id,
-    name: p.name,
-    url: p.url ?? '',
-    address: p.address ?? undefined,
-    description: p.description ?? undefined,
-    amenities: p.amenities ?? undefined,
-    image: p.image ?? undefined,
-  }));
+  // Merge: parks first (alphabetical), then Foursquare places by distance.
+  const placeRows: PlaceRow[] = places ?? [];
+  const spots: Spot[] = [
+    ...storedParks.map((p): Spot => ({
+      id: `park-${p.id}`,
+      kind: 'park',
+      name: p.name,
+      address: p.address ?? undefined,
+      description: p.description ?? undefined,
+      amenities: p.amenities ?? undefined,
+      image: p.image ?? undefined,
+      url: p.url ?? undefined,
+    })),
+    ...placeRows.map((p): Spot => ({
+      id: `fsq-${p.fsq_id}`,
+      kind: 'place',
+      name: p.name ?? 'Unnamed',
+      address: p.addy ?? undefined,
+      category: p.cats ?? undefined,
+      distance: p.dist ?? undefined,
+    })),
+  ];
 
   // Alerts: card type wants NoaaAlert shape (epoch numbers etc).
   const localAlerts: NoaaAlert[] = storedAlerts
@@ -96,8 +107,6 @@ export default async function MainPage() {
       expires: a.expires_at ?? undefined,
     }));
 
-  const placesList: PlaceRow[] = places ?? [];
-
   const storyImgs = misc.filter((m) => m.text === 'true' && m.id.startsWith('WeatherStory')).map((m) => m.id);
   const radarImgs: RadarImg[] = [
     ...storyImgs.map((img) => ({
@@ -112,8 +121,7 @@ export default async function MainPage() {
     <div className="dashboard">
       <NewsCard   items={feeds} />
       <EventsCard events={events}     tz={loc.timezone} />
-      <PlacesCard places={placesList} />
-      <ParksCard  parks={parksList} />
+      <PlacesCard spots={spots} />
       <div className="col-stack">
         <AlertsCard alerts={localAlerts} tz={loc.timezone} />
         <RadarCard  imgs={radarImgs} />
