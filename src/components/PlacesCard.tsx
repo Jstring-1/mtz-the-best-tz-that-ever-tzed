@@ -18,6 +18,28 @@ export interface Spot {
   url?: string;               // parks
 }
 
+// Google Maps embed via the no-API-key text-query URL. Renders a
+// modest 240px-tall iframe with a pin on the address. Works without
+// any billing setup; falls back gracefully if Google can't resolve
+// the address (iframe just shows a "search again" empty state).
+function MiniMap({ query }: { query: string }) {
+  const src = `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=15&ie=UTF8&iwloc=&output=embed`;
+  return (
+    <iframe
+      title={`Map of ${query}`}
+      src={src}
+      style={{
+        width: '100%', height: 240,
+        border: '1px solid var(--border)',
+        borderRadius: 4,
+        marginTop: 4,
+      }}
+      loading="lazy"
+      referrerPolicy="no-referrer-when-downgrade"
+    />
+  );
+}
+
 export default function PlacesCard({ spots }: { spots: Spot[] }) {
   const [open, setOpen] = useState<Spot | null>(null);
 
@@ -41,11 +63,8 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
               </span>
               <span className="sub">
                 {s.address ?? ''}
-                {s.distance != null
-                  ? `${s.address ? ' · ' : ''}${Math.round(s.distance)} m`
-                  : ''}
                 {s.category
-                  ? `${s.address || s.distance != null ? ' · ' : ''}${(s.category.split(',')[0] ?? '').trim()}`
+                  ? `${s.address ? ' · ' : ''}${(s.category.split(',')[0] ?? '').trim()}`
                   : ''}
                 {s.kind === 'park' && s.amenities && s.amenities.length
                   ? `${s.address ? ' · ' : ''}${s.amenities.length} amenities`
@@ -56,7 +75,7 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
         </div>
       )}
 
-      <Modal open={!!open} onClose={() => setOpen(null)} title={open?.name ?? 'Place'} size={open?.kind === 'park' ? 'lg' : 'md'}>
+      <Modal open={!!open} onClose={() => setOpen(null)} title={open?.name ?? 'Place'} size="lg">
         {open && open.kind === 'park' && (
           <>
             {open.image && (
@@ -73,11 +92,12 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
                 <div className="meta muted" style={{ textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 6 }}>
                   Amenities
                 </div>
-                <ul className="park-amenities">
+                <ul className="park-amenities" style={{ marginBottom: 12 }}>
                   {open.amenities.map((a) => <li key={a}>{a}</li>)}
                 </ul>
               </>
             )}
+            {open.address && <MiniMap query={open.address} />}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
               {open.url && (
                 <a className="event-modal-btn primary" href={open.url} target="_blank" rel="noopener">
@@ -100,8 +120,8 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
         {open && open.kind === 'place' && (
           <>
             {open.address && <div className="meta" style={{ marginBottom: 8 }}>{open.address}</div>}
-            {open.category && <div className="meta muted">{open.category.replace(/,\s*$/, '')}</div>}
-            {open.distance != null && <div className="meta" style={{ marginTop: 6 }}>~{Math.round(open.distance)} m away</div>}
+            {open.category && <div className="meta muted" style={{ marginBottom: 12 }}>{open.category.replace(/,\s*$/, '')}</div>}
+            {open.address && <MiniMap query={open.address} />}
             {open.address && (
               <p style={{ marginTop: 14 }}>
                 <a
