@@ -572,6 +572,10 @@ async function foursquarePlaces(json: Record<string, unknown>) {
     // Foursquare's radius spills into Benicia across the bridge. Skip
     // anything whose address is in Benicia — we want Martinez only.
     if (/\bBenicia\b/i.test(addy)) continue;
+    // Drop regional / generic entries like "The Bay Area" whose address
+    // is just "Martinez, CA 94553" with no street number. A real venue
+    // always has a leading "1234 Some St".
+    if (!/^\s*\d/.test(addy)) continue;
     let cats = '', images = '';
     for (const c of v.categories ?? []) {
       cats += `${c.name ?? ''}, `;
@@ -591,6 +595,8 @@ async function foursquarePlaces(json: Record<string, unknown>) {
   // upsert is keyed on fsq_id so old out-of-area rows linger forever
   // otherwise; this matches the filter above.
   await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
+  // And the regional / no-street-number entries (e.g. "The Bay Area").
+  await sql`DELETE FROM places WHERE addy !~ '^[[:space:]]*[0-9]'`;
 }
 
 async function ticketmasterEvents(json: Record<string, unknown>) {
