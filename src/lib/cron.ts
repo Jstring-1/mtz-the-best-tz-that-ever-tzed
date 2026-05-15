@@ -629,11 +629,63 @@ async function foursquarePlaces(json: Record<string, unknown>) {
 //
 // We pull a handful of category groups in parallel to get a varied
 // list. searchNearby caps each call at 20 results.
-const GOOGLE_PLACES_GROUPS: Array<{ name: string; types: string[] }> = [
-  { name: 'food',   types: ['restaurant', 'cafe', 'bar', 'bakery', 'ice_cream_shop'] },
-  { name: 'rec',    types: ['park', 'tourist_attraction', 'museum', 'library', 'art_gallery'] },
-  { name: 'retail', types: ['supermarket', 'pharmacy', 'book_store', 'clothing_store'] },
+//
+// `excluded` per group reproduces Foursquare's "no chains" stance at
+// the API level — Google doesn't expose a chain flag, but most fast
+// food and takeaway-only joints are tagged fast_food_restaurant or
+// meal_takeaway, which we can reject directly. The CHAIN_NAMES list
+// below catches the rest by name pattern (Starbucks is a "cafe",
+// Chipotle is sometimes just "restaurant", etc.).
+const GOOGLE_PLACES_GROUPS: Array<{ name: string; types: string[]; excluded?: string[] }> = [
+  { name: 'food',
+    types:    ['restaurant', 'cafe', 'bar', 'bakery', 'ice_cream_shop'],
+    excluded: ['fast_food_restaurant', 'meal_takeaway', 'meal_delivery'],
+  },
+  { name: 'rec',
+    types: ['park', 'tourist_attraction', 'museum', 'library', 'art_gallery'],
+  },
+  { name: 'retail',
+    types: ['supermarket', 'pharmacy', 'book_store', 'clothing_store'],
+  },
 ];
+
+// Name-pattern blocklist for chains that slip past the type filter
+// (most coffee + casual-dining chains aren't tagged "fast_food").
+// Each entry is matched case-insensitively against the place name as
+// a substring, so "McDonald's #4287" still gets caught.
+const CHAIN_NAMES: string[] = [
+  // Burger / fast food
+  "McDonald's", 'Burger King', "Wendy's", 'KFC', 'Taco Bell',
+  'In-N-Out', "Carl's Jr", 'Jack in the Box', "Arby's", 'Sonic',
+  'Five Guys', "Chick-fil-A", 'Popeyes', 'White Castle', 'Hardee',
+  'Panda Express', 'Chipotle', 'Habit Burger', 'El Pollo Loco',
+  // Sandwiches / sub chains
+  'Subway', "Jimmy John's", 'Jersey Mike', 'Quiznos', "Togo's",
+  'Panera', "Au Bon Pain", "McAlister's",
+  // Pizza chains
+  'Pizza Hut', "Domino's", "Papa John's", 'Little Caesars',
+  'Round Table', 'Mountain Mike', "Sbarro", "Papa Murphy's",
+  // Coffee / drink chains
+  'Starbucks', "Peet's Coffee", 'Dunkin', 'Coffee Bean', "Tully's",
+  'Boba Guys', "Philz",
+  // Casual / chain dining
+  'Applebee', "Chili's", 'TGI Friday', 'Olive Garden', 'IHOP',
+  "Denny's", "BJ's Restaurant", 'Buffalo Wild Wings', 'Black Angus',
+  'Outback Steakhouse', 'Red Lobster', 'Red Robin', 'Cheesecake Factory',
+  "Hooters", 'Cracker Barrel', 'P.F. Chang', 'California Pizza Kitchen',
+  // Dessert / ice cream chains
+  'Dairy Queen', 'Cold Stone', 'Baskin-Robbins', "Ben & Jerry's",
+  '31 Flavors', 'Yogurtland',
+  // Convenience / grocery chains
+  '7-Eleven', 'AM/PM', 'Circle K', 'Walmart', 'Target',
+  'Safeway', 'Trader Joe', 'Whole Foods', 'Costco', 'Lucky',
+  // Pharmacy chains
+  'CVS', 'Walgreens', 'Rite Aid',
+];
+const CHAIN_RE = new RegExp(
+  CHAIN_NAMES.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+  'i',
+);
 
 interface GPlace {
   id: string;
@@ -655,7 +707,7 @@ async function googlePlaces(json: Record<string, unknown>) {
 
   for (const group of GOOGLE_PLACES_GROUPS) {
     try {
-      const body = {
+      const body: Record<string, unknown> = {
         includedTypes: group.types,
         maxResultCount: 20,
         locationRestriction: {
@@ -665,6 +717,7 @@ async function googlePlaces(json: Record<string, unknown>) {
           },
         },
       };
+      if (group.excluded?.length) body.excludedTypes = group.excluded;
       const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
         method: 'POST',
         headers: {
@@ -687,12 +740,15 @@ async function googlePlaces(json: Record<string, unknown>) {
         const addy = p.formattedAddress ?? '';
         if (/\bBenicia\b/i.test(addy)) continue;
         if (startsWithCity(addy, loc.short)) continue;
+        const name = p.displayName?.text ?? 'Unnamed';
+        // Chain blocklist — final layer after API-side excludedTypes.
+        if (CHAIN_RE.test(name)) continue;
         const primary = p.primaryTypeDisplayName?.text ?? '';
         const types = (p.types ?? []).slice(0, 3).join(', ');
         const cats = (primary || types) + ', ';
         collected.push({
           fsq_id: p.id,            // re-use the table's primary key column
-          name: p.displayName?.text ?? 'Unnamed',
+          name,
           addy,
           cats,
           dist: null,
@@ -714,6 +770,13 @@ async function googlePlaces(json: Record<string, unknown>) {
   await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
   const cityPattern = `^[[:space:]]*${escapeRegex(loc.short)}[[:space:]]*,`;
   await sql`DELETE FROM places WHERE addy ~* ${cityPattern}`;
+  // And purge any chain rows already in the DB whose name matches the
+  // blocklist — keeps the table clean if the regex changes between
+  // scrapes.
+  const chainPgRe = '(' + CHAIN_NAMES
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|') + ')';
+  await sql`DELETE FROM places WHERE name ~* ${chainPgRe}`;
 }
 
 async function ticketmasterEvents(json: Record<string, unknown>) {
