@@ -145,7 +145,7 @@ function StockModalBody({ s, onClose }: { s: StockEntry; onClose: () => void }) 
 
       {!s.quote && (
         <p className="muted" style={{ fontSize: '.85em', marginTop: 8 }}>
-          No data cached yet — run <code>/api/cron?bucket=1h</code> during market hours.
+          No data cached yet — run <code>/api/cron?bucket=5m</code> from /admin.
         </p>
       )}
     </div>
