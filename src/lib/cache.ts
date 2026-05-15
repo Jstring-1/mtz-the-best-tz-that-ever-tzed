@@ -129,17 +129,26 @@ export async function upsertMiscMany(records: Record<string, string>): Promise<v
   }
 }
 
+let placesLastSeenEnsured = false;
+async function ensurePlacesLastSeen(): Promise<void> {
+  if (placesLastSeenEnsured) return;
+  await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()`;
+  placesLastSeenEnsured = true;
+}
+
 export async function upsertPlaces(places: Omit<PlaceRow, 'lat' | 'lon'>[]): Promise<void> {
+  await ensurePlacesLastSeen();
   for (const p of places) {
     await sql`
-      INSERT INTO places (fsq_id, name, addy, cats, dist, images)
-      VALUES (${p.fsq_id}, ${p.name}, ${p.addy}, ${p.cats}, ${p.dist}, ${p.images})
+      INSERT INTO places (fsq_id, name, addy, cats, dist, images, last_seen)
+      VALUES (${p.fsq_id}, ${p.name}, ${p.addy}, ${p.cats}, ${p.dist}, ${p.images}, NOW())
       ON CONFLICT (fsq_id) DO UPDATE SET
-        name   = EXCLUDED.name,
-        addy   = EXCLUDED.addy,
-        cats   = EXCLUDED.cats,
-        dist   = EXCLUDED.dist,
-        images = EXCLUDED.images
+        name      = EXCLUDED.name,
+        addy      = EXCLUDED.addy,
+        cats      = EXCLUDED.cats,
+        dist      = EXCLUDED.dist,
+        images    = EXCLUDED.images,
+        last_seen = NOW()
     `;
   }
 }

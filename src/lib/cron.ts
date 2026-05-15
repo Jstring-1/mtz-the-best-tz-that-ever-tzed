@@ -622,6 +622,100 @@ async function foursquarePlaces(json: Record<string, unknown>) {
   await sql`DELETE FROM places WHERE addy ~* ${cityPattern}`;
 }
 
+// Google Places (New) — much fresher data than Foursquare. Uses the
+// "Basics" SKU field mask (places.id / displayName / formattedAddress
+// / types / primaryTypeDisplayName / location), which is the cheap
+// tier — covered by Google's $200/month free credit for our volume.
+//
+// We pull a handful of category groups in parallel to get a varied
+// list. searchNearby caps each call at 20 results.
+const GOOGLE_PLACES_GROUPS: Array<{ name: string; types: string[] }> = [
+  { name: 'food',   types: ['restaurant', 'cafe', 'bar', 'bakery', 'ice_cream_shop'] },
+  { name: 'rec',    types: ['park', 'tourist_attraction', 'museum', 'library', 'art_gallery'] },
+  { name: 'retail', types: ['supermarket', 'pharmacy', 'book_store', 'clothing_store'] },
+];
+
+interface GPlace {
+  id: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  types?: string[];
+  primaryTypeDisplayName?: { text?: string };
+}
+
+async function googlePlaces(json: Record<string, unknown>) {
+  const loc = getLocation();
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? '';
+  if (!apiKey) { console.warn('[places] no GOOGLE_PLACES_API_KEY set'); return; }
+
+  const scrapedAt = new Date().toISOString();
+  const collected: Array<{ fsq_id: string; name: string; addy: string; cats: string; dist: number | null; images: string }> = [];
+  const seen = new Set<string>();
+  const debugRaw: Record<string, unknown> = {};
+
+  for (const group of GOOGLE_PLACES_GROUPS) {
+    try {
+      const body = {
+        includedTypes: group.types,
+        maxResultCount: 20,
+        locationRestriction: {
+          circle: {
+            center: { latitude: loc.lat, longitude: loc.lon },
+            radius: 5000,
+          },
+        },
+      };
+      const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.types,places.primaryTypeDisplayName',
+        },
+        body: JSON.stringify(body),
+        cache: 'no-store',
+      });
+      if (!r.ok) {
+        console.warn(`[places] google ${group.name}: HTTP ${r.status}`);
+        continue;
+      }
+      const j = await r.json() as { places?: GPlace[] };
+      debugRaw[group.name] = { count: j.places?.length ?? 0 };
+      for (const p of j.places ?? []) {
+        if (!p.id || seen.has(p.id)) continue;
+        seen.add(p.id);
+        const addy = p.formattedAddress ?? '';
+        if (/\bBenicia\b/i.test(addy)) continue;
+        if (startsWithCity(addy, loc.short)) continue;
+        const primary = p.primaryTypeDisplayName?.text ?? '';
+        const types = (p.types ?? []).slice(0, 3).join(', ');
+        const cats = (primary || types) + ', ';
+        collected.push({
+          fsq_id: p.id,            // re-use the table's primary key column
+          name: p.displayName?.text ?? 'Unnamed',
+          addy,
+          cats,
+          dist: null,
+          images: '',
+        });
+      }
+    } catch (e) {
+      console.warn(`[places] google ${group.name} threw:`, e instanceof Error ? e.message : e);
+    }
+  }
+  json.google_places = { scrapedAt, totals: debugRaw, count: collected.length };
+
+  if (collected.length) await upsertPlaces(collected);
+  // Drop any row we didn't refresh in this scrape — the prior
+  // Foursquare entries (different id format) age out automatically.
+  await sql`DELETE FROM places WHERE last_seen < NOW() - INTERVAL '10 minutes'`;
+  // Same Benicia / regional-entry housekeeping as before, in case the
+  // address-based filters above ever miss something.
+  await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
+  const cityPattern = `^[[:space:]]*${escapeRegex(loc.short)}[[:space:]]*,`;
+  await sql`DELETE FROM places WHERE addy ~* ${cityPattern}`;
+}
+
 async function ticketmasterEvents(json: Record<string, unknown>) {
   // We cache the raw event array verbatim — every field Ticketmaster returns
   // is preserved so the UI can extract whatever it needs (image, ticket URL,
@@ -739,7 +833,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
   }
 
   if (bucket === '12h' || all) {
-    await safe('foursquare_places',  () => foursquarePlaces(json),   ok, errors);
+    await safe('google_places',      () => googlePlaces(json),       ok, errors);
     await safe('ticketmaster_events',() => ticketmasterEvents(json), ok, errors);
     await safe('local_parks',        () => localParks(json),         ok, errors);
     await safe('purge_stores',       () => purgeStores(),             ok, errors);
