@@ -27,7 +27,7 @@ export default async function MainPage() {
     listRecentQuakes(20),
     listParks(),
     listActiveAlerts(),
-    getFeeds(24),
+    getFeeds(120),
     getMisc(),
     getPlaces(),
   ]);

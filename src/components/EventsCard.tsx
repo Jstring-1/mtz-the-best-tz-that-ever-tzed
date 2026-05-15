@@ -23,14 +23,20 @@ export interface UEvent {
 }
 
 type Tab = 'local' | 'regional';
+const PAGE = 12;
 
 export default function EventsCard({ events, tz }: { events: UEvent[]; tz: string }) {
   const [open, setOpen] = useState<UEvent | null>(null);
   const [tab, setTab] = useState<Tab>('local');
+  const [shown, setShown] = useState(PAGE);
 
   const local    = events.filter((e) => e.source === 'local');
   const regional = events.filter((e) => e.source === 'ticketmaster');
-  const shown = tab === 'local' ? local : regional;
+  const list = tab === 'local' ? local : regional;
+  const visible = list.slice(0, shown);
+  const remaining = Math.max(0, list.length - shown);
+
+  const switchTab = (t: Tab) => { setTab(t); setShown(PAGE); };
 
   return (
     <section className="card-section events-card">
@@ -42,36 +48,45 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
             role="tab"
             aria-selected={tab === 'local'}
             className={`event-tab ${tab === 'local' ? 'on' : ''}`}
-            onClick={() => setTab('local')}
+            onClick={() => switchTab('local')}
           >Local <span className="count">{local.length}</span></button>
           <button
             type="button"
             role="tab"
             aria-selected={tab === 'regional'}
             className={`event-tab ${tab === 'regional' ? 'on' : ''}`}
-            onClick={() => setTab('regional')}
+            onClick={() => switchTab('regional')}
           >Regional <span className="count">{regional.length}</span></button>
         </span>
       </h2>
-      {shown.length === 0 ? (
+      {list.length === 0 ? (
         <p className="empty">
           {tab === 'local' ? 'No local events cached yet.' : 'No Ticketmaster events cached yet.'}
         </p>
       ) : (
-        <div className="stack-sm">
-          {shown.slice(0, 36).map((e) => (
+        <>
+          <div className="stack-sm">
+            {visible.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                className="event-row clickable"
+                onClick={() => setOpen(e)}
+              >
+                <span className="when">{e.start_at ? fmtDateShort(e.start_at * 1000, tz) : 'TBA'}</span>
+                <span className="name">{e.title}</span>
+                <span className="venue">{e.source_label}{e.venue && e.venue !== e.source_label ? ` · ${e.venue}` : ''}</span>
+              </button>
+            ))}
+          </div>
+          {remaining > 0 && (
             <button
-              key={e.id}
               type="button"
-              className="event-row clickable"
-              onClick={() => setOpen(e)}
-            >
-              <span className="when">{e.start_at ? fmtDateShort(e.start_at * 1000, tz) : 'TBA'}</span>
-              <span className="name">{e.title}</span>
-              <span className="venue">{e.source_label}{e.venue && e.venue !== e.source_label ? ` · ${e.venue}` : ''}</span>
-            </button>
-          ))}
-        </div>
+              className="load-more"
+              onClick={() => setShown((n) => n + PAGE)}
+            >Load more ({remaining})</button>
+          )}
+        </>
       )}
 
       <Modal open={!!open} onClose={() => setOpen(null)} title={open?.title ?? 'Event'} size="lg">
