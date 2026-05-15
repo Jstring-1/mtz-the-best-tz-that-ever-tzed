@@ -229,15 +229,22 @@ export async function upsertBirds(rows: StoredBird[]): Promise<void> {
 
 export async function listRecentBirds(limit = 60): Promise<StoredBird[]> {
   await ensureTables();
+  // DISTINCT ON keeps one row per common_name — the most recent sighting
+  // for each species. Then the outer SELECT re-sorts by recency for
+  // display so the list reads newest-first.
   return await sql<StoredBird[]>`
-    SELECT b.id, b.common_name, b.sci_name, b.observed_at, b.place, b.cnt, b.lat, b.lon,
-           w.description   AS wiki_description,
-           w.extract       AS wiki_extract,
-           w.thumbnail_url AS wiki_thumbnail,
-           w.content_url   AS wiki_url
-    FROM birds b
-    LEFT JOIN bird_wiki w ON w.common_name = b.common_name
-    ORDER BY b.observed_at DESC NULLS LAST
+    SELECT * FROM (
+      SELECT DISTINCT ON (b.common_name)
+             b.id, b.common_name, b.sci_name, b.observed_at, b.place, b.cnt, b.lat, b.lon,
+             w.description   AS wiki_description,
+             w.extract       AS wiki_extract,
+             w.thumbnail_url AS wiki_thumbnail,
+             w.content_url   AS wiki_url
+      FROM birds b
+      LEFT JOIN bird_wiki w ON w.common_name = b.common_name
+      ORDER BY b.common_name, b.observed_at DESC NULLS LAST
+    ) uniq
+    ORDER BY observed_at DESC NULLS LAST
     LIMIT ${limit}
   `;
 }
