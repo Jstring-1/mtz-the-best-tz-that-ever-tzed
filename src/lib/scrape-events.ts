@@ -23,20 +23,32 @@ const COMMON_HEADERS = {
 
 // ----- helpers ---------------------------------------------------------
 
-export function stripHtml(s: string): string {
+// Decode the common named entities plus the entire numeric range
+// (&#8211; → "–", &#8217; → "’", etc.) — WordPress / The Events
+// Calendar both emit these heavily in titles and descriptions.
+export function decodeEntities(s: string): string {
   return (s || '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&#0?39;/g, "'")
     .replace(/&apos;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+      try { return String.fromCodePoint(parseInt(hex, 16)); } catch { return ''; }
+    })
+    .replace(/&#(\d+);/g, (_, dec) => {
+      try { return String.fromCodePoint(parseInt(dec, 10)); } catch { return ''; }
+    });
+}
+
+export function stripHtml(s: string): string {
+  return decodeEntities(
+    (s || '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ''),
+  ).replace(/\s+/g, ' ').trim();
 }
 
 function tsFromIso(iso: string | null | undefined): number | null {
@@ -131,7 +143,7 @@ async function scrapeDelCielo(): Promise<LocalEvent[]> {
     id: `delcielo-${e.id}`,
     source: 'delcielo',
     source_label: 'Del Cielo Brewing',
-    title: e.title,
+    title: cleanDelCieloTitle(e.title),
     // utc_start_date is naive UTC ("2026-05-16 01:30:00") — append Z.
     // Fallback to start_date (naive local) without Z.
     start_at: tsFromIso(toTribeIso(e.utc_start_date, true) ?? toTribeIso(e.start_date, false)),
@@ -141,6 +153,15 @@ async function scrapeDelCielo(): Promise<LocalEvent[]> {
     description: stripHtml(e.description || ''),
     image: e.image?.url,
   }));
+}
+
+// Strip the leading "Live Music // " (and slight variants) that Del
+// Cielo prepends to most music events, and decode HTML entities the
+// WP API doesn't pre-decode.
+function cleanDelCieloTitle(raw: string): string {
+  return decodeEntities(raw || '')
+    .replace(/^\s*Live\s+Music\s*(?:\/\/|[-–—:])\s*/i, '')
+    .trim();
 }
 
 // Tribe returns "YYYY-MM-DD HH:MM:SS" (space, no T, no zone). Normalise
@@ -235,12 +256,12 @@ function extractJsonLdEvents(html: string): Array<Record<string, unknown>> {
 
 function jsonLdToEvents(rows: Array<Record<string, unknown>>, source: string, sourceLabel: string, venue: string, fallbackUrl: string): LocalEvent[] {
   return rows.map((r, i) => {
-    const name = String(r.name ?? r.headline ?? 'Event').trim();
+    const name = decodeEntities(String(r.name ?? r.headline ?? 'Event')).trim();
     const start = r.startDate as string | undefined;
     const end   = r.endDate as string | undefined;
     const url   = String(r.url ?? fallbackUrl);
     const loc   = r.location as Record<string, unknown> | undefined;
-    const venName = (loc?.name ? String(loc.name) : '') || venue;
+    const venName = (loc?.name ? decodeEntities(String(loc.name)) : '') || venue;
     const desc  = stripHtml(String(r.description ?? ''));
     const img   = typeof r.image === 'string'
       ? r.image
