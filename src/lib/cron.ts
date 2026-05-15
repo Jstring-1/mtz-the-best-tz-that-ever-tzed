@@ -242,6 +242,11 @@ async function ebird(json: Record<string, unknown>) {
   json.eBird = birds;
 }
 
+async function localEvents(json: Record<string, unknown>) {
+  const { scrapeAllLocalEvents } = await import('./scrape-events');
+  json['local_events'] = await scrapeAllLocalEvents();
+}
+
 async function weatherStory(misc: Record<string, string>) {
   const html = await fetchText('https://www.weather.gov/mtr/');
   for (let n = 0; n <= 9; n++) {
@@ -519,6 +524,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('news_feeds',     () => newsFeeds(),                ok, errors);
     await safe('noaa_water_rss', () => noaaWaterRss(xmlBag),       ok, errors);
     await safe('weather_story',  () => weatherStory(miscBag),      ok, errors);
+    await safe('local_events',   () => localEvents(json),          ok, errors);
   }
 
   if (bucket === '12h' || all) {

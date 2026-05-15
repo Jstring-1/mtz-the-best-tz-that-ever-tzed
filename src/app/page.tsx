@@ -1,11 +1,11 @@
 import { getLocation } from '@/lib/location';
 import { getJson, getFeeds, getMisc, getPlaces } from '@/lib/cache';
-import type { NoaaAlertsBag, NoaaAlert, TmEvent, PlaceRow } from '@/lib/types';
+import type { NoaaAlertsBag, NoaaAlert, TmEvent, PlaceRow, LocalEvent } from '@/lib/types';
 import AlertsCard from '@/components/AlertsCard';
 import NewsCard from '@/components/NewsCard';
 import QuakesCard, { type QuakeRow } from '@/components/QuakesCard';
 import BirdsCard, { type BirdSighting } from '@/components/BirdsCard';
-import EventsCard from '@/components/EventsCard';
+import EventsCard, { type UEvent } from '@/components/EventsCard';
 import PlacesCard from '@/components/PlacesCard';
 import RadarCard, { type RadarImg } from '@/components/RadarCard';
 
@@ -15,11 +15,12 @@ export const revalidate = 0;
 export default async function MainPage() {
   const loc = getLocation();
 
-  const [alerts, quakesRaw, birdsRaw, eventsRaw, feeds, misc, places] = await Promise.all([
+  const [alerts, quakesRaw, birdsRaw, tmRaw, localRaw, feeds, misc, places] = await Promise.all([
     getJson<NoaaAlertsBag>('NOAA_alerts'),
     getJson<Record<string, QuakeRow>>('USGS_earthquakes'),
     getJson<Record<string, BirdSighting>>('eBird'),
     getJson<TmEvent[] | unknown>('TM_shows'),
+    getJson<LocalEvent[]>('local_events'),
     getFeeds(8),
     getMisc(),
     getPlaces(),
@@ -35,9 +36,11 @@ export default async function MainPage() {
 
   const birds: BirdSighting[] = birdsRaw ? Object.values(birdsRaw) : [];
 
-  const events: TmEvent[] = Array.isArray(eventsRaw)
-    ? upcomingEvents(eventsRaw as TmEvent[])
-    : [];
+  // Merge Ticketmaster + locally-scraped events into one chronological list.
+  const events: UEvent[] = buildUnifiedEvents(
+    Array.isArray(tmRaw) ? (tmRaw as TmEvent[]) : [],
+    Array.isArray(localRaw) ? localRaw : [],
+  );
 
   const placesList: PlaceRow[] = places ?? [];
 
@@ -66,23 +69,56 @@ export default async function MainPage() {
   );
 }
 
-// Filter past events, allowing 6h grace for in-progress shows.
-function upcomingEvents(arr: TmEvent[]): TmEvent[] {
+// ---- merge + sort helpers --------------------------------------------
+
+function buildUnifiedEvents(tm: TmEvent[], local: LocalEvent[]): UEvent[] {
   const cutoff = Math.floor(Date.now() / 1000) - 6 * 3600;
-  return arr
-    .filter((e) => {
-      const iso = e.dates?.start?.dateTime;
-      if (iso) { const ms = Date.parse(iso); if (!Number.isNaN(ms)) return Math.floor(ms / 1000) >= cutoff; }
-      const ld = e.dates?.start?.localDate;
-      if (ld) { const [y, m, d] = ld.split('-').map(Number); if (y && m && d) return Math.floor(Date.UTC(y, m - 1, d, 19) / 1000) >= cutoff; }
-      return true;
-    })
-    .sort((a, b) => (epochOf(a) ?? 0) - (epochOf(b) ?? 0));
+  const out: UEvent[] = [];
+
+  for (const e of tm) {
+    const ts = tmEpoch(e);
+    if (ts != null && ts < cutoff) continue;
+    const venue = e._embedded?.venues?.[0];
+    out.push({
+      id: `tm-${e.id ?? out.length}`,
+      title: e.name ?? 'Untitled event',
+      venue: venue?.name ?? '',
+      city: venue?.city?.name,
+      start_at: ts,
+      url: e.url,
+      source: 'ticketmaster',
+      source_label: 'Ticketmaster',
+      segment: e.classifications?.[0]?.segment?.name,
+      genre:   e.classifications?.[0]?.genre?.name,
+      pleaseNote: e.pleaseNote,
+    });
+  }
+
+  for (const e of local) {
+    if (e.start_at != null && e.start_at < cutoff) continue;
+    out.push({
+      id: `local-${e.id}`,
+      title: e.title,
+      venue: e.venue,
+      start_at: e.start_at ?? null,
+      url: e.url,
+      description: e.description,
+      image: e.image,
+      source: 'local',
+      source_label: e.source_label,
+    });
+  }
+
+  return out.sort((a, b) => (a.start_at ?? Infinity) - (b.start_at ?? Infinity));
 }
-function epochOf(e: TmEvent): number | null {
+
+function tmEpoch(e: TmEvent): number | null {
   const iso = e.dates?.start?.dateTime;
   if (iso) { const ms = Date.parse(iso); if (!Number.isNaN(ms)) return Math.floor(ms / 1000); }
   const ld = e.dates?.start?.localDate;
-  if (ld) { const [y, m, d] = ld.split('-').map(Number); if (y && m && d) return Math.floor(Date.UTC(y, m - 1, d, 19) / 1000); }
+  if (ld) {
+    const [y, m, d] = ld.split('-').map(Number);
+    if (y && m && d) return Math.floor(Date.UTC(y, m - 1, d, 19) / 1000);
+  }
   return null;
 }

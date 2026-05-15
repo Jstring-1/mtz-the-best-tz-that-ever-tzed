@@ -119,6 +119,21 @@ export interface TmEvent {
   _embedded?: { venues?: TmVenue[]; attractions?: Array<{ name?: string; url?: string; images?: TmImage[] }> };
 }
 
+// Unified shape for scraped local-venue events. Stored under the
+// 'local_events' apis_json key as an array.
+export interface LocalEvent {
+  id: string;             // stable string id, "source-<n>"
+  source: string;         // short slug, e.g. 'delcielo', 'fivesuns_music'
+  source_label: string;   // human-readable label (the venue, usually)
+  title: string;
+  start_at: number | null; // epoch seconds, or null if undated/recurring
+  end_at?: number | null;
+  venue: string;
+  url: string;
+  description?: string;
+  image?: string;
+}
+
 export type ApisJsonId =
   | 'NOAA_alerts'
   | 'NOAA_gp_forecast'
@@ -133,5 +148,6 @@ export type ApisJsonId =
   | 'USGS_earthquakes'
   | 'four_sq'
   | 'TM_shows'
+  | 'local_events'
   | '12D_stocks'
   | string;       // also: NOAA_Bouy_*, purple_air_*, plus future ids
