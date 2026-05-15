@@ -335,9 +335,23 @@ async function noaaWaterRss(xmlBag: Record<string, string>) {
   }
 }
 
+// Stocks: hourly during US market session (4am–8pm Eastern, covers pre /
+// after-hours). Batches all symbols into one /quote request — twelvedata's
+// free tier is 8 req/min, 800/day, so a single batched call per hour is
+// well under budget. Outside market hours, no-op (keeps the cached values).
+const STOCK_SYMBOLS = ['SPX', 'DJI', 'IXIC', 'GME', 'PSLV'];
+
 async function twelvedataStocks(json: Record<string, unknown>) {
-  const params = new URLSearchParams({ apikey: process.env.TWELVEDATA_KEY ?? '', interval: '30min', type: 'stock', symbol: 'GME' });
-  json['12D_stocks'] = await fetchJson(`https://api.twelvedata.com/price?${params}`);
+  const etHour = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric', hour12: false,
+  }).format(new Date()));
+  if (Number.isNaN(etHour) || etHour < 4 || etHour >= 20) return;
+  const params = new URLSearchParams({
+    apikey: process.env.TWELVEDATA_KEY ?? '',
+    symbol: STOCK_SYMBOLS.join(','),
+  });
+  json['12D_stocks'] = await fetchJson(`https://api.twelvedata.com/quote?${params}`);
 }
 
 async function foursquarePlaces(json: Record<string, unknown>) {
@@ -438,12 +452,14 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('usgs_quakes', () => usgsQuakes(json), ok, errors);
     await safe('ebird', () => ebird(json), ok, errors);
     await safe('weather_story', () => weatherStory(miscBag), ok, errors);
+    // Stocks are hourly but the job itself short-circuits outside US
+    // market hours, so it's safe to run every hour.
+    await safe('twelvedata_stocks', () => twelvedataStocks(json), ok, errors);
   }
 
   if (bucket === '4h' || all) {
     await safe('news_feeds', () => newsFeeds(), ok, errors);
     await safe('noaa_water_rss', () => noaaWaterRss(xmlBag), ok, errors);
-    await safe('twelvedata_stocks', () => twelvedataStocks(json), ok, errors);
   }
 
   if (bucket === '12h' || all) {

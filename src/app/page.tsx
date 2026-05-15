@@ -3,6 +3,7 @@ import { getLocation } from '@/lib/location';
 import { getJson, getFeeds } from '@/lib/cache';
 import { relativeFromUnixSeconds } from '@/lib/time';
 import type { NoaaAlertsBag, NoaaForecastPeriod, NoaaAlert } from '@/lib/types';
+import StocksStrip from '@/components/StocksStrip';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -29,6 +30,9 @@ export default async function MainPage() {
       </section>
 
       <section className="glance">
+
+        <h2>Markets</h2>
+        <StocksStrip />
 
         {localAlerts.length > 0 && (
           <>

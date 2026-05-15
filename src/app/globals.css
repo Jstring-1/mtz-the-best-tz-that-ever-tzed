@@ -315,6 +315,96 @@ main { padding-top: calc(var(--hdr-h) + var(--top-stack-h)); display: block; }
 .wx-temp { color: var(--wx-temp); }
 
 
+/* --- Stocks (main page) ----------------------------------------------- */
+
+.stocks-strip {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin: 8px 0 16px;
+}
+.stock-cell {
+  display: inline-flex; flex-direction: column; align-items: flex-start;
+  gap: 2px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  min-width: 130px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 120ms, border-color 120ms;
+}
+.stock-cell:hover { background: var(--bg-elev-2); border-color: var(--accent); }
+.stock-cell .sym { font-family: var(--mono); font-size: .8em; color: var(--text-muted); letter-spacing: .5px; }
+.stock-cell .price { font-size: 1.2em; color: var(--text); font-variant-numeric: tabular-nums; }
+.stock-cell .pct { font-size: .85em; font-variant-numeric: tabular-nums; }
+.stock-cell.up   { border-left: 3px solid forestgreen; }
+.stock-cell.up   .pct { color: limegreen; }
+.stock-cell.down { border-left: 3px solid indianred; }
+.stock-cell.down .pct { color: indianred; }
+.stock-cell.flat { border-left: 3px solid var(--border); }
+.stock-cell.flat .pct { color: var(--text-muted); }
+
+.stock-modal {
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0;
+  max-width: 520px;
+  width: 92vw;
+}
+.stock-modal::backdrop { background: rgba(0, 0, 0, .7); }
+.stock-modal-content { padding: 18px 22px 20px; position: relative; font-family: var(--sans); }
+.stock-modal-close {
+  position: absolute; top: 6px; right: 10px;
+  background: transparent; border: 0; color: var(--text-muted);
+  font-size: 22px; line-height: 1; cursor: pointer; padding: 4px 8px;
+}
+.stock-modal-close:hover { color: var(--text); }
+.stock-modal-title {
+  font-size: 1.15em; margin: 0 28px 8px 0; font-weight: 600;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline;
+}
+.stock-modal-title .sym { font-family: var(--mono); color: var(--accent); }
+.stock-modal-title .muted { color: var(--text-muted); font-weight: 400; font-size: .85em; }
+.stock-modal-price {
+  display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap;
+  margin: 4px 0 14px;
+  font-variant-numeric: tabular-nums;
+}
+.stock-modal-price .now { font-size: 1.6em; font-weight: 700; }
+.stock-modal-price .change.up   { color: limegreen; }
+.stock-modal-price .change.down { color: indianred; }
+.stock-modal-price .change.flat { color: var(--text-muted); }
+.stock-modal-price .badge {
+  font-size: .7em; padding: 2px 6px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: .6px;
+}
+.stock-modal-price .badge.open   { background: #053b13; color: limegreen; border: 1px solid forestgreen; }
+.stock-modal-price .badge.closed { background: #3a1a1a; color: indianred; border: 1px solid #5a2020; }
+.stock-modal-kv {
+  display: grid; grid-template-columns: auto 1fr; gap: 6px 16px;
+  margin: 8px 0 16px;
+  font-size: .9em;
+}
+.stock-modal-kv dt { color: var(--text-muted); font-size: .85em; }
+.stock-modal-kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+.stock-modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.stock-modal-btn {
+  padding: 8px 14px;
+  border-radius: 4px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+  font-size: .9em;
+}
+.stock-modal-btn:hover { border-color: var(--accent); color: var(--accent); }
+.stock-modal-btn.primary { background: var(--accent); color: #000; font-weight: 600; }
+.stock-modal-btn.primary:hover { color: #000; opacity: .9; }
+
+
 /* --- Hourly strip ------------------------------------------------------- */
 
 .wx-hourly {
