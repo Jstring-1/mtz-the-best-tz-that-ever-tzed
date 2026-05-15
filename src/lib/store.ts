@@ -113,6 +113,28 @@ async function ensureTables(): Promise<void> {
   `;
   await sql`CREATE INDEX IF NOT EXISTS alerts_expires_at_idx ON alerts (expires_at)`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS pets (
+      id            TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      species       TEXT,
+      breed         TEXT,
+      age           TEXT,
+      gender        TEXT,
+      weight        TEXT,
+      color         TEXT,
+      intake_date   TEXT,
+      location      TEXT,
+      photo_url     TEXT,
+      description   TEXT,
+      url           TEXT,
+      shelter       TEXT,
+      first_seen    TIMESTAMPTZ DEFAULT NOW(),
+      last_seen     TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS pets_last_seen_idx ON pets (last_seen)`;
+
   ensured = true;
 }
 
@@ -449,6 +471,83 @@ export async function listActiveAlerts(): Promise<StoredAlert[]> {
     FROM alerts
     WHERE expires_at IS NULL OR expires_at >= ${now}
     ORDER BY sent_at DESC NULLS LAST
+  `;
+}
+
+// ---------- Pets ------------------------------------------------------
+
+export interface StoredPet {
+  id: string;
+  name: string;
+  species: string | null;
+  breed: string | null;
+  age: string | null;
+  gender: string | null;
+  weight: string | null;
+  color: string | null;
+  intake_date: string | null;
+  location: string | null;
+  photo_url: string | null;
+  description: string | null;
+  url: string | null;
+  shelter: string | null;
+}
+
+export async function upsertPets(rows: StoredPet[]): Promise<void> {
+  if (!rows.length) return;
+  await ensureTables();
+  for (const r of rows) {
+    await sql`
+      INSERT INTO pets (
+        id, name, species, breed, age, gender, weight, color,
+        intake_date, location, photo_url, description, url, shelter,
+        last_seen
+      ) VALUES (
+        ${r.id}, ${r.name}, ${r.species}, ${r.breed}, ${r.age}, ${r.gender},
+        ${r.weight}, ${r.color}, ${r.intake_date}, ${r.location},
+        ${r.photo_url}, ${r.description}, ${r.url}, ${r.shelter}, NOW()
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        name        = EXCLUDED.name,
+        species     = EXCLUDED.species,
+        breed       = EXCLUDED.breed,
+        age         = EXCLUDED.age,
+        gender      = EXCLUDED.gender,
+        weight      = EXCLUDED.weight,
+        color       = EXCLUDED.color,
+        intake_date = EXCLUDED.intake_date,
+        location    = EXCLUDED.location,
+        photo_url   = EXCLUDED.photo_url,
+        description = EXCLUDED.description,
+        url         = EXCLUDED.url,
+        shelter     = EXCLUDED.shelter,
+        last_seen   = NOW()
+    `;
+  }
+}
+
+// Drop any row not refreshed by the latest scrape — those pets either
+// got adopted or were taken off the listing. Run from cron after each
+// upsert.
+export async function purgeStalePets(): Promise<number> {
+  await ensureTables();
+  const r = await sql<{ c: string }[]>`
+    WITH del AS (
+      DELETE FROM pets
+      WHERE last_seen < NOW() - INTERVAL '30 minutes'
+      RETURNING id
+    ) SELECT COUNT(*)::text AS c FROM del
+  `;
+  return Number(r[0]?.c ?? 0);
+}
+
+export async function listAvailablePets(): Promise<StoredPet[]> {
+  await ensureTables();
+  return await sql<StoredPet[]>`
+    SELECT id, name, species, breed, age, gender, weight, color,
+           intake_date, location, photo_url, description, url, shelter
+    FROM pets
+    ORDER BY species ASC, name ASC
   `;
 }
 

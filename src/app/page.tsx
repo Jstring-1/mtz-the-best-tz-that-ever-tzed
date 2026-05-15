@@ -2,6 +2,7 @@ import { getLocation } from '@/lib/location';
 import { getFeeds, getMisc, getPlaces } from '@/lib/cache';
 import {
   listUpcomingEvents, listRecentBirds, listRecentQuakes, listParks, listActiveAlerts,
+  listAvailablePets,
 } from '@/lib/store';
 import type { PlaceRow, NoaaAlert } from '@/lib/types';
 import AlertsCard from '@/components/AlertsCard';
@@ -10,6 +11,7 @@ import QuakesCard, { type QuakeRow } from '@/components/QuakesCard';
 import BirdsCard, { type BirdSighting } from '@/components/BirdsCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
 import PlacesCard, { type Spot } from '@/components/PlacesCard';
+import PetsCard from '@/components/PetsCard';
 import RadarCard, { type RadarImg } from '@/components/RadarCard';
 
 export const dynamic = 'force-dynamic';
@@ -20,13 +22,14 @@ export default async function MainPage() {
 
   const [
     storedEvents, storedBirds, storedQuakes, storedParks, storedAlerts,
-    feeds, misc, places,
+    storedPets, feeds, misc, places,
   ] = await Promise.all([
     listUpcomingEvents(),
     listRecentBirds(60),
     listRecentQuakes(20),
     listParks(),
     listActiveAlerts(),
+    listAvailablePets(),
     getFeeds(120),
     getMisc(),
     getPlaces(),
@@ -134,6 +137,7 @@ export default async function MainPage() {
         <QuakesCard quakes={quakes}    tz={loc.timezone} />
       </div>
       <BirdsCard  sightings={birds} />
+      <PetsCard   pets={storedPets} />
     </div>
   );
 }

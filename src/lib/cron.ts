@@ -395,6 +395,20 @@ async function purgeStores() {
   console.log(`[cron] purge: events ${r.events}, birds ${r.birds}, quakes ${r.quakes}, alerts ${r.alerts}`);
 }
 
+async function shelterPets(json: Record<string, unknown>) {
+  const { scrapeAllPets } = await import('./scrape-pets');
+  const pets = await scrapeAllPets();
+  json['shelter_pets'] = { count: pets.length, scrapedAt: new Date().toISOString() };
+  if (!pets.length) return;
+  const { upsertPets, purgeStalePets } = await import('./store');
+  await upsertPets(pets);
+  // Pets that fell off the listing (adopted, transferred, etc.) get
+  // removed once their last_seen falls behind by >30 min — long enough
+  // to ride out a single failed scrape.
+  const purged = await purgeStalePets();
+  console.log(`[cron] shelter_pets: upserted ${pets.length}, purged ${purged}`);
+}
+
 async function weatherStory(misc: Record<string, string>) {
   const html = await fetchText('https://www.weather.gov/mtr/');
   for (let n = 0; n <= 9; n++) {
@@ -909,6 +923,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('noaa_water_rss', () => noaaWaterRss(xmlBag),       ok, errors);
     await safe('weather_story',  () => weatherStory(miscBag),      ok, errors);
     await safe('local_events',   () => localEvents(json),          ok, errors);
+    await safe('shelter_pets',   () => shelterPets(json),          ok, errors);
   }
 
   if (bucket === '12h' || all) {
