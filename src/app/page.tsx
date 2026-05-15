@@ -53,13 +53,15 @@ export default async function MainPage() {
 
   return (
     <div className="dashboard">
-      <AlertsCard alerts={localAlerts} tz={loc.timezone} />
-      <QuakesCard quakes={quakes}     tz={loc.timezone} />
       <NewsCard   items={feeds} />
-      <BirdsCard  sightings={birds} />
       <EventsCard events={events}     tz={loc.timezone} />
       <PlacesCard places={placesList} />
-      <RadarCard  imgs={radarImgs} />
+      <div className="col-stack">
+        <AlertsCard alerts={localAlerts} tz={loc.timezone} />
+        <RadarCard  imgs={radarImgs} />
+        <QuakesCard quakes={quakes}    tz={loc.timezone} />
+      </div>
+      <BirdsCard  sightings={birds} />
     </div>
   );
 }

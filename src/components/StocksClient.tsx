@@ -20,24 +20,12 @@ export interface TwelveQuote {
   volume?: string;
   average_volume?: string;
   is_market_open?: boolean;
-  market_state?: string;   // REGULAR | PRE | POST | CLOSED | PREPRE | POSTPOST
+  market_state?: string;
   fifty_two_week?: { low?: string; high?: string; range?: string };
   // present on errors instead of price data
   status?: string;
   code?: number;
   message?: string;
-}
-
-function marketLabel(state?: string): { label: string; cls: string } {
-  switch ((state ?? '').toUpperCase()) {
-    case 'REGULAR':  return { label: 'Market open',  cls: 'open' };
-    case 'PRE':
-    case 'PREPRE':   return { label: 'Pre-market',   cls: 'pre' };
-    case 'POST':
-    case 'POSTPOST': return { label: 'After-hours',  cls: 'post' };
-    case 'CLOSED':   return { label: 'Market closed', cls: 'closed' };
-    default:         return { label: state ? state : 'Status unknown', cls: 'closed' };
-  }
 }
 
 export interface StockEntry {
@@ -172,10 +160,6 @@ function StockModalBody({ s, onClose }: { s: StockEntry; onClose: () => void }) 
           {change == null ? '—' : (change >= 0 ? '+' : '') + fmt(change)}{' '}
           ({pct == null ? '—' : `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`})
         </span>
-        {(() => {
-          const m = marketLabel(q.market_state);
-          return <span className={`badge ${m.cls}`}>{m.label}</span>;
-        })()}
       </div>
 
       <dl className="stock-modal-kv">

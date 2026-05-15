@@ -934,6 +934,13 @@ main { padding-top: var(--top-stack-h); display: block; }
   align-items: start;
 }
 
+/* Wrapper for stacking multiple cards inside one grid column. */
+.dashboard .col-stack {
+  display: flex; flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
 .dashboard .card-section {
   background: var(--bg-elev);
   border: 1px solid var(--border);
