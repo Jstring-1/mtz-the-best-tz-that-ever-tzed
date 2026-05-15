@@ -343,8 +343,58 @@ async function scrapeGenericPage(url: string, source: string, sourceLabel: strin
   return fallbackDateScan(html, source, sourceLabel, venue, url);
 }
 
+// City of Martinez "Signature Events" is an accordion of 11 annual
+// community events. Trying to parse it generically gave us a useless
+// "MAY 2026" row from the page's calendar widget, so we hand-curate.
+// For events with firm calendar dates (4th of July, Juneteenth, etc.)
+// we project the next occurrence; the rest get start_at=null and a
+// "(typically <season>)" hint in the description.
+
+interface SigEvent { title: string; month?: number; day?: number; desc: string }
+
+const MARTINEZ_SIGNATURE_EVENTS: SigEvent[] = [
+  { title: 'Lunar New Year Celebration',                                desc: 'Annual community Lunar New Year celebration (typically late January / early February).' },
+  { title: 'John Muir Birthday – Earth Day Celebration',  month: 4, day: 21, desc: 'Honoring naturalist John Muir and celebrating Earth Day in his hometown.' },
+  { title: 'Bay Area Craft Beer Festival',                              desc: 'Craft beer festival featuring local Bay Area brewers (typically spring).' },
+  { title: 'King of the County BBQ',                                    desc: 'BBQ competition crowning the best in Contra Costa County (typically summer).' },
+  { title: 'Martinez Juneteenth',                          month: 6, day: 19, desc: 'Annual Juneteenth celebration.' },
+  { title: '4th of July Parade & Fireworks',               month: 7, day: 4,  desc: 'Independence Day parade and fireworks display.' },
+  { title: 'Beaver Festival',                                           desc: 'Celebrating Martinez’s famous beavers and creek wildlife (typically late summer).' },
+  { title: 'Art in the Park',                                           desc: 'Local artists showcase work in Martinez parks (typically fall).' },
+  { title: 'Martinez Pride',                               month: 6,           desc: 'Annual Pride celebration in Martinez (typically June).' },
+  { title: 'Martini Shake-Off',                                         desc: 'Annual martini competition — Martinez is the claimed birthplace of the martini (typically fall).' },
+  { title: 'Holiday Frolic',                               month: 12, day: 5, desc: 'Holiday season celebration with lights, music, and family activities.' },
+];
+
 async function scrapeCityOfMartinez(): Promise<LocalEvent[]> {
-  return scrapeGenericPage('https://www.cityofmartinez.org/our-city/signature-city-events', 'martinez', 'City of Martinez', 'Martinez, CA');
+  const url = 'https://www.cityofmartinez.org/our-city/signature-city-events';
+  return MARTINEZ_SIGNATURE_EVENTS.map((e) => ({
+    id: `martinez-sig-${slugify(e.title)}`,
+    source: 'martinez',
+    source_label: 'City of Martinez',
+    title: e.title,
+    start_at: nextOccurrenceTs(e.month, e.day),
+    end_at: null,
+    venue: 'Martinez, CA',
+    url,
+    description: e.desc,
+  }));
+}
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// Return the next occurrence of (month, day) at local noon, expressed
+// as epoch seconds. If either is missing, return null.
+function nextOccurrenceTs(month?: number, day?: number): number | null {
+  if (!month) return null;
+  const useDay = day ?? 15;
+  const now = new Date();
+  const y = now.getFullYear();
+  const thisYear = ptEpoch(y, month - 1, useDay, 12, 0);
+  if (thisYear * 1000 >= Date.now() - 24 * 3600 * 1000) return thisYear;
+  return ptEpoch(y + 1, month - 1, useDay, 12, 0);
 }
 async function scrapeRoxxOnMain(): Promise<LocalEvent[]> {
   return scrapeGenericPage('https://www.roxxonmain.com/music-events', 'roxxonmain', 'Roxx on Main', 'Roxx on Main');

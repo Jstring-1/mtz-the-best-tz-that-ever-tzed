@@ -328,6 +328,11 @@ async function localEvents(json: Record<string, unknown>) {
   // were stored before the LVM filter landed. Scraper now drops them,
   // so they'd otherwise sit until their end_at aged past 90 days.
   await sql`DELETE FROM events WHERE source = 'delcielo' AND title LIKE '%LVM'`;
+  // And the calendar-widget garbage rows the generic City of Martinez
+  // scraper produced before we switched to the hand-curated list.
+  // Old ids matched "martinez-fb-*" / "martinez-jsonld-*"; the new
+  // curated rows use "martinez-sig-<slug>".
+  await sql`DELETE FROM events WHERE source = 'martinez' AND id NOT LIKE 'martinez-sig-%'`;
   // Mirror into the structured events table.
   const { upsertEvents } = await import('./store');
   await upsertEvents(events.map((e) => ({
