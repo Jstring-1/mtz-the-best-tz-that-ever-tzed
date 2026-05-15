@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
+import MiniMap from './MiniMap';
 
 // Unified event row used inside the card. We convert both Ticketmaster
 // events and locally-scraped venue events into this shape in page.tsx.
@@ -107,8 +108,12 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
             {open.description && (
               <p style={{ lineHeight: 1.5, marginBottom: 12 }}>{open.description}</p>
             )}
+            {(() => {
+              const q = [open.venue, open.city].filter(Boolean).join(', ');
+              return q ? <MiniMap query={q} /> : null;
+            })()}
             {open.url && (
-              <a className="event-modal-btn primary" href={open.url} target="_blank" rel="noopener">
+              <a className="event-modal-btn primary" href={open.url} target="_blank" rel="noopener" style={{ marginTop: 14, display: 'inline-block' }}>
                 {open.source === 'ticketmaster' ? 'Get tickets →' : `View on ${open.source_label} →`}
               </a>
             )}

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
+import MiniMap from './MiniMap';
 
 // Unified shape — both Foursquare places and scraped Martinez parks
 // share this card now. `kind` discriminates the modal layout.
@@ -16,28 +17,6 @@ export interface Spot {
   description?: string;       // parks
   image?: string;             // parks
   url?: string;               // parks
-}
-
-// Google Maps embed via the no-API-key text-query URL. Renders a
-// modest 240px-tall iframe with a pin on the address. Works without
-// any billing setup; falls back gracefully if Google can't resolve
-// the address (iframe just shows a "search again" empty state).
-function MiniMap({ query }: { query: string }) {
-  const src = `https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=15&ie=UTF8&iwloc=&output=embed`;
-  return (
-    <iframe
-      title={`Map of ${query}`}
-      src={src}
-      style={{
-        width: '100%', height: 240,
-        border: '1px solid var(--border)',
-        borderRadius: 4,
-        marginTop: 4,
-      }}
-      loading="lazy"
-      referrerPolicy="no-referrer-when-downgrade"
-    />
-  );
 }
 
 export default function PlacesCard({ spots }: { spots: Spot[] }) {
