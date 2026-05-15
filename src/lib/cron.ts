@@ -328,6 +328,16 @@ function slugId(s: string): string {
   return s.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase().slice(0, 100);
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function startsWithCity(addy: string, city: string): boolean {
+  if (!city) return false;
+  const re = new RegExp(`^\\s*${escapeRegex(city)}\\s*,`, 'i');
+  return re.test(addy);
+}
+
 async function localEvents(json: Record<string, unknown>) {
   const { scrapeAllLocalEvents } = await import('./scrape-events');
   const events = await scrapeAllLocalEvents();
@@ -581,9 +591,11 @@ async function foursquarePlaces(json: Record<string, unknown>) {
     // anything whose address is in Benicia — we want Martinez only.
     if (/\bBenicia\b/i.test(addy)) continue;
     // Drop regional / generic entries like "The Bay Area" whose address
-    // is just "Martinez, CA 94553" with no street number. A real venue
-    // always has a leading "1234 Some St".
-    if (!/^\s*\d/.test(addy)) continue;
+    // is JUST "<City>, CA[, 94553]" — no street, no cross-street, no
+    // landmark. Real venues at corners or inside parks ("Castro St &
+    // Susana Park, Martinez, CA") have something before the first
+    // comma that isn't the city itself, so they pass.
+    if (startsWithCity(addy, loc.short)) continue;
     let cats = '', images = '';
     for (const c of v.categories ?? []) {
       cats += `${c.name ?? ''}, `;
@@ -603,8 +615,11 @@ async function foursquarePlaces(json: Record<string, unknown>) {
   // upsert is keyed on fsq_id so old out-of-area rows linger forever
   // otherwise; this matches the filter above.
   await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
-  // And the regional / no-street-number entries (e.g. "The Bay Area").
-  await sql`DELETE FROM places WHERE addy !~ '^[[:space:]]*[0-9]'`;
+  // And the regional / no-street entries (e.g. "The Bay Area") whose
+  // address is just "<City>, ...". Real venues have a street, a
+  // cross-street, or a landmark before the first comma.
+  const cityPattern = `^[[:space:]]*${escapeRegex(loc.short)}[[:space:]]*,`;
+  await sql`DELETE FROM places WHERE addy ~* ${cityPattern}`;
 }
 
 async function ticketmasterEvents(json: Record<string, unknown>) {
