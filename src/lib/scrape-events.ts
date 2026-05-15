@@ -139,7 +139,11 @@ async function scrapeDelCielo(): Promise<LocalEvent[]> {
   if (!text) return [];
   let j: { events?: TribeEvent[] };
   try { j = JSON.parse(text); } catch { return []; }
-  return (j.events ?? []).map((e) => ({
+  return (j.events ?? [])
+    // Drop the Livermore-location entries (titles suffixed with "- LVM").
+    // We only care about the Martinez taproom; "- MTZ" entries pass.
+    .filter((e) => !/[-–—]\s*LVM\s*$/i.test(e.title || ''))
+    .map((e) => ({
     id: `delcielo-${e.id}`,
     source: 'delcielo',
     source_label: 'Del Cielo Brewing',

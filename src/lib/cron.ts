@@ -1,6 +1,7 @@
 // Background refresh jobs.  Each function is a single API → cache write.
 // Buckets group jobs by refresh cadence.  /api/cron?bucket=… runs one bucket.
 
+import { sql } from './db';
 import { getLocation, getNoaaGridpoint } from './location';
 import {
   upsertJsonMany,
@@ -323,6 +324,10 @@ async function localEvents(json: Record<string, unknown>) {
   const { scrapeAllLocalEvents } = await import('./scrape-events');
   const events = await scrapeAllLocalEvents();
   json['local_events'] = events;
+  // Housekeeping: purge any Del Cielo Livermore-location entries that
+  // were stored before the LVM filter landed. Scraper now drops them,
+  // so they'd otherwise sit until their end_at aged past 90 days.
+  await sql`DELETE FROM events WHERE source = 'delcielo' AND title LIKE '%LVM'`;
   // Mirror into the structured events table.
   const { upsertEvents } = await import('./store');
   await upsertEvents(events.map((e) => ({
