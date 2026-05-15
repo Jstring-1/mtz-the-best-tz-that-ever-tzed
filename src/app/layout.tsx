@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Source_Code_Pro, Inter } from 'next/font/google';
 import { getLocation } from '@/lib/location';
-import Header from '@/components/Header';
 import WeatherStrip from '@/components/WeatherStrip';
 import HourlyStrip from '@/components/HourlyStrip';
 import ForecastStrip from '@/components/ForecastStrip';
@@ -33,10 +32,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <span className="wx-sep" aria-hidden />
           <ForecastStrip />
         </section>
-        <Header />
         <main>{children}</main>
         <footer className="site-ftr">
-          {loc.siteName} · {loc.name} · data refreshed via <a href="/admin">/admin</a>
+          {loc.siteName} · {loc.name}
         </footer>
       </body>
     </html>
