@@ -385,6 +385,8 @@ main { padding-top: calc(var(--hdr-h) + var(--top-stack-h)); display: block; }
   text-transform: uppercase; letter-spacing: .6px;
 }
 .stock-modal-price .badge.open   { background: #053b13; color: limegreen; border: 1px solid forestgreen; }
+.stock-modal-price .badge.pre    { background: #1f2c0a; color: #a8c84a; border: 1px solid #4a5a20; }
+.stock-modal-price .badge.post   { background: #2c180a; color: #d99c4a; border: 1px solid #5a3520; }
 .stock-modal-price .badge.closed { background: #3a1a1a; color: indianred; border: 1px solid #5a2020; }
 .stock-modal-kv {
   display: grid; grid-template-columns: auto 1fr; gap: 6px 16px;

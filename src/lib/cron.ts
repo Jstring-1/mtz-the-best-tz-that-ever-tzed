@@ -350,7 +350,11 @@ function fmtEpochAsEt(sec: number): string {
 
 async function fetchYahooQuote(sym: string): Promise<unknown | null> {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`;
+    // range=1d → chartPreviousClose is yesterday's regular close, which
+    // is what we actually want for "today's change". With a longer range,
+    // chartPreviousClose is the close before the *window*, not yesterday,
+    // and the percent change comes out drastically wrong.
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`;
     const r = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; mtz-city/1.0)' },
       cache: 'no-store',
@@ -360,7 +364,10 @@ async function fetchYahooQuote(sym: string): Promise<unknown | null> {
     const meta = j?.chart?.result?.[0]?.meta;
     if (!meta) return null;
     const close = Number(meta.regularMarketPrice ?? 0);
-    const prev  = Number(meta.chartPreviousClose ?? meta.previousClose ?? 0);
+    // Prefer previousClose (yesterday's regular close) over
+    // chartPreviousClose. With range=1d they line up, but if Yahoo ever
+    // omits one, previousClose is the safer field.
+    const prev  = Number(meta.previousClose ?? meta.chartPreviousClose ?? 0);
     const change = prev ? close - prev : 0;
     const percent = prev ? (change / prev) * 100 : 0;
     return {
