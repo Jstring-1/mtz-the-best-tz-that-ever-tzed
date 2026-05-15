@@ -132,13 +132,24 @@ async function scrapeDelCielo(): Promise<LocalEvent[]> {
     source: 'delcielo',
     source_label: 'Del Cielo Brewing',
     title: e.title,
-    start_at: tsFromIso(e.utc_start_date ? e.utc_start_date + 'Z' : e.start_date),
-    end_at:   tsFromIso(e.utc_end_date   ? e.utc_end_date   + 'Z' : e.end_date),
+    // utc_start_date is naive UTC ("2026-05-16 01:30:00") — append Z.
+    // Fallback to start_date (naive local) without Z.
+    start_at: tsFromIso(toTribeIso(e.utc_start_date, true) ?? toTribeIso(e.start_date, false)),
+    end_at:   tsFromIso(toTribeIso(e.utc_end_date,   true) ?? toTribeIso(e.end_date,   false)),
     venue: e.venue?.venue || 'Del Cielo Brewing',
     url: e.url,
     description: stripHtml(e.description || ''),
     image: e.image?.url,
   }));
+}
+
+// Tribe returns "YYYY-MM-DD HH:MM:SS" (space, no T, no zone). Normalise
+// to ISO 8601 — if isUtc, mark as Z; otherwise leave naive (treated as
+// local by Date.parse).
+function toTribeIso(s: string | undefined, isUtc: boolean): string | null {
+  if (!s) return null;
+  const t = s.includes('T') ? s : s.replace(' ', 'T');
+  return isUtc && !/[Zz]|[+-]\d\d:?\d\d$/.test(t) ? t + 'Z' : t;
 }
 
 // ----- Five Suns Brewing (Squarespace) ---------------------------------
@@ -157,10 +168,12 @@ interface SqsItem {
 async function scrapeSquarespaceCollection(url: string, source: string, sourceLabel: string, venue: string): Promise<LocalEvent[]> {
   const text = await safeFetch(url + (url.includes('?') ? '&' : '?') + 'format=json');
   if (!text) return [];
-  let j: { items?: SqsItem[]; collection?: { fullUrl?: string } };
+  // Event-type Squarespace collections return entries in `upcoming` / `past`
+  // (not `items` like regular collections). Try both shapes.
+  let j: { items?: SqsItem[]; upcoming?: SqsItem[]; past?: SqsItem[] };
   try { j = JSON.parse(text); } catch { return []; }
   const base = new URL(url).origin;
-  const items = j.items ?? [];
+  const items: SqsItem[] = j.upcoming ?? j.items ?? [];
   return items.map((it) => ({
     id: `${source}-${it.id}`,
     source,
