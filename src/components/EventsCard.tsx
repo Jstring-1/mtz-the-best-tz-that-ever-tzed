@@ -21,17 +21,44 @@ export interface UEvent {
   pleaseNote?: string;
 }
 
+type Tab = 'local' | 'regional';
+
 export default function EventsCard({ events, tz }: { events: UEvent[]; tz: string }) {
   const [open, setOpen] = useState<UEvent | null>(null);
+  const [tab, setTab] = useState<Tab>('local');
+
+  const local    = events.filter((e) => e.source === 'local');
+  const regional = events.filter((e) => e.source === 'ticketmaster');
+  const shown = tab === 'local' ? local : regional;
 
   return (
     <section className="card-section events-card">
-      <h2>Events <span className="count">{events.length}</span></h2>
-      {events.length === 0 ? (
-        <p className="empty">No events cached.</p>
+      <h2>
+        Events
+        <span className="event-tabs" role="tablist" aria-label="Event scope">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'local'}
+            className={`event-tab ${tab === 'local' ? 'on' : ''}`}
+            onClick={() => setTab('local')}
+          >Local <span className="count">{local.length}</span></button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'regional'}
+            className={`event-tab ${tab === 'regional' ? 'on' : ''}`}
+            onClick={() => setTab('regional')}
+          >Regional <span className="count">{regional.length}</span></button>
+        </span>
+      </h2>
+      {shown.length === 0 ? (
+        <p className="empty">
+          {tab === 'local' ? 'No local events cached yet.' : 'No Ticketmaster events cached yet.'}
+        </p>
       ) : (
         <div className="stack-sm">
-          {events.slice(0, 12).map((e) => (
+          {shown.slice(0, 12).map((e) => (
             <button
               key={e.id}
               type="button"

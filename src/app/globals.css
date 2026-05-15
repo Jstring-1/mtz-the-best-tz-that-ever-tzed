@@ -1006,6 +1006,32 @@ main { padding-top: var(--top-stack-h); display: block; }
 .bird-row .sub  { font-size: .82em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Events */
+.event-tabs {
+  display: inline-flex; gap: 4px;
+  margin-left: auto;
+}
+.event-tab {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: .72em;
+  cursor: pointer;
+  text-transform: lowercase;
+  letter-spacing: .4px;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.event-tab:hover { color: var(--text); border-color: var(--accent); }
+.event-tab.on {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+.event-tab.on .count { color: #000; opacity: .7; }
+.event-tab .count { font-size: .9em; color: var(--text-muted); }
+
 .event-row { display: grid !important; grid-template-columns: 52px 1fr; row-gap: 1px; }
 .event-row .when  { color: var(--accent); font-family: var(--mono); font-size: .85em; }
 .event-row .name  { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
