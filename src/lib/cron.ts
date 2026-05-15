@@ -247,6 +247,11 @@ async function localEvents(json: Record<string, unknown>) {
   json['local_events'] = await scrapeAllLocalEvents();
 }
 
+async function localParks(json: Record<string, unknown>) {
+  const { scrapeAllParks } = await import('./scrape-parks');
+  json['local_parks'] = await scrapeAllParks();
+}
+
 async function weatherStory(misc: Record<string, string>) {
   const html = await fetchText('https://www.weather.gov/mtr/');
   for (let n = 0; n <= 9; n++) {
@@ -528,8 +533,9 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
   }
 
   if (bucket === '12h' || all) {
-    await safe('foursquare_places', () => foursquarePlaces(json), ok, errors);
-    await safe('ticketmaster_events', () => ticketmasterEvents(json), ok, errors);
+    await safe('foursquare_places',  () => foursquarePlaces(json),   ok, errors);
+    await safe('ticketmaster_events',() => ticketmasterEvents(json), ok, errors);
+    await safe('local_parks',        () => localParks(json),         ok, errors);
   }
 
   if (Object.keys(json).length)    await upsertJsonMany(json);

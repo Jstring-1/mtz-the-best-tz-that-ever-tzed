@@ -1,12 +1,13 @@
 import { getLocation } from '@/lib/location';
 import { getJson, getFeeds, getMisc, getPlaces } from '@/lib/cache';
-import type { NoaaAlertsBag, NoaaAlert, TmEvent, PlaceRow, LocalEvent } from '@/lib/types';
+import type { NoaaAlertsBag, NoaaAlert, TmEvent, PlaceRow, LocalEvent, Park } from '@/lib/types';
 import AlertsCard from '@/components/AlertsCard';
 import NewsCard from '@/components/NewsCard';
 import QuakesCard, { type QuakeRow } from '@/components/QuakesCard';
 import BirdsCard, { type BirdSighting } from '@/components/BirdsCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
 import PlacesCard from '@/components/PlacesCard';
+import ParksCard from '@/components/ParksCard';
 import RadarCard, { type RadarImg } from '@/components/RadarCard';
 
 export const dynamic = 'force-dynamic';
@@ -15,12 +16,13 @@ export const revalidate = 0;
 export default async function MainPage() {
   const loc = getLocation();
 
-  const [alerts, quakesRaw, birdsRaw, tmRaw, localRaw, feeds, misc, places] = await Promise.all([
+  const [alerts, quakesRaw, birdsRaw, tmRaw, localRaw, parksRaw, feeds, misc, places] = await Promise.all([
     getJson<NoaaAlertsBag>('NOAA_alerts'),
     getJson<Record<string, QuakeRow>>('USGS_earthquakes'),
     getJson<Record<string, BirdSighting>>('eBird'),
     getJson<TmEvent[] | unknown>('TM_shows'),
     getJson<LocalEvent[]>('local_events'),
+    getJson<Park[]>('local_parks'),
     getFeeds(8),
     getMisc(),
     getPlaces(),
@@ -43,6 +45,7 @@ export default async function MainPage() {
   );
 
   const placesList: PlaceRow[] = places ?? [];
+  const parksList: Park[] = Array.isArray(parksRaw) ? parksRaw : [];
 
   const storyImgs = misc.filter((m) => m.text === 'true' && m.id.startsWith('WeatherStory')).map((m) => m.id);
   const radarImgs: RadarImg[] = [
@@ -59,6 +62,7 @@ export default async function MainPage() {
       <NewsCard   items={feeds} />
       <EventsCard events={events}     tz={loc.timezone} />
       <PlacesCard places={placesList} />
+      <ParksCard  parks={parksList} />
       <div className="col-stack">
         <AlertsCard alerts={localAlerts} tz={loc.timezone} />
         <RadarCard  imgs={radarImgs} />

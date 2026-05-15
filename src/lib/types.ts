@@ -119,6 +119,18 @@ export interface TmEvent {
   _embedded?: { venues?: TmVenue[]; attractions?: Array<{ name?: string; url?: string; images?: TmImage[] }> };
 }
 
+// Scraped park record. Stored under the 'local_parks' apis_json key
+// as an array. Refreshed in the 12h cron bucket.
+export interface Park {
+  id: string;            // slug derived from URL path
+  name: string;
+  url: string;
+  address?: string;
+  description?: string;
+  amenities?: string[];
+  image?: string;
+}
+
 // Unified shape for scraped local-venue events. Stored under the
 // 'local_events' apis_json key as an array.
 export interface LocalEvent {
@@ -149,5 +161,6 @@ export type ApisJsonId =
   | 'four_sq'
   | 'TM_shows'
   | 'local_events'
+  | 'local_parks'
   | '12D_stocks'
   | string;       // also: NOAA_Bouy_*, purple_air_*, plus future ids
