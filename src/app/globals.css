@@ -989,8 +989,28 @@ main { padding-top: var(--top-stack-h); display: block; }
   border-left-color: var(--accent);
 }
 
-/* Quakes */
-.quake-row { display: grid !important; grid-template-columns: auto 1fr auto; gap: 8px; align-items: baseline; }
+/* Quakes — plain text rows, no border / no box / no hover background.
+   Override the generic .clickable styles applied by the dashboard. */
+.quakes-card .quake-row {
+  display: grid !important;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  background: transparent !important;
+  border: 0 !important;
+  border-left: 0 !important;
+  padding: 3px 0;
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.quakes-card .quake-row:hover {
+  background: transparent !important;
+}
+.quakes-card .quake-row:hover .place { color: var(--accent); }
 .quake-row .mag {
   font-family: var(--mono); font-weight: 700;
   min-width: 38px; text-align: right;
