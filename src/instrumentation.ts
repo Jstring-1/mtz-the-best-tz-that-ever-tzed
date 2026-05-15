@@ -24,22 +24,26 @@ export async function register() {
   ] as const;
 
   const ts = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const debug = process.env.MTZ_DEBUG === '1';
 
   async function fire(bucket: typeof SCHEDULES[number]['name']) {
     const t0 = Date.now();
     try {
       const r = await runBucket(bucket);
       const errs = Object.keys(r.errors);
-      console.log(
-        `[${ts()}] [cron] ${bucket} ok ${Date.now() - t0}ms — ran ${r.ok.length}${errs.length ? `, ${errs.length} errors` : ''}`,
-      );
+      // Only log success lines when MTZ_DEBUG=1. Errors always log.
+      if (debug) {
+        console.log(`[${ts()}] [cron] ${bucket} ok ${Date.now() - t0}ms — ran ${r.ok.length}${errs.length ? `, ${errs.length} errors` : ''}`);
+      } else if (errs.length) {
+        console.log(`[${ts()}] [cron] ${bucket} ran ${r.ok.length}, ${errs.length} err`);
+      }
       for (const k of errs) console.error(`  ${bucket}/${k}: ${r.errors[k]}`);
     } catch (e) {
       console.error(`[${ts()}] [cron] ${bucket} threw:`, e instanceof Error ? e.message : e);
     }
   }
 
-  console.log(`[${ts()}] [cron] inline scheduler online — ${SCHEDULES.length} buckets`);
+  if (debug) console.log(`[${ts()}] [cron] inline scheduler online — ${SCHEDULES.length} buckets`);
 
   // Stagger initial fires for the short-cadence buckets so a fresh boot
   // doesn't slam every API at once. Long buckets (>1h) tick naturally.

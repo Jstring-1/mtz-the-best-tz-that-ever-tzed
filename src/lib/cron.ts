@@ -317,7 +317,9 @@ async function ebird(json: Record<string, unknown>) {
     // serve them without an on-click fetch. Doesn't block on failure.
     try {
       const r = await backfillBirdWikis(rows.map((b) => b.common_name));
-      console.log(`[cron] bird_wiki: fetched ${r.fetched}, skipped ${r.skipped}, failed ${r.failed}`);
+      if (process.env.MTZ_DEBUG === '1' || r.failed > 0) {
+        console.log(`[cron] bird_wiki: fetched ${r.fetched}, skipped ${r.skipped}, failed ${r.failed}`);
+      }
     } catch (e) {
       console.warn('[cron] bird_wiki backfill threw:', e instanceof Error ? e.message : e);
     }
@@ -392,7 +394,9 @@ async function localParks(json: Record<string, unknown>) {
 async function purgeStores() {
   const { purgeOldRows } = await import('./store');
   const r = await purgeOldRows();
-  console.log(`[cron] purge: events ${r.events}, birds ${r.birds}, quakes ${r.quakes}, alerts ${r.alerts}`);
+  if (process.env.MTZ_DEBUG === '1' || r.events + r.birds + r.quakes + r.alerts > 0) {
+    console.log(`[cron] purge: events ${r.events}, birds ${r.birds}, quakes ${r.quakes}, alerts ${r.alerts}`);
+  }
 }
 
 async function shelterPets(json: Record<string, unknown>) {
@@ -406,7 +410,7 @@ async function shelterPets(json: Record<string, unknown>) {
   // removed once their last_seen falls behind by >30 min — long enough
   // to ride out a single failed scrape.
   const purged = await purgeStalePets();
-  console.log(`[cron] shelter_pets: upserted ${pets.length}, purged ${purged}`);
+  if (process.env.MTZ_DEBUG === '1') console.log(`[cron] shelter_pets: upserted ${pets.length}, purged ${purged}`);
 }
 
 async function weatherStory(misc: Record<string, string>) {

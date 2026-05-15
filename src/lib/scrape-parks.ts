@@ -198,7 +198,7 @@ function pickAmenities(html: string): string[] {
 export async function scrapeAllParks(): Promise<Park[]> {
   const indexHtml = await fetchText(INDEX_URL);
   if (!indexHtml) { console.warn('[parks] index fetch returned null'); return []; }
-  console.log(`[parks] index html bytes=${indexHtml.length}`);
+  if (process.env.MTZ_DEBUG === '1') console.log(`[parks] index html bytes=${indexHtml.length}`);
   const links = extractParkLinks(indexHtml);
   if (!links.length) {
     // Diagnostic: how many <a href>s did the page even contain, and what
@@ -210,7 +210,7 @@ export async function scrapeAllParks(): Promise<Park[]> {
     console.warn(`[parks] no park links found on index — first ${allHrefs.length} hrefs:`, allHrefs);
     return [];
   }
-  console.log(`[parks] index: matched ${links.length} park links`);
+  if (process.env.MTZ_DEBUG === '1') console.log(`[parks] index: matched ${links.length} park links`);
 
   const out: Park[] = [];
   for (const { url, linkText } of links) {

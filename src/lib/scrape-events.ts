@@ -475,11 +475,10 @@ async function scrapeContraCosta(): Promise<LocalEvent[]> {
   const xml = await safeFetch(url);
   if (!xml) { console.warn('[contracosta] fetch returned null'); return []; }
   const items = parseRssItems(xml);
-  console.log(`[contracosta] bytes=${xml.length}, items=${items.length}`);
   if (items.length === 0) {
-    // Diagnostic — show first 200 bytes of what we got so we can see
-    // whether it's RSS, Atom, an error page, or something else.
-    console.log(`[contracosta] head: ${xml.slice(0, 200).replace(/\s+/g, ' ')}`);
+    console.log(`[contracosta] bytes=${xml.length}, items=0, head: ${xml.slice(0, 200).replace(/\s+/g, ' ')}`);
+  } else if (process.env.MTZ_DEBUG === '1') {
+    console.log(`[contracosta] bytes=${xml.length}, items=${items.length}`);
   }
   return items.map((it, i) => {
     const title = decodeEntities(it.title || 'Event');

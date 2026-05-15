@@ -130,14 +130,13 @@ export async function scrapeAllPets(): Promise<ScrapedPet[]> {
       if (!html) { console.warn(`[pets] ${species}: fetch returned null`); return [] as ScrapedPet[]; }
       try {
         const pets = parsePetsFromHtml(html, species, url);
-        // How many "ID Number:" matches did we see at all?
-        const anchorCount = (html.match(/(?:ID\s*Number|ID\s*#|Animal\s*ID)\s*:/gi) ?? []).length;
-        console.log(`[pets] ${species}: parsed ${pets.length} pets (anchors ${anchorCount}, ${html.length} bytes)`);
-        if (anchorCount === 0 && html.length > 0) {
-          // Diagnostic: show the first 200 bytes so we can see if the
-          // page came back empty / behind a JS gate / under a different
-          // markup pattern than expected.
-          console.log(`[pets] ${species} head: ${html.slice(0, 200).replace(/\s+/g, ' ')}`);
+        const debug = process.env.MTZ_DEBUG === '1';
+        if (debug || pets.length === 0) {
+          const anchorCount = (html.match(/(?:ID\s*Number|ID\s*#|Animal\s*ID)\s*:/gi) ?? []).length;
+          console.log(`[pets] ${species}: parsed ${pets.length} (anchors ${anchorCount}, ${html.length}b)`);
+          if (anchorCount === 0 && html.length > 0) {
+            console.log(`[pets] ${species} head: ${html.slice(0, 200).replace(/\s+/g, ' ')}`);
+          }
         }
         return pets;
       } catch (e) {
