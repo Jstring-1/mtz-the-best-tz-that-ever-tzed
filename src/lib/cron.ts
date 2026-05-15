@@ -709,6 +709,9 @@ async function googlePlaces(json: Record<string, unknown>) {
   const loc = getLocation();
   const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? '';
   if (!apiKey) { console.warn('[places] no GOOGLE_PLACES_API_KEY set'); return; }
+  // Ensure the last_seen column exists before we touch it — otherwise
+  // an early return on an empty result blows up on the DELETE below.
+  await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()`;
 
   const scrapedAt = new Date().toISOString();
   const collected: Array<{ fsq_id: string; name: string; addy: string; cats: string; dist: number | null; images: string }> = [];
