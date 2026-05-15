@@ -159,12 +159,21 @@ async function scrapeDelCielo(): Promise<LocalEvent[]> {
   }));
 }
 
-// Strip the leading "Live Music // " (and slight variants) that Del
-// Cielo prepends to most music events, and decode HTML entities the
-// WP API doesn't pre-decode.
+// Clean a Del Cielo title:
+//   1. Decode HTML entities the WP API doesn't pre-decode.
+//   2. Strip the leading "Live Music // " (and slight variants).
+//   3. Strip the trailing location tag — "– MTZ", "– LVM",
+//      "– MTZ & LVM", "– LVM & MTZ" (and the full-word variants).
+//      Events that are pure "– LVM" never reach this fn (they're
+//      filtered out earlier); this just cleans cross-location titles
+//      and the standalone "– MTZ" suffix.
 function cleanDelCieloTitle(raw: string): string {
   return decodeEntities(raw || '')
     .replace(/^\s*Live\s+Music\s*(?:\/\/|[-–—:])\s*/i, '')
+    .replace(
+      /\s*[-–—]\s*(?:MTZ|LVM|Martinez|Livermore)(?:\s*&\s*(?:MTZ|LVM|Martinez|Livermore))?\s*$/i,
+      '',
+    )
     .trim();
 }
 
