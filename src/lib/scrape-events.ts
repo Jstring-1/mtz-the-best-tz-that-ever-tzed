@@ -152,7 +152,7 @@ async function scrapeDelCielo(): Promise<LocalEvent[]> {
     // Fallback to start_date (naive local) without Z.
     start_at: tsFromIso(toTribeIso(e.utc_start_date, true) ?? toTribeIso(e.start_date, false)),
     end_at:   tsFromIso(toTribeIso(e.utc_end_date,   true) ?? toTribeIso(e.end_date,   false)),
-    venue: e.venue?.venue || 'Del Cielo Brewing',
+    venue: decodeEntities(e.venue?.venue || 'Del Cielo Brewing'),
     url: e.url,
     description: stripHtml(e.description || ''),
     image: e.image?.url,
