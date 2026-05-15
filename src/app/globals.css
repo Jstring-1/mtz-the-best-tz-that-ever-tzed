@@ -261,7 +261,7 @@ main { padding-top: calc(var(--hdr-h) + var(--top-stack-h)); display: block; }
   display: flex; flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--border);
   font-size: .65em;
   line-height: 1;
@@ -270,14 +270,47 @@ main { padding-top: calc(var(--hdr-h) + var(--top-stack-h)); display: block; }
 }
 .wx-row-hourly   { top: var(--strip-h);                          height: var(--hourly-h); }
 .wx-row-forecast { top: calc(var(--strip-h) + var(--hourly-h));  height: var(--forecast-h); }
-.wx-row-hourly .cell, .wx-row-forecast .cell {
-  display: inline-flex; gap: 5px; align-items: baseline;
-}
 .wx-row-hourly .label, .wx-row-forecast .label {
   color: var(--text-muted);
 }
-.wx-row-hourly .cell.now { font-weight: 700; }
+
+/* Hourly cells: slim rounded pills, subtle outlines, gold halo for the
+   current hour. Single line: "3pm 72°". */
+.wx-row-hourly .cell {
+  display: inline-flex; gap: 5px; align-items: baseline;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  transition: background 120ms, border-color 120ms;
+}
+.wx-row-hourly .cell:hover {
+  background: var(--bg-elev-2);
+}
+.wx-row-hourly .cell.now {
+  background: rgba(255, 215, 0, .14);
+  border-color: var(--accent);
+  font-weight: 700;
+}
 .wx-row-hourly .cell.now .label { color: var(--text); }
+
+/* Forecast cells: small rectangular tiles with a colored top accent —
+   day label on top, temp on bottom. Distinct from the hourly pills. */
+.wx-row-forecast .cell {
+  display: inline-flex; gap: 6px; align-items: center;
+  padding: 3px 9px 3px 7px;
+  border-radius: 3px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--wx-temp);
+}
+.wx-row-forecast .cell:hover { background: var(--bg-elev-2); }
+.wx-row-forecast .cell .label {
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-size: .9em;
+}
+
 /* Inline temp color for strip cells (shared with tiles via --wx-temp). */
 .wx-temp { color: var(--wx-temp); }
 
