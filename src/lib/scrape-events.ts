@@ -435,9 +435,10 @@ function extractRssTag(body: string, tag: string): string | undefined {
 
 function parseRssItems(xml: string): RssItem[] {
   const out: RssItem[] = [];
-  const re = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
+  // RSS 2.0 <item>
+  const rssRe = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(xml))) {
+  while ((m = rssRe.exec(xml))) {
     const body = m[1];
     out.push({
       title:       extractRssTag(body, 'title'),
@@ -446,6 +447,21 @@ function parseRssItems(xml: string): RssItem[] {
       pubDate:     extractRssTag(body, 'pubDate'),
       guid:        extractRssTag(body, 'guid'),
     });
+  }
+  // Atom <entry> fallback — some calendar feeds use this format.
+  if (out.length === 0) {
+    const atomRe = /<entry\b[^>]*>([\s\S]*?)<\/entry>/gi;
+    while ((m = atomRe.exec(xml))) {
+      const body = m[1];
+      const linkHrefMatch = body.match(/<link\b[^>]*\bhref=["']([^"']+)["']/i);
+      out.push({
+        title:       extractRssTag(body, 'title'),
+        link:        linkHrefMatch?.[1] ?? extractRssTag(body, 'link'),
+        description: extractRssTag(body, 'summary') ?? extractRssTag(body, 'content'),
+        pubDate:     extractRssTag(body, 'published') ?? extractRssTag(body, 'updated'),
+        guid:        extractRssTag(body, 'id'),
+      });
+    }
   }
   return out;
 }
@@ -457,8 +473,14 @@ function slugForId(s: string): string {
 async function scrapeContraCosta(): Promise<LocalEvent[]> {
   const url = 'https://www.contracosta.ca.gov/RSSFeed.aspx?ModID=58&CID=All-calendar.xml';
   const xml = await safeFetch(url);
-  if (!xml) return [];
+  if (!xml) { console.warn('[contracosta] fetch returned null'); return []; }
   const items = parseRssItems(xml);
+  console.log(`[contracosta] bytes=${xml.length}, items=${items.length}`);
+  if (items.length === 0) {
+    // Diagnostic — show first 200 bytes of what we got so we can see
+    // whether it's RSS, Atom, an error page, or something else.
+    console.log(`[contracosta] head: ${xml.slice(0, 200).replace(/\s+/g, ' ')}`);
+  }
   return items.map((it, i) => {
     const title = decodeEntities(it.title || 'Event');
     const description = stripHtml(it.description || '');

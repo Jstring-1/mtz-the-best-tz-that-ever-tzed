@@ -65,48 +65,60 @@ function pickField(chunk: string, label: string): string | null {
 
 function parsePetsFromHtml(html: string, species: string, listingUrl: string): ScrapedPet[] {
   const out: ScrapedPet[] = [];
-  // Each pet's HTML chunk starts at its IMG src="/image/<n>" and runs
-  // until the next such IMG (or end of doc). The path /image/<n>
-  // numerically maps to a backing photo asset on 24petconnect.
-  const re = /<img[^>]*\bsrc=["'](\/image\/(\d+))["'][^>]*>([\s\S]*?)(?=<img[^>]*\bsrc=["']\/image\/\d+["']|$)/gi;
+
+  // Anchor on the shelter ID number (A1234567 / 1234567). Every pet
+  // listing on 24petconnect has one; that's the most reliable anchor.
+  // We slice the HTML around each ID into a "block" and extract fields
+  // from that block. More forgiving than anchoring on the photo IMG.
+  const idRe = /(?:ID\s*Number|ID\s*#|Animal\s*ID)\s*:\s*(?:<[^>]*>)*\s*(A?\d{4,})/gi;
+  const anchors: Array<{ id: string; index: number }> = [];
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    const photoPath = m[1];
-    const photoId = m[2];
-    const chunk = m[3];
+  while ((m = idRe.exec(html))) {
+    anchors.push({ id: m[1].trim(), index: m.index });
+  }
+  if (anchors.length === 0) return out;
 
-    // Anchor on the shelter ID number — required to be a stable pet id.
-    const idMatch = chunk.match(/\bID Number\s*:\s*([\s\S]*?)(?=<\s*\w|\n|$)/i);
-    const id = idMatch ? stripHtmlInner(idMatch[1]).trim() : '';
-    if (!id || !/^A?\d+$/i.test(id)) continue;
+  for (let i = 0; i < anchors.length; i++) {
+    const a = anchors[i];
+    // Block window: from halfway between prev anchor (or start) to
+    // halfway to next anchor (or end).
+    const prev = i > 0 ? anchors[i - 1].index : 0;
+    const next = i + 1 < anchors.length ? anchors[i + 1].index : html.length;
+    const start = Math.floor((prev + a.index) / 2);
+    const end = Math.floor((a.index + next) / 2);
+    const chunk = html.substring(start, end);
 
-    const name        = pickField(chunk, 'Name')                       ?? '';
+    const name = pickField(chunk, 'Name');
     if (!name) continue;
-    const age         = pickField(chunk, 'Age');
-    const gender      = pickField(chunk, 'Gender');
-    const breed       = pickField(chunk, 'Breed');
-    const color       = pickField(chunk, 'Color');
-    const weight      = pickField(chunk, 'Weight');
-    const intake_date = pickField(chunk, 'Brought to the Shelter');
-    const location    = pickField(chunk, 'Location');
+
+    // Look for the pet's photo anywhere inside the block. 24petconnect
+    // serves photos under /image/<n>; tolerate http(s) prefix and
+    // lazy-load attributes (data-src).
+    const photoMatch =
+         chunk.match(/<img[^>]*\bsrc=["']([^"']*\/image\/\d+[^"']*)["']/i)
+      ?? chunk.match(/<img[^>]*\bdata-src=["']([^"']*\/image\/\d+[^"']*)["']/i);
+    let photo_url: string | null = null;
+    if (photoMatch) {
+      const path = photoMatch[1];
+      photo_url = /^https?:\/\//i.test(path) ? path : `https://24petconnect.com${path.startsWith('/') ? path : '/' + path}`;
+    }
 
     out.push({
-      id,
+      id: a.id,
       name,
       species,
-      breed,
-      age,
-      gender,
-      weight,
-      color,
-      intake_date,
-      location,
-      photo_url: `https://24petconnect.com${photoPath}`,
+      breed:       pickField(chunk, 'Breed'),
+      age:         pickField(chunk, 'Age'),
+      gender:      pickField(chunk, 'Gender'),
+      weight:      pickField(chunk, 'Weight'),
+      color:       pickField(chunk, 'Color'),
+      intake_date: pickField(chunk, 'Brought to the Shelter'),
+      location:    pickField(chunk, 'Location'),
+      photo_url,
       description: null,
-      url: `${listingUrl}#${encodeURIComponent(id)}`,
+      url: `${listingUrl}#${encodeURIComponent(a.id)}`,
       shelter: 'Contra Costa Animal Services',
     });
-    void photoId; // keep for future use if 24petconnect changes paths
   }
   return out;
 }
@@ -115,10 +127,18 @@ export async function scrapeAllPets(): Promise<ScrapedPet[]> {
   const results = await Promise.all(
     SOURCES.map(async ({ url, species }) => {
       const html = await safeFetch(url);
-      if (!html) return [] as ScrapedPet[];
+      if (!html) { console.warn(`[pets] ${species}: fetch returned null`); return [] as ScrapedPet[]; }
       try {
         const pets = parsePetsFromHtml(html, species, url);
-        console.log(`[pets] ${species}: parsed ${pets.length} pets (${html.length} bytes)`);
+        // How many "ID Number:" matches did we see at all?
+        const anchorCount = (html.match(/(?:ID\s*Number|ID\s*#|Animal\s*ID)\s*:/gi) ?? []).length;
+        console.log(`[pets] ${species}: parsed ${pets.length} pets (anchors ${anchorCount}, ${html.length} bytes)`);
+        if (anchorCount === 0 && html.length > 0) {
+          // Diagnostic: show the first 200 bytes so we can see if the
+          // page came back empty / behind a JS gate / under a different
+          // markup pattern than expected.
+          console.log(`[pets] ${species} head: ${html.slice(0, 200).replace(/\s+/g, ' ')}`);
+        }
         return pets;
       } catch (e) {
         console.warn(`[pets] ${species} parse threw:`, e instanceof Error ? e.message : e);
