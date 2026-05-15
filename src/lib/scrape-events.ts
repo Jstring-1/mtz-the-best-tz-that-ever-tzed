@@ -412,6 +412,78 @@ async function scrapeSlowHandBBQ(): Promise<LocalEvent[]> {
   return scrapeGenericPage('https://www.slowhandbbq.com/events', 'slowhand', 'Slow Hand BBQ', 'Slow Hand BBQ');
 }
 
+// ----- Contra Costa County RSS calendar --------------------------------
+// CivicEngage / Granicus-style RSS feed of county-wide municipal events.
+// pubDate is when the item was published (often the same day), so we
+// look in the title and description for the actual event date.
+
+interface RssItem {
+  title?: string;
+  link?: string;
+  description?: string;
+  pubDate?: string;
+  guid?: string;
+}
+
+function extractRssTag(body: string, tag: string): string | undefined {
+  const re = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, 'i');
+  const m = body.match(re);
+  if (!m) return undefined;
+  // Strip CDATA wrapping if present.
+  return m[1].replace(/^\s*<!\[CDATA\[/, '').replace(/\]\]>\s*$/, '').trim();
+}
+
+function parseRssItems(xml: string): RssItem[] {
+  const out: RssItem[] = [];
+  const re = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml))) {
+    const body = m[1];
+    out.push({
+      title:       extractRssTag(body, 'title'),
+      link:        extractRssTag(body, 'link'),
+      description: extractRssTag(body, 'description'),
+      pubDate:     extractRssTag(body, 'pubDate'),
+      guid:        extractRssTag(body, 'guid'),
+    });
+  }
+  return out;
+}
+
+function slugForId(s: string): string {
+  return s.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase().slice(0, 80);
+}
+
+async function scrapeContraCosta(): Promise<LocalEvent[]> {
+  const url = 'https://www.contracosta.ca.gov/RSSFeed.aspx?ModID=58&CID=All-calendar.xml';
+  const xml = await safeFetch(url);
+  if (!xml) return [];
+  const items = parseRssItems(xml);
+  return items.map((it, i) => {
+    const title = decodeEntities(it.title || 'Event');
+    const description = stripHtml(it.description || '');
+    // Try multiple date sources in order: pubDate (rarely the event
+    // date), then a loose match on title, then on description text.
+    const tryDates: Array<number | null> = [
+      it.pubDate ? tsFromIso(it.pubDate) : null,
+      tsFromLooseDate(title),
+      tsFromLooseDate(description),
+    ];
+    const start_at = tryDates.find((t) => t != null) ?? null;
+    const idSeed = it.guid || it.link || `${title}-${start_at ?? i}`;
+    return {
+      id: `contracosta-${slugForId(idSeed)}`,
+      source: 'contracosta',
+      source_label: 'Contra Costa County',
+      title,
+      start_at,
+      venue: 'Contra Costa County',
+      url: it.link || url,
+      description,
+    };
+  });
+}
+
 // ----- Luigi's Deli — recurring weekly residencies ---------------------
 // These don't need scraping. The slots are the same every week; we
 // just need to project the next N weeks of Monday and Tuesday dates
@@ -514,6 +586,7 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
   ['roxxonmain',     scrapeRoxxOnMain],
   ['slowhand',       scrapeSlowHandBBQ],
   ['luigi',          luigiRecurring],
+  ['contracosta',    scrapeContraCosta],
 ];
 
 export async function scrapeAllLocalEvents(): Promise<LocalEvent[]> {

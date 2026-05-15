@@ -42,7 +42,9 @@ export default async function MainPage() {
     url: e.url ?? undefined,
     description: e.description ?? undefined,
     image: e.image ?? undefined,
-    source: e.source === 'ticketmaster' ? 'ticketmaster' : 'local',
+    source: e.source === 'ticketmaster' ? 'ticketmaster'
+           : e.source === 'contracosta'  ? 'municipal'
+           : 'local',
     source_label: e.source_label,
     segment: e.segment ?? undefined,
     genre: e.genre ?? undefined,

@@ -15,14 +15,14 @@ export interface UEvent {
   url?: string;
   description?: string;
   image?: string;
-  source: 'ticketmaster' | 'local';
-  source_label: string;          // "Ticketmaster" | "Del Cielo Brewing" | etc.
+  source: 'ticketmaster' | 'local' | 'municipal';
+  source_label: string;          // "Ticketmaster" | "Del Cielo Brewing" | "Contra Costa County" | etc.
   segment?: string;
   genre?: string;
   pleaseNote?: string;
 }
 
-type Tab = 'local' | 'regional';
+type Tab = 'local' | 'municipal' | 'regional';
 const PAGE = 12;
 
 export default function EventsCard({ events, tz }: { events: UEvent[]; tz: string }) {
@@ -30,9 +30,10 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
   const [tab, setTab] = useState<Tab>('local');
   const [shown, setShown] = useState(PAGE);
 
-  const local    = events.filter((e) => e.source === 'local');
-  const regional = events.filter((e) => e.source === 'ticketmaster');
-  const list = tab === 'local' ? local : regional;
+  const local     = events.filter((e) => e.source === 'local');
+  const municipal = events.filter((e) => e.source === 'municipal');
+  const regional  = events.filter((e) => e.source === 'ticketmaster');
+  const list = tab === 'local' ? local : tab === 'municipal' ? municipal : regional;
   const visible = list.slice(0, shown);
   const remaining = Math.max(0, list.length - shown);
 
@@ -53,6 +54,13 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
           <button
             type="button"
             role="tab"
+            aria-selected={tab === 'municipal'}
+            className={`event-tab ${tab === 'municipal' ? 'on' : ''}`}
+            onClick={() => switchTab('municipal')}
+          >Municipal <span className="count">{municipal.length}</span></button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={tab === 'regional'}
             className={`event-tab ${tab === 'regional' ? 'on' : ''}`}
             onClick={() => switchTab('regional')}
@@ -61,7 +69,9 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
       </h2>
       {list.length === 0 ? (
         <p className="empty">
-          {tab === 'local' ? 'No local events cached yet.' : 'No Ticketmaster events cached yet.'}
+          {tab === 'local'     ? 'No local events cached yet.'
+            : tab === 'municipal' ? 'No municipal events cached yet.'
+            : 'No Ticketmaster events cached yet.'}
         </p>
       ) : (
         <>
