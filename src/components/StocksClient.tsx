@@ -92,7 +92,12 @@ export default function StocksClient({ stocks, compact = false }: { stocks: Stoc
             </button>
           );
         })}
-        <dialog className="stock-modal" ref={dlgRef} onClose={() => setOpen(null)}>
+        <dialog
+          className="stock-modal"
+          ref={dlgRef}
+          onClose={() => setOpen(null)}
+          onClick={(e) => { if (e.target === e.currentTarget) setOpen(null); }}
+        >
           {open && <StockModalBody s={open} onClose={() => setOpen(null)} />}
         </dialog>
       </>
@@ -126,7 +131,12 @@ export default function StocksClient({ stocks, compact = false }: { stocks: Stoc
         })}
       </div>
 
-      <dialog className="stock-modal" ref={dlgRef} onClose={() => setOpen(null)}>
+      <dialog
+        className="stock-modal"
+        ref={dlgRef}
+        onClose={() => setOpen(null)}
+        onClick={(e) => { if (e.target === e.currentTarget) setOpen(null); }}
+      >
         {open && <StockModalBody s={open} onClose={() => setOpen(null)} />}
       </dialog>
     </>

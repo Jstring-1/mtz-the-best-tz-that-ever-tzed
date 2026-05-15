@@ -105,7 +105,12 @@ export default function EventsList({ events, timezone }: Props) {
         </section>
       ))}
 
-      <dialog className="event-modal" ref={dlgRef} onClose={() => setOpen(null)}>
+      <dialog
+        className="event-modal"
+        ref={dlgRef}
+        onClose={() => setOpen(null)}
+        onClick={(e) => { if (e.target === e.currentTarget) setOpen(null); }}
+      >
         {open && <EventModalBody ev={open} tz={timezone} onClose={() => setOpen(null)} />}
       </dialog>
     </>
