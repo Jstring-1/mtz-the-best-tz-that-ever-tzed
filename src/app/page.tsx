@@ -112,8 +112,8 @@ export default async function MainPage() {
 
   return (
     <div className="dashboard">
-      <NewsCard   items={feeds} />
       <EventsCard events={events}     tz={loc.timezone} />
+      <NewsCard   items={feeds} />
       <PlacesCard spots={spots} />
       <PetsCard   pets={storedPets} />
       <div className="col-stack">
