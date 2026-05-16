@@ -645,30 +645,28 @@ async function foursquarePlaces(json: Record<string, unknown>) {
   await sql`DELETE FROM places WHERE addy ~* ${cityPattern}`;
 }
 
-// Google Places (New) — much fresher data than Foursquare. Uses the
-// "Basics" SKU field mask (places.id / displayName / formattedAddress
-// / types / primaryTypeDisplayName / location), which is the cheap
-// tier — covered by Google's $200/month free credit for our volume.
+// OpenStreetMap via the Overpass API — free, no key, no billing.
+// Each group is a set of Overpass tag filters; we union them inside a
+// single bbox-scoped query. `out center tags` returns a representative
+// lat/lon for ways/relations plus the tag dictionary.
 //
-// We pull a handful of category groups in parallel to get a varied
-// list. searchNearby caps each call at 20 results.
-//
-// `excluded` per group reproduces Foursquare's "no chains" stance at
-// the API level — Google doesn't expose a chain flag, but most fast
-// food and takeaway-only joints are tagged fast_food_restaurant or
-// meal_takeaway, which we can reject directly. The CHAIN_NAMES list
-// below catches the rest by name pattern (Starbucks is a "cafe",
-// Chipotle is sometimes just "restaurant", etc.).
-const GOOGLE_PLACES_GROUPS: Array<{ name: string; types: string[]; excluded?: string[] }> = [
+// food deliberately omits amenity=fast_food; rec covers parks /
+// recreation / culture; retail is a curated shop whitelist so we don't
+// drag in every gas station and phone-repair kiosk. The CHAIN_NAMES
+// list below still strips chain brands by name pattern.
+const OSM_GROUPS: Array<{ name: string; filters: string[] }> = [
   { name: 'food',
-    types:    ['restaurant', 'cafe', 'bar', 'bakery', 'ice_cream_shop'],
-    excluded: ['fast_food_restaurant', 'meal_takeaway', 'meal_delivery'],
+    filters: ['nwr["amenity"~"^(restaurant|cafe|bar|pub|bakery|biergarten|ice_cream)$"]'],
   },
   { name: 'rec',
-    types: ['park', 'tourist_attraction', 'museum', 'library', 'art_gallery'],
+    filters: [
+      'nwr["leisure"~"^(park|garden|nature_reserve|playground|sports_centre|fitness_centre)$"]',
+      'nwr["tourism"~"^(museum|gallery|attraction|artwork|viewpoint)$"]',
+      'nwr["amenity"~"^(library|theatre|arts_centre|community_centre)$"]',
+    ],
   },
   { name: 'retail',
-    types: ['supermarket', 'pharmacy', 'book_store', 'clothing_store'],
+    filters: ['nwr["shop"~"^(supermarket|greengrocer|books|clothes|gift|florist|jewelry|hardware|bicycle|art|deli|farm|wine|variety_store|second_hand)$"]'],
   },
 ];
 
@@ -720,20 +718,19 @@ const CHAIN_RE = new RegExp(
   'i',
 );
 
-interface GPlace {
-  id: string;
-  displayName?: { text?: string };
-  formattedAddress?: string;
-  types?: string[];
-  primaryTypeDisplayName?: { text?: string };
+interface OsmEl {
+  type: 'node' | 'way' | 'relation';
+  id: number;
+  tags?: Record<string, string>;
 }
 
-async function googlePlaces(json: Record<string, unknown>) {
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
+
+async function osmPlaces(json: Record<string, unknown>) {
   const loc = getLocation();
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? '';
-  if (!apiKey) {
-    throw new Error('GOOGLE_PLACES_API_KEY env var is not set (check the exact name in Railway)');
-  }
   // Ensure the last_seen column exists before we touch it — otherwise
   // an early return on an empty result blows up on the DELETE below.
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()`;
@@ -743,75 +740,74 @@ async function googlePlaces(json: Record<string, unknown>) {
   const seen = new Set<string>();
   const debugRaw: Record<string, unknown> = {};
 
-  for (const group of GOOGLE_PLACES_GROUPS) {
+  // Overpass bbox order is (south, west, north, east).
+  const b = DOWNTOWN_BOUNDS;
+  const bbox = `${b.low.latitude},${b.low.longitude},${b.high.latitude},${b.high.longitude}`;
+
+  for (const group of OSM_GROUPS) {
+    const q = `[out:json][timeout:25];(${group.filters.map((f) => `${f}(${bbox});`).join('')});out center tags;`;
     try {
-      const body: Record<string, unknown> = {
-        includedTypes: group.types,
-        maxResultCount: 20,
-        locationRestriction: {
-          rectangle: DOWNTOWN_BOUNDS,
-        },
-      };
-      if (group.excluded?.length) body.excludedTypes = group.excluded;
-      const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.types,places.primaryTypeDisplayName',
-        },
-        body: JSON.stringify(body),
-        cache: 'no-store',
-      });
-      if (!r.ok) {
-        const errBody = (await r.text().catch(() => '')).slice(0, 300);
-        console.warn(`[places] google ${group.name}: HTTP ${r.status} ${errBody}`);
-        debugRaw[group.name] = { httpStatus: r.status, error: errBody };
+      let r: Response | null = null;
+      for (const ep of OVERPASS_ENDPOINTS) {
+        r = await fetch(ep, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'mtz.city/1.0 (hyperlocal dashboard; contact via github.com/Jstring-1)',
+          },
+          body: 'data=' + encodeURIComponent(q),
+          cache: 'no-store',
+        });
+        if (r.ok) break;
+      }
+      if (!r || !r.ok) {
+        const errBody = r ? (await r.text().catch(() => '')).slice(0, 300) : 'no response';
+        console.warn(`[places] osm ${group.name}: HTTP ${r?.status} ${errBody}`);
+        debugRaw[group.name] = { httpStatus: r?.status ?? 0, error: errBody };
         continue;
       }
-      const j = await r.json() as { places?: GPlace[] };
-      debugRaw[group.name] = { count: j.places?.length ?? 0 };
-      for (const p of j.places ?? []) {
-        if (!p.id || seen.has(p.id)) continue;
-        seen.add(p.id);
-        const addy = p.formattedAddress ?? '';
-        if (/\bBenicia\b/i.test(addy)) continue;
-        if (startsWithCity(addy, loc.short)) continue;
-        const name = p.displayName?.text ?? 'Unnamed';
-        // Chain blocklist — final layer after API-side excludedTypes.
+      const j = await r.json() as { elements?: OsmEl[] };
+      debugRaw[group.name] = { count: j.elements?.length ?? 0 };
+      for (const el of j.elements ?? []) {
+        const t = el.tags ?? {};
+        const name = (t.name ?? '').trim();
+        if (!name) continue;
+        const key = `osm-${el.type}-${el.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        // Chain blocklist — strips national brands by name pattern.
         if (CHAIN_RE.test(name)) continue;
-        const primary = p.primaryTypeDisplayName?.text ?? '';
-        const types = (p.types ?? []).slice(0, 3).join(', ');
-        const cats = (primary || types) + ', ';
-        collected.push({
-          fsq_id: p.id,            // re-use the table's primary key column
-          name,
-          addy,
-          cats,
-          dist: null,
-          images: '',
-        });
+        const city = (t['addr:city'] ?? '').trim();
+        if (/\bbenicia\b/i.test(city)) continue;
+        const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ').trim();
+        // Only build an address when we have a real street line — a
+        // bare "Martinez, CA" would trip the city-prefix housekeeping
+        // DELETE and wipe parks that carry no street address.
+        const addy = street
+          ? [street, city || loc.short, t['addr:state'], t['addr:postcode']].filter(Boolean).join(', ')
+          : '';
+        const rawCat = t.cuisine || t.amenity || t.leisure || t.tourism || t.shop || group.name;
+        const cats = String(rawCat).replace(/[_;]+/g, ' ').trim() + ', ';
+        collected.push({ fsq_id: key, name, addy, cats, dist: null, images: '' });
       }
     } catch (e) {
-      console.warn(`[places] google ${group.name} threw:`, e instanceof Error ? e.message : e);
+      console.warn(`[places] osm ${group.name} threw:`, e instanceof Error ? e.message : e);
+      debugRaw[group.name] = { error: e instanceof Error ? e.message : String(e) };
     }
+    // Politeness pause between Overpass queries (shared free service).
+    await new Promise((res) => setTimeout(res, 1000));
   }
-  json.google_places = { scrapedAt, totals: debugRaw, count: collected.length };
+  json.osm_places = { scrapedAt, totals: debugRaw, count: collected.length };
 
   if (!collected.length) {
-    throw new Error(`google places returned 0 usable rows — ${JSON.stringify(debugRaw)}`);
+    throw new Error(`overpass returned 0 usable rows — ${JSON.stringify(debugRaw)}`);
   }
 
-  if (collected.length) {
-    await upsertPlaces(collected);
-    // Delete every row not in this scrape's result set — wipes out
-    // residual Foursquare rows (different id format) immediately
-    // rather than waiting on last_seen to age out. Skipped when the
-    // collection is empty so a failed API call doesn't nuke the
-    // entire table.
-    const keepIds = collected.map((c) => c.fsq_id);
-    await sql`DELETE FROM places WHERE NOT (fsq_id = ANY(${keepIds}))`;
-  }
+  await upsertPlaces(collected);
+  // Delete every row not in this run's result set — wipes residual
+  // Foursquare / Google rows (different id format) immediately.
+  const keepIds = collected.map((c) => c.fsq_id);
+  await sql`DELETE FROM places WHERE NOT (fsq_id = ANY(${keepIds}))`;
   // Same Benicia / regional-entry housekeeping as before, in case the
   // address-based filters above ever miss something.
   await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
@@ -944,7 +940,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
   }
 
   if (bucket === '12h' || all) {
-    await safe('google_places',      () => googlePlaces(json),       ok, errors);
+    await safe('osm_places',         () => osmPlaces(json),          ok, errors);
     await safe('ticketmaster_events',() => ticketmasterEvents(json), ok, errors);
     await safe('local_parks',        () => localParks(json),         ok, errors);
     await safe('purge_stores',       () => purgeStores(),             ok, errors);
