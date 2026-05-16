@@ -371,8 +371,8 @@ interface SigEvent { title: string; month?: number; day?: number; desc: string }
 const MARTINEZ_SIGNATURE_EVENTS: SigEvent[] = [
   { title: 'Lunar New Year Celebration',                                desc: 'Annual community Lunar New Year celebration (typically late January / early February).' },
   { title: 'John Muir Birthday – Earth Day Celebration',  month: 4, day: 21, desc: 'Honoring naturalist John Muir and celebrating Earth Day in his hometown.' },
-  { title: 'Bay Area Craft Beer Festival',                              desc: 'Craft beer festival featuring local Bay Area brewers (typically spring).' },
-  { title: 'King of the County BBQ',                                    desc: 'BBQ competition crowning the best in Contra Costa County (typically summer).' },
+  // Bay Area Craft Beer Fest / King of the County BBQ / Martini Shake-Off
+  // are now scraped with real dates (see scrapeSingleEvent sources).
   { title: 'Martinez Juneteenth',                          month: 6, day: 19, desc: 'Annual Juneteenth celebration.' },
   { title: '4th of July Parade & Fireworks',               month: 7, day: 4,  desc: 'Independence Day parade and fireworks display.' },
   { title: 'Beaver Festival',                                           desc: 'Celebrating Martinez’s famous beavers and creek wildlife (typically late summer).' },
@@ -473,6 +473,46 @@ async function scrapeRoxxOnMain(): Promise<LocalEvent[]> {
 async function scrapeSlowHandBBQ(): Promise<LocalEvent[]> {
   return scrapeGenericPage('https://www.slowhandbbq.com/events', 'slowhand', 'Slow Hand BBQ', 'Slow Hand BBQ');
 }
+
+// ----- Single annual-event landing pages -------------------------------
+// Each of these sites promotes one yearly festival. We just scrape the
+// first real date off the page so it auto-rolls each year, and emit a
+// single LocalEvent. Fails open (skipped) if no date is found.
+async function scrapeSingleEvent(
+  url: string, source: string, label: string, title: string, venue: string,
+): Promise<LocalEvent[]> {
+  const html = await safeFetch(url);
+  if (!html) return [];
+  const text = stripHtml(html);
+  const start_at = tsFromLooseDate(text);
+  if (start_at == null) return [];
+  return [{
+    id: `${source}-${new Date(start_at * 1000).getUTCFullYear()}`,
+    source,
+    source_label: label,
+    title,
+    start_at,
+    end_at: null,
+    venue,
+    url,
+  }];
+}
+
+const scrapeCraftBeerFest = () => scrapeSingleEvent(
+  'https://downtownmartinez.org/bay-area-craft-beer-fest',
+  'baycraftbeer', 'Bay Area Craft Beer Fest',
+  'Bay Area Craft Beer Festival', 'Downtown Martinez',
+);
+const scrapeCountyBBQ = () => scrapeSingleEvent(
+  'https://countybbq.com/',
+  'countybbq', 'King of the County BBQ',
+  'King of the County BBQ Festival', 'Martinez, CA',
+);
+const scrapeMartinezMartini = () => scrapeSingleEvent(
+  'https://martinezmartini.com/',
+  'martinezmartini', 'Martinez Martini',
+  'Martinez Martini Shake-Off', 'Martinez, CA',
+);
 
 // ----- Contra Costa County RSS calendar --------------------------------
 // CivicEngage / Granicus-style RSS feed of county-wide municipal events.
@@ -674,6 +714,9 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
   ['martinez',       scrapeCityOfMartinez],
   ['roxxonmain',     scrapeRoxxOnMain],
   ['slowhand',       scrapeSlowHandBBQ],
+  ['baycraftbeer',   scrapeCraftBeerFest],
+  ['countybbq',      scrapeCountyBBQ],
+  ['martinezmartini', scrapeMartinezMartini],
   ['luigi',          luigiRecurring],
   ['contracosta',    scrapeContraCosta],
 ];
