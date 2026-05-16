@@ -209,5 +209,8 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
 }
 
 function fmtDateShort(ms: number, tz: string): string {
-  return new Date(ms).toLocaleDateString('en-US', { timeZone: tz, month: 'short', day: 'numeric' });
+  const d = new Date(ms);
+  const wd = d.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short' });
+  const md = d.toLocaleDateString('en-US', { timeZone: tz, month: 'numeric', day: 'numeric' });
+  return `${wd} ${md}`;
 }
