@@ -19,8 +19,20 @@ export interface Spot {
   url?: string;               // parks
 }
 
-// Drop the ", Martinez, CA, 94553" city/state/zip tail — every place is
-// in downtown Martinez, so only the street line is useful.
+type Group = 'all' | 'food' | 'parks' | 'retail' | 'rec';
+
+// Bucket a spot into a filter group from its kind + category tag text.
+function classify(s: Spot): Exclude<Group, 'all'> {
+  if (s.kind === 'park') return 'parks';
+  const c = (s.category ?? '').toLowerCase();
+  if (/park|garden|nature_reserve|playground/.test(c)) return 'parks';
+  if (/restaurant|cafe|coffee|bar\b|pub|bakery|biergarten|ice.?cream|deli|food|cuisine|brew/.test(c)) return 'food';
+  if (/shop|store|supermarket|greengrocer|book|cloth|gift|florist|jewel|hardware|bicycle|wine|market|second.?hand|variety/.test(c)) return 'retail';
+  return 'rec';   // museums, galleries, libraries, theatres, fitness, etc.
+}
+
+// Drop the ", Martinez, CA, 94553" city/state/zip tail — only the
+// street line is useful.
 function shortAddr(a?: string): string {
   if (!a) return '';
   const i = a.search(/\bMartinez\b/i);
@@ -38,16 +50,35 @@ function mapQuery(s: Spot): string {
 
 export default function PlacesCard({ spots }: { spots: Spot[] }) {
   const [open, setOpen] = useState<Spot | null>(null);
+  const [group, setGroup] = useState<Group>('all');
+
+  const shown = group === 'all' ? spots : spots.filter((s) => classify(s) === group);
+  const count = (g: Group) =>
+    g === 'all' ? spots.length : spots.filter((s) => classify(s) === g).length;
 
   return (
     <section className="card-section places-card">
       <h2>Places <span className="count">{spots.length}</span></h2>
-      {spots.length === 0 ? (
-        <p className="empty">No places cached.</p>
+      <span className="event-tabs reg-filter" role="tablist" aria-label="Places category">
+        {(['all', 'food', 'parks', 'retail', 'rec'] as Group[]).map((g) => (
+          <button
+            key={g}
+            type="button"
+            role="tab"
+            aria-selected={group === g}
+            className={`event-tab ${group === g ? 'on' : ''}`}
+            onClick={() => setGroup(g)}
+          >
+            {g[0].toUpperCase() + g.slice(1)} <span className="count">{count(g)}</span>
+          </button>
+        ))}
+      </span>
+      {shown.length === 0 ? (
+        <p className="empty">{spots.length === 0 ? 'No places cached.' : 'No places in this category.'}</p>
       ) : (
         <>
         <div className="stack-sm">
-          {spots.map((s) => (
+          {shown.map((s) => (
             <button
               key={s.id}
               type="button"

@@ -670,14 +670,15 @@ const OSM_GROUPS: Array<{ name: string; filters: string[] }> = [
   },
 ];
 
-// Rectangle scoping the Google Places fetch to downtown Martinez —
-// roughly bounded by the waterfront / marina to the north, Alhambra
-// Valley / Pine St to the south, Talbart St / I-680 to the west,
-// and Pacheco Blvd to the east. Edit these to widen/narrow the
-// search area; lat goes N→positive, lng goes W→negative.
-const DOWNTOWN_BOUNDS = {
-  low:  { latitude: 38.0080, longitude: -122.1485 },  // SW corner
-  high: { latitude: 38.0250, longitude: -122.1275 },  // NE corner
+// Rectangle scoping the places fetch to (roughly) all of Martinez —
+// from the Carquinez Strait waterfront in the north down past Alhambra
+// Valley / Briones in the south, and from the Hwy-4 corridor in the
+// west out to Vine Hill / Pacheco in the east. Edit these to
+// widen/narrow the search area; lat goes N→positive, lng goes
+// W→negative.
+const MARTINEZ_BOUNDS = {
+  low:  { latitude: 37.9300, longitude: -122.1700 },  // SW corner
+  high: { latitude: 38.0450, longitude: -122.0700 },  // NE corner
 };
 
 // Name-pattern blocklist for chains that slip past the type filter
@@ -741,7 +742,7 @@ async function osmPlaces(json: Record<string, unknown>) {
   const debugRaw: Record<string, unknown> = {};
 
   // Overpass bbox order is (south, west, north, east).
-  const b = DOWNTOWN_BOUNDS;
+  const b = MARTINEZ_BOUNDS;
   const bbox = `${b.low.latitude},${b.low.longitude},${b.high.latitude},${b.high.longitude}`;
 
   for (const group of OSM_GROUPS) {
