@@ -121,9 +121,9 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                 {e.kind === 'quake' ? (
                   <>
                     <span className="name">
-                      <span className="quake-tag">M{e.magnitude != null ? e.magnitude.toFixed(1) : '—'}</span>
+                      M{e.magnitude != null ? e.magnitude.toFixed(1) : '—'} Earthquake
                     </span>
-                    <span className="venue quake-place">{e.venue}</span>
+                    <span className="venue">{e.venue}</span>
                   </>
                 ) : (
                   <>

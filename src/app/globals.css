@@ -1166,31 +1166,9 @@ main { padding-top: var(--top-stack-h); display: block; }
 .event-row .name  { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .event-row .venue { grid-column: 2; font-size: .8em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Earthquake rows inside the events list. Same 2-col grid as a normal
-   event: date in col 1, magnitude tag in col 1-row-1's sibling cell,
-   location wrapping on the second row. */
-.event-row .when.quake { color: var(--accent-warm); align-self: center; }
-.event-row .name .quake-tag {
-  display: inline-block;
-  padding: 0 5px;
-  border-radius: 3px;
-  font-family: var(--mono);
-  font-size: .8em;
-  font-weight: 700;
-  line-height: 1.5;
-  color: var(--accent-warm);
-  border: 1px solid var(--accent-warm);
-}
-/* Location: wrap fully, not truncated/muted like a normal venue. */
-.event-row .venue.quake-place {
-  font-size: .82em;
-  color: var(--text);
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  line-height: 1.35;
-  padding-top: 1px;
-}
+/* Earthquake rows render identically to normal event rows — the only
+   difference is the date is red instead of gold. */
+.event-row .when.quake { color: crimson; }
 
 /* Places */
 .place-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
