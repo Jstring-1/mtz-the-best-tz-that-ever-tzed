@@ -787,7 +787,10 @@ async function osmPlaces(json: Record<string, unknown>) {
         const addy = street
           ? [street, city || loc.short, t['addr:state'], t['addr:postcode']].filter(Boolean).join(', ')
           : '';
-        const rawCat = t.cuisine || t.amenity || t.leisure || t.tourism || t.shop || group.name;
+        // Prefer the structural OSM type (amenity/leisure/tourism/shop)
+        // so the category is filterable ("restaurant", not "italian").
+        // Cuisine is only a last-resort fallback.
+        const rawCat = t.amenity || t.leisure || t.tourism || t.shop || t.cuisine || group.name;
         const cats = String(rawCat).replace(/[_;]+/g, ' ').trim() + ', ';
         collected.push({ fsq_id: key, name, addy, cats, dist: null, images: '' });
       }

@@ -25,9 +25,9 @@ type Group = 'all' | 'food' | 'parks' | 'retail' | 'rec';
 function classify(s: Spot): Exclude<Group, 'all'> {
   if (s.kind === 'park') return 'parks';
   const c = (s.category ?? '').toLowerCase();
-  if (/park|garden|nature_reserve|playground/.test(c)) return 'parks';
-  if (/restaurant|cafe|coffee|bar\b|pub|bakery|biergarten|ice.?cream|deli|food|cuisine|brew/.test(c)) return 'food';
-  if (/shop|store|supermarket|greengrocer|book|cloth|gift|florist|jewel|hardware|bicycle|wine|market|second.?hand|variety/.test(c)) return 'retail';
+  if (/\b(park|garden|nature.?reserve|playground|dog.?park|picnic)\b/.test(c)) return 'parks';
+  if (/restaurant|cafe|coffee|\bbar\b|\bpub\b|bakery|biergarten|ice.?cream|deli|diner|bistro|tavern|eatery|grill|food|fast.?food|cuisine|brew|pizza|sushi|burger|sandwich|taco|bbq|barbecue|noodle|ramen|thai|mexican|italian|chinese|indian|japanese|vietnamese|korean|mediterranean|greek|american|seafood|steak|breakfast|brunch|kitchen/.test(c)) return 'food';
+  if (/shop|store|supermarket|greengrocer|book|cloth|gift|florist|jewel|hardware|bicycle|wine|market|second.?hand|variety|grocery|pharmacy|boutique|antique/.test(c)) return 'retail';
   return 'rec';   // museums, galleries, libraries, theatres, fitness, etc.
 }
 
