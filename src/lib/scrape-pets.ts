@@ -50,53 +50,53 @@ async function safeFetch(url: string): Promise<string | null> {
   }
 }
 
-// Pull one labelled field out of a chunk of HTML. Tolerant of inline
-// tags between the label and the value ("Breed: <span>Lab mix</span>").
-function pickField(chunk: string, label: string): string | null {
-  const re = new RegExp(
-    `${label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*:\\s*([\\s\\S]*?)(?=<\\s*\\w|\\n|$)`,
-    'i',
+// 24petconnect server-renders each pet as:
+//   <div class="gridResult" id="Result_A1034574"
+//        onclick="Details('CCASDAvailablePets','CCST','A1034574')">
+//     <img src="/image/688711384" ... />
+//     <span class="text_Name results">Chance</span>
+//     <span class="text_Breed results">Pit Bull Terrier mix</span>
+//     ... text_Age / text_Gender / text_Weight / text_Color /
+//         text_BroughttotheShelter / text_Location / text_IDNumber
+// Pagination is a plain GET: &index=30, &index=60, … 30 per page.
+
+function cleanVal(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const t = stripHtmlInner(v).replace(/\s+/g, ' ').trim();
+  if (!t || /^(-+|n\/?a|unknown|none)$/i.test(t)) return null;
+  return t;
+}
+
+// Pull a `<span class="text_<Field> results">VALUE</span>` value out of
+// one pet's HTML block.
+function pickField(block: string, field: string): string | null {
+  const m = block.match(
+    new RegExp(`class="text_${field}\\b[^"]*results[^"]*">([\\s\\S]*?)<`, 'i'),
   );
-  const m = chunk.match(re);
-  if (!m) return null;
-  const v = stripHtmlInner(m[1]).trim();
-  return v.length ? v : null;
+  return m ? cleanVal(m[1]) : null;
 }
 
 function parsePetsFromHtml(html: string, species: string, listingUrl: string): ScrapedPet[] {
   const out: ScrapedPet[] = [];
 
-  // Anchor on the shelter ID number (A1234567 / 1234567). Every pet
-  // listing on 24petconnect has one; that's the most reliable anchor.
-  // We slice the HTML around each ID into a "block" and extract fields
-  // from that block. More forgiving than anchoring on the photo IMG.
-  const idRe = /(?:ID\s*Number|ID\s*#|Animal\s*ID)\s*:\s*(?:<[^>]*>)*\s*(A?\d{4,})/gi;
-  const anchors: Array<{ id: string; index: number }> = [];
-  let m: RegExpExecArray | null;
-  while ((m = idRe.exec(html))) {
-    anchors.push({ id: m[1].trim(), index: m.index });
-  }
-  if (anchors.length === 0) return out;
+  // Each pet is a `<div class="gridResult" ...>` container. Split on the
+  // opening tag; the first chunk is page chrome before the first pet.
+  const parts = html.split(/<div class="gridResult"/i).slice(1);
 
-  for (let i = 0; i < anchors.length; i++) {
-    const a = anchors[i];
-    // Block window: from halfway between prev anchor (or start) to
-    // halfway to next anchor (or end).
-    const prev = i > 0 ? anchors[i - 1].index : 0;
-    const next = i + 1 < anchors.length ? anchors[i + 1].index : html.length;
-    const start = Math.floor((prev + a.index) / 2);
-    const end = Math.floor((a.index + next) / 2);
-    const chunk = html.substring(start, end);
+  for (const block of parts) {
+    const idM =
+         block.match(/id="Result_([A-Za-z0-9]+)"/i)
+      ?? block.match(/Details\(\s*'[^']*'\s*,\s*'[^']*'\s*,\s*'([A-Za-z0-9]+)'\s*\)/i);
+    const id = idM ? idM[1].trim() : (pickField(block, 'IDNumber') ?? '');
+    if (!id) continue;
 
-    const name = pickField(chunk, 'Name');
+    const name = pickField(block, 'Name');
     if (!name) continue;
 
-    // Look for the pet's photo anywhere inside the block. 24petconnect
-    // serves photos under /image/<n>; tolerate http(s) prefix and
-    // lazy-load attributes (data-src).
+    // Photo: 24petconnect serves /image/<n>; tolerate lazy-load attrs.
     const photoMatch =
-         chunk.match(/<img[^>]*\bsrc=["']([^"']*\/image\/\d+[^"']*)["']/i)
-      ?? chunk.match(/<img[^>]*\bdata-src=["']([^"']*\/image\/\d+[^"']*)["']/i);
+         block.match(/<img[^>]*\bsrc=["']([^"']*\/image\/\d+[^"']*)["']/i)
+      ?? block.match(/<img[^>]*\bdata-src=["']([^"']*\/image\/\d+[^"']*)["']/i);
     let photo_url: string | null = null;
     if (photoMatch) {
       const path = photoMatch[1];
@@ -104,49 +104,58 @@ function parsePetsFromHtml(html: string, species: string, listingUrl: string): S
     }
 
     out.push({
-      id: a.id,
+      id,
       name,
       species,
-      breed:       pickField(chunk, 'Breed'),
-      age:         pickField(chunk, 'Age'),
-      gender:      pickField(chunk, 'Gender'),
-      weight:      pickField(chunk, 'Weight'),
-      color:       pickField(chunk, 'Color'),
-      intake_date: pickField(chunk, 'Brought to the Shelter'),
-      location:    pickField(chunk, 'Location'),
+      breed:       pickField(block, 'Breed'),
+      age:         pickField(block, 'Age'),
+      gender:      pickField(block, 'Gender'),
+      weight:      pickField(block, 'Weight'),
+      color:       pickField(block, 'Color'),
+      intake_date: pickField(block, 'BroughttotheShelter'),
+      location:    pickField(block, 'Location'),
       photo_url,
       description: null,
-      url: `${listingUrl}#${encodeURIComponent(a.id)}`,
+      url: `${listingUrl}#${encodeURIComponent(id)}`,
       shelter: 'Contra Costa Animal Services',
     });
   }
   return out;
 }
 
+const PAGE_SIZE = 30;
+const MAX_PAGES = 10;   // safety cap (≤300 pets/species)
+
+async function scrapeSource(baseUrl: string, species: string): Promise<ScrapedPet[]> {
+  const debug = process.env.MTZ_DEBUG === '1';
+  const all: ScrapedPet[] = [];
+  for (let pg = 0; pg < MAX_PAGES; pg++) {
+    const url = pg === 0 ? baseUrl : `${baseUrl}&index=${pg * PAGE_SIZE}`;
+    const html = await safeFetch(url);
+    if (!html) break;
+    const pets = parsePetsFromHtml(html, species, baseUrl);
+    if (debug || (pg === 0 && pets.length === 0)) {
+      const blocks = (html.match(/<div class="gridResult"/gi) ?? []).length;
+      console.log(`[pets] ${species} pg${pg}: parsed ${pets.length} (gridResult blocks ${blocks}, ${html.length}b)`);
+    }
+    if (!pets.length) break;
+    all.push(...pets);
+    if (pets.length < PAGE_SIZE) break;          // last page
+    await new Promise((r) => setTimeout(r, 800)); // politeness
+  }
+  return all;
+}
+
 export async function scrapeAllPets(): Promise<ScrapedPet[]> {
   const results = await Promise.all(
-    SOURCES.map(async ({ url, species }) => {
-      const html = await safeFetch(url);
-      if (!html) { console.warn(`[pets] ${species}: fetch returned null`); return [] as ScrapedPet[]; }
-      try {
-        const pets = parsePetsFromHtml(html, species, url);
-        const debug = process.env.MTZ_DEBUG === '1';
-        if (debug || pets.length === 0) {
-          const anchorCount = (html.match(/(?:ID\s*Number|ID\s*#|Animal\s*ID)\s*:/gi) ?? []).length;
-          console.log(`[pets] ${species}: parsed ${pets.length} (anchors ${anchorCount}, ${html.length}b)`);
-          if (anchorCount === 0 && html.length > 0) {
-            console.log(`[pets] ${species} head: ${html.slice(0, 200).replace(/\s+/g, ' ')}`);
-          }
-        }
-        return pets;
-      } catch (e) {
-        console.warn(`[pets] ${species} parse threw:`, e instanceof Error ? e.message : e);
-        return [];
-      }
-    }),
+    SOURCES.map(({ url, species }) =>
+      scrapeSource(url, species).catch((e) => {
+        console.warn(`[pets] ${species} threw:`, e instanceof Error ? e.message : e);
+        return [] as ScrapedPet[];
+      }),
+    ),
   );
-  // Dedupe by id (some pets show on both dog + cat pages? unlikely
-  // but cheap to guard).
+  // Dedupe by id across pages / species.
   const byId = new Map<string, ScrapedPet>();
   for (const p of results.flat()) if (!byId.has(p.id)) byId.set(p.id, p);
   return [...byId.values()];
