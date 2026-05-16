@@ -17,6 +17,8 @@ export interface Spot {
   description?: string;       // parks
   image?: string;             // parks
   url?: string;               // parks
+  lat?: number;               // OSM places
+  lon?: number;
 }
 
 type Group = 'all' | 'food' | 'parks' | 'retail' | 'rec';
@@ -43,9 +45,11 @@ function shortAddr(a?: string): string {
 // Many scraped parks (and some OSM places) have no street address. Fall
 // back to "<Name>, Martinez, CA" so the map and Maps link still work.
 function mapQuery(s: Spot): string {
-  return s.address && s.address.trim()
-    ? s.address
-    : `${s.name}, Martinez, CA`;
+  // Exact OSM coordinates are the most reliable; then a real street
+  // address; then a name lookup as a last resort.
+  if (s.lat != null && s.lon != null) return `${s.lat},${s.lon}`;
+  if (s.address && s.address.trim()) return s.address;
+  return `${s.name}, Martinez, CA`;
 }
 
 export default function PlacesCard({ spots }: { spots: Spot[] }) {

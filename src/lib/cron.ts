@@ -723,6 +723,9 @@ interface OsmEl {
   type: 'node' | 'way' | 'relation';
   id: number;
   tags?: Record<string, string>;
+  lat?: number;                       // present on nodes
+  lon?: number;
+  center?: { lat?: number; lon?: number };  // present on ways/relations (out center)
 }
 
 const OVERPASS_ENDPOINTS = [
@@ -737,7 +740,7 @@ async function osmPlaces(json: Record<string, unknown>) {
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()`;
 
   const scrapedAt = new Date().toISOString();
-  const collected: Array<{ fsq_id: string; name: string; addy: string; cats: string; dist: number | null; images: string }> = [];
+  const collected: Array<{ fsq_id: string; name: string; addy: string; cats: string; dist: number | null; images: string; lat: number | null; lon: number | null }> = [];
   const seen = new Set<string>();
   const debugRaw: Record<string, unknown> = {};
 
@@ -792,7 +795,9 @@ async function osmPlaces(json: Record<string, unknown>) {
         // Cuisine is only a last-resort fallback.
         const rawCat = t.amenity || t.leisure || t.tourism || t.shop || t.cuisine || group.name;
         const cats = String(rawCat).replace(/[_;]+/g, ' ').trim() + ', ';
-        collected.push({ fsq_id: key, name, addy, cats, dist: null, images: '' });
+        const lat = el.lat ?? el.center?.lat ?? null;
+        const lon = el.lon ?? el.center?.lon ?? null;
+        collected.push({ fsq_id: key, name, addy, cats, dist: null, images: '', lat, lon });
       }
     } catch (e) {
       console.warn(`[places] osm ${group.name} threw:`, e instanceof Error ? e.message : e);

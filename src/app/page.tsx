@@ -82,14 +82,20 @@ export default async function MainPage() {
       image: p.image ?? undefined,
       url: p.url ?? undefined,
     })),
-    ...placeRows.map((p): Spot => ({
-      id: `fsq-${p.fsq_id}`,
-      kind: 'place',
-      name: p.name ?? 'Unnamed',
-      address: p.addy ?? undefined,
-      category: p.cats ?? undefined,
-      distance: p.dist ?? undefined,
-    })),
+    ...placeRows.map((p): Spot => {
+      const lat = p.lat != null ? Number(p.lat) : undefined;
+      const lon = p.lon != null ? Number(p.lon) : undefined;
+      return {
+        id: `fsq-${p.fsq_id}`,
+        kind: 'place',
+        name: p.name ?? 'Unnamed',
+        address: p.addy ?? undefined,
+        category: p.cats ?? undefined,
+        distance: p.dist ?? undefined,
+        lat: lat != null && Number.isFinite(lat) ? lat : undefined,
+        lon: lon != null && Number.isFinite(lon) ? lon : undefined,
+      };
+    }),
   ];
 
   // Alerts: card type wants NoaaAlert shape (epoch numbers etc).
