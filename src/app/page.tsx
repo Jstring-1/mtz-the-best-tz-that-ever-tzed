@@ -1,7 +1,7 @@
 import { getLocation } from '@/lib/location';
 import { getFeeds, getMisc, getPlaces } from '@/lib/cache';
 import {
-  listUpcomingEvents, listRecentQuakes, listParks, listActiveAlerts,
+  listUpcomingEvents, listParks, listActiveAlerts,
   listAvailablePets,
 } from '@/lib/store';
 import type { PlaceRow, NoaaAlert } from '@/lib/types';
@@ -19,11 +19,10 @@ export default async function MainPage() {
   const loc = getLocation();
 
   const [
-    storedEvents, storedQuakes, storedParks, storedAlerts,
+    storedEvents, storedParks, storedAlerts,
     storedPets, feeds, misc, places,
   ] = await Promise.all([
     listUpcomingEvents(),
-    listRecentQuakes(20),
     listParks(),
     listActiveAlerts(),
     listAvailablePets(),
@@ -51,23 +50,6 @@ export default async function MainPage() {
     pleaseNote: e.please_note ?? undefined,
   }));
 
-  // Earthquakes now live inside the Events list (Local tab) with a
-  // distinct date color + magnitude tag. Most-recent first, ahead of
-  // the upcoming venue events.
-  const quakeEvents: UEvent[] = storedQuakes
-    .slice()
-    .sort((a, b) => b.occurred_at - a.occurred_at)
-    .map((q) => ({
-      id: `quake-${q.id ?? q.occurred_at}`,
-      title: q.place,
-      venue: q.place,
-      start_at: q.occurred_at,
-      url: q.url ?? undefined,
-      source: 'local',
-      source_label: 'USGS earthquake',
-      kind: 'quake',
-      magnitude: q.magnitude ?? null,
-    }));
 
   // Merge: parks first (alphabetical), then Foursquare places by distance.
   const placeRows: PlaceRow[] = places ?? [];
@@ -127,7 +109,7 @@ export default async function MainPage() {
 
   return (
     <div className="dashboard">
-      <EventsCard events={[...quakeEvents, ...events]} tz={loc.timezone} />
+      <EventsCard events={events} tz={loc.timezone} />
       <NewsCard   items={feeds} />
       <PlacesCard spots={spots} />
       <PetsCard   pets={storedPets} />
