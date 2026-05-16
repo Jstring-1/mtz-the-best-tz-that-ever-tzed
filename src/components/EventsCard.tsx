@@ -25,16 +25,33 @@ export interface UEvent {
 }
 
 type Tab = 'local' | 'municipal' | 'regional';
+type RegFilter = 'all' | 'music' | 'stage' | 'sports';
+
+// Bucket a Ticketmaster segment into the three regional filter groups.
+function segGroup(seg?: string): Exclude<RegFilter, 'all'> | 'other' {
+  const s = (seg ?? '').toLowerCase();
+  if (s.includes('music')) return 'music';
+  if (s.includes('sport')) return 'sports';
+  if (/art|theat|comedy|film|stage/.test(s)) return 'stage';
+  return 'other';
+}
 
 export default function EventsCard({ events, tz }: { events: UEvent[]; tz: string }) {
   const [open, setOpen] = useState<UEvent | null>(null);
   const [tab, setTab] = useState<Tab>('local');
+  const [regFilter, setRegFilter] = useState<RegFilter>('all');
 
   const local     = events.filter((e) => e.source === 'local');
   const municipal = events.filter((e) => e.source === 'municipal');
   const regional  = events.filter((e) => e.source === 'ticketmaster');
-  const list = tab === 'local' ? local : tab === 'municipal' ? municipal : regional;
+  const regionalShown = regFilter === 'all'
+    ? regional
+    : regional.filter((e) => segGroup(e.segment) === regFilter);
+  const list = tab === 'local' ? local : tab === 'municipal' ? municipal : regionalShown;
   const visible = list;
+
+  const regCount = (f: RegFilter) =>
+    f === 'all' ? regional.length : regional.filter((e) => segGroup(e.segment) === f).length;
 
   const switchTab = (t: Tab) => setTab(t);
 
@@ -66,6 +83,22 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
           >Municipal <span className="count">{municipal.length}</span></button>
         </span>
       </h2>
+      {tab === 'regional' && (
+        <span className="event-tabs reg-filter" role="tablist" aria-label="Regional category">
+          {(['all', 'music', 'stage', 'sports'] as RegFilter[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              role="tab"
+              aria-selected={regFilter === f}
+              className={`event-tab ${regFilter === f ? 'on' : ''}`}
+              onClick={() => setRegFilter(f)}
+            >
+              {f[0].toUpperCase() + f.slice(1)} <span className="count">{regCount(f)}</span>
+            </button>
+          ))}
+        </span>
+      )}
       {list.length === 0 ? (
         <p className="empty">
           {tab === 'local'     ? 'No local events cached yet.'
@@ -93,7 +126,11 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                 ) : (
                   <>
                     <span className="name">{e.title}</span>
-                    <span className="venue">{e.source_label}{e.venue && e.venue !== e.source_label ? ` · ${e.venue}` : ''}</span>
+                    <span className="venue">
+                      {e.source === 'ticketmaster'
+                        ? [e.venue, e.city].filter(Boolean).join(' · ')
+                        : `${e.source_label}${e.venue && e.venue !== e.source_label ? ` · ${e.venue}` : ''}`}
+                    </span>
                   </>
                 )}
               </button>
@@ -142,7 +179,7 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                 {[open.segment, open.genre].filter(Boolean).join(' · ')}
               </div>
             )}
-            {open.kind !== 'quake' && (
+            {open.kind !== 'quake' && open.source !== 'ticketmaster' && (
               <div className="meta muted" style={{ marginBottom: 12 }}>via {open.source_label}</div>
             )}
             {open.pleaseNote && <p style={{ marginBottom: 10 }}>{open.pleaseNote}</p>}

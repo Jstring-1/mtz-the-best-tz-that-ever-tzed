@@ -832,18 +832,41 @@ async function ticketmasterEvents(json: Record<string, unknown>) {
   // Future events only.  Use today's UTC date at 00:00 — Ticketmaster
   // accepts ISO 8601 with seconds + Z, no millis.
   const startDateTime = `${new Date().toISOString().slice(0, 10)}T00:00:00Z`;
-  const params = new URLSearchParams({
-    apikey: process.env.TICKETMASTER_KEY ?? '',
-    size: '200',
-    geoPoint: `${loc.lat},${loc.lon}`,
-    radius: '50',          // miles
-    unit: 'miles',
-    sort: 'date,asc',
-    startDateTime,
-  });
-  type TM = { _embedded?: { events?: Array<Record<string, unknown>> } };
-  const r = await fetchJson<TM>(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);
-  const events = r._embedded?.events ?? [];
+  type TM = {
+    _embedded?: { events?: Array<Record<string, unknown>> };
+    page?: { totalPages?: number; totalElements?: number };
+  };
+  // Ticketmaster's deep-paging cap is (page * size) < 1000, so with
+  // size=199 we can pull pages 0..4 ≈ ~1000 events — far more than the
+  // single-page ~5 days the Bay Area's event density used to give us.
+  const SIZE = 199;
+  const MAX_PAGES = 5;
+  const seen = new Set<string>();
+  const events: Array<Record<string, unknown>> = [];
+  let totalPages = 1;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const params = new URLSearchParams({
+      apikey: process.env.TICKETMASTER_KEY ?? '',
+      size: String(SIZE),
+      page: String(page),
+      geoPoint: `${loc.lat},${loc.lon}`,
+      radius: '50',          // miles
+      unit: 'miles',
+      sort: 'date,asc',
+      startDateTime,
+    });
+    const r = await fetchJson<TM>(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);
+    const batch = r._embedded?.events ?? [];
+    for (const ev of batch) {
+      const eid = String((ev as { id?: string }).id ?? '');
+      if (eid && seen.has(eid)) continue;
+      if (eid) seen.add(eid);
+      events.push(ev);
+    }
+    totalPages = r.page?.totalPages ?? 1;
+    if (!batch.length || page + 1 >= totalPages) break;
+    await new Promise((res) => setTimeout(res, 250)); // rate-limit politeness
+  }
   json.TM_shows = events;
   // Mirror into the structured events table.
   const { upsertEvents } = await import('./store');

@@ -1153,6 +1153,14 @@ main { padding-top: var(--top-stack-h); display: block; }
 .event-tab.on .count { color: #000; opacity: .7; }
 .event-tab .count { font-size: .9em; color: var(--text-muted); }
 
+/* Regional sub-filter sits on its own row under the header. */
+.event-tabs.reg-filter {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: 0;
+  margin-bottom: 8px;
+}
+
 .event-row { display: grid !important; grid-template-columns: 52px 1fr; row-gap: 1px; }
 .event-row .when  { color: var(--accent); font-family: var(--mono); font-size: .85em; }
 .event-row .name  { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
