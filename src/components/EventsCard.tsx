@@ -85,20 +85,35 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                 <span className={`when${e.kind === 'quake' ? ' quake' : ''}`}>
                   {e.start_at ? fmtDateShort(e.start_at * 1000, tz) : 'TBA'}
                 </span>
-                <span className="name">
-                  {e.kind === 'quake' && e.magnitude != null && (
-                    <span className="quake-tag">M{e.magnitude.toFixed(1)}</span>
-                  )}
-                  {e.title}
-                </span>
-                <span className="venue">{e.source_label}{e.venue && e.venue !== e.source_label ? ` · ${e.venue}` : ''}</span>
+                {e.kind === 'quake' ? (
+                  <span className="name quake-name">
+                    <span className="quake-tag">M{e.magnitude != null ? e.magnitude.toFixed(1) : '—'}</span>
+                    <span className="quake-place">{e.venue}</span>
+                  </span>
+                ) : (
+                  <>
+                    <span className="name">{e.title}</span>
+                    <span className="venue">{e.source_label}{e.venue && e.venue !== e.source_label ? ` · ${e.venue}` : ''}</span>
+                  </>
+                )}
               </button>
             ))}
           </div>
         </>
       )}
 
-      <Modal open={!!open} onClose={() => setOpen(null)} title={open?.title ?? 'Event'} size="lg">
+      <Modal
+        open={!!open}
+        onClose={() => setOpen(null)}
+        title={
+          open
+            ? open.kind === 'quake'
+              ? `M${open.magnitude != null ? open.magnitude.toFixed(1) : '—'} earthquake`
+              : open.title
+            : 'Event'
+        }
+        size="lg"
+      >
         {open && (
           <>
             {open.image && (
@@ -127,7 +142,9 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                 {[open.segment, open.genre].filter(Boolean).join(' · ')}
               </div>
             )}
-            <div className="meta muted" style={{ marginBottom: 12 }}>via {open.source_label}</div>
+            {open.kind !== 'quake' && (
+              <div className="meta muted" style={{ marginBottom: 12 }}>via {open.source_label}</div>
+            )}
             {open.pleaseNote && <p style={{ marginBottom: 10 }}>{open.pleaseNote}</p>}
             {open.description && (
               <p style={{ lineHeight: 1.5, marginBottom: 12 }}>{open.description}</p>
@@ -142,7 +159,9 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
             })()}
             {open.url && (
               <a className="event-modal-btn primary" href={open.url} target="_blank" rel="noopener" style={{ marginTop: 14, display: 'inline-block' }}>
-                {open.source === 'ticketmaster' ? 'Get tickets →' : `View on ${open.source_label} →`}
+                {open.kind === 'quake' ? 'USGS event page →'
+                  : open.source === 'ticketmaster' ? 'Get tickets →'
+                  : `View on ${open.source_label} →`}
               </a>
             )}
           </>

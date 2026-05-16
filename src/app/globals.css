@@ -1171,6 +1171,24 @@ main { padding-top: var(--top-stack-h); display: block; }
   color: var(--accent-warm);
   border: 1px solid var(--accent-warm);
 }
+/* Quake cell: magnitude tag, then the location wrapping below it. */
+.event-row .name.quake-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  overflow: visible;
+  white-space: normal;
+}
+.event-row .name.quake-name .quake-tag { margin-right: 0; }
+.event-row .quake-place {
+  font-weight: 400;
+  font-size: .85em;
+  color: var(--text);
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.35;
+}
 
 /* Places */
 .place-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
