@@ -347,7 +347,10 @@ async function localEvents(json: Record<string, unknown>) {
   // Housekeeping: purge any Del Cielo Livermore-location entries that
   // were stored before the LVM filter landed. Scraper now drops them,
   // so they'd otherwise sit until their end_at aged past 90 days.
-  await sql`DELETE FROM events WHERE source = 'delcielo' AND title LIKE '%LVM'`;
+  await sql`DELETE FROM events WHERE source = 'delcielo' AND (
+    title ~* '\\mLVM\\M' OR title ~* '\\mlivermore\\M'
+    OR venue ~* '\\mLVM\\M' OR venue ~* '\\mlivermore\\M'
+  )`;
   // And the calendar-widget garbage rows the generic City of Martinez
   // scraper produced before we switched to the hand-curated list.
   // Old ids matched "martinez-fb-*" / "martinez-jsonld-*"; the new

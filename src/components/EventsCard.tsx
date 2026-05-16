@@ -181,9 +181,6 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                 {[open.segment, open.genre].filter(Boolean).join(' · ')}
               </div>
             )}
-            {open.kind !== 'quake' && open.source !== 'ticketmaster' && (
-              <div className="meta muted" style={{ marginBottom: 12 }}>via {open.source_label}</div>
-            )}
             {open.pleaseNote && <p style={{ marginBottom: 10 }}>{open.pleaseNote}</p>}
             {open.description && (
               <p style={{ lineHeight: 1.5, marginBottom: 12 }}>{open.description}</p>
