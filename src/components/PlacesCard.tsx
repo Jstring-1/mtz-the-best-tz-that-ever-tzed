@@ -28,6 +28,14 @@ function shortAddr(a?: string): string {
   return head.replace(/[,\s]+$/, '').trim();
 }
 
+// Many scraped parks (and some OSM places) have no street address. Fall
+// back to "<Name>, Martinez, CA" so the map and Maps link still work.
+function mapQuery(s: Spot): string {
+  return s.address && s.address.trim()
+    ? s.address
+    : `${s.name}, Martinez, CA`;
+}
+
 export default function PlacesCard({ spots }: { spots: Spot[] }) {
   const [open, setOpen] = useState<Spot | null>(null);
 
@@ -87,23 +95,21 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
                 </ul>
               </>
             )}
-            {open.address && <MiniMap query={open.address} />}
+            <MiniMap query={mapQuery(open)} />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
               {open.url && (
                 <a className="event-modal-btn primary" href={open.url} target="_blank" rel="noopener">
                   Open park page →
                 </a>
               )}
-              {open.address && (
-                <a
-                  className="event-modal-btn"
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(open.address)}`}
-                  target="_blank"
-                  rel="noopener"
-                >
-                  Open in Maps →
-                </a>
-              )}
+              <a
+                className="event-modal-btn"
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery(open))}`}
+                target="_blank"
+                rel="noopener"
+              >
+                Open in Maps →
+              </a>
             </div>
           </>
         )}
@@ -111,19 +117,17 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
           <>
             {open.address && <div className="meta" style={{ marginBottom: 8 }}>{open.address}</div>}
             {open.category && <div className="meta muted" style={{ marginBottom: 12 }}>{open.category.replace(/,\s*$/, '')}</div>}
-            {open.address && <MiniMap query={open.address} />}
-            {open.address && (
-              <p style={{ marginTop: 14 }}>
-                <a
-                  className="event-modal-btn primary"
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(open.address)}`}
-                  target="_blank"
-                  rel="noopener"
-                >
-                  Open in Maps →
-                </a>
-              </p>
-            )}
+            <MiniMap query={mapQuery(open)} />
+            <p style={{ marginTop: 14 }}>
+              <a
+                className="event-modal-btn primary"
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery(open))}`}
+                target="_blank"
+                rel="noopener"
+              >
+                Open in Maps →
+              </a>
+            </p>
           </>
         )}
       </Modal>
