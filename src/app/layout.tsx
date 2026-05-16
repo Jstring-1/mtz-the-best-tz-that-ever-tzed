@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import { Source_Code_Pro, Inter } from 'next/font/google';
+
+const GA_ID = 'G-VR227N4QG6';
 import { getLocation } from '@/lib/location';
 import WeatherStrip from '@/components/WeatherStrip';
 import HourlyStrip from '@/components/HourlyStrip';
@@ -26,6 +29,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${mono.variable} ${sans.variable}`}>
       <body>
+        <Script
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="ga4-init" strategy="afterInteractive">
+          {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${GA_ID}');`}
+        </Script>
         <WeatherStrip />
         <section className="wx-row-2" aria-label="Hourly and 7-day forecast">
           <HourlyStrip />
