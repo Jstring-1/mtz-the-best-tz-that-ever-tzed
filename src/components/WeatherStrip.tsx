@@ -1,15 +1,15 @@
 import { getJson } from '@/lib/cache';
 import { getLocation } from '@/lib/location';
-import StocksStrip from './StocksStrip';
 
 // Top-of-page weather summary, rendered on every page above the site header.
 // Reads from cache only — no fetches on render.
 
 interface WxNow {
   current?: {
-    temp_f?: number; humidity?: number;
-    wind_mph?: number; wind_dir?: string;
-    pressure_mb?: number;
+    temp_f?: number; feelslike_f?: number; humidity?: number;
+    wind_mph?: number; wind_dir?: string; gust_mph?: number;
+    pressure_mb?: number; uv?: number; vis_miles?: number;
+    precip_in?: number; cloud?: number;
     condition?: { text?: string; icon?: string };
   };
 }
@@ -43,22 +43,29 @@ export default async function WeatherStrip() {
       <span className="clock">
         {new Date().toLocaleString('en-US', { timeZone: loc.timezone, weekday: 'short', month: 'short', day: 'numeric' })}
       </span>
-      {(cur?.condition?.icon || cur?.condition?.text) && (
+      {(cur?.condition?.text || cur?.temp_f != null) && (
         <span className="cond gold">
-          {cur.condition.icon && <img src={`https:${cur.condition.icon}`} alt={cur.condition.text ?? ''} />}
-          {cur.condition.text}
+          {cur?.condition?.icon && <img src={`https:${cur.condition.icon}`} alt={cur.condition.text ?? ''} />}
+          {[cur?.condition?.text, cur?.temp_f != null ? `${cur.temp_f}°F` : null]
+            .filter(Boolean).join(' ')}
         </span>
       )}
-      {cur?.temp_f != null && <span className="red">{cur.temp_f}°F</span>}
-      {cur?.wind_mph != null && <span className="dodger">{cur.wind_mph}mph {cur.wind_dir ?? ''}</span>}
+      {cur?.feelslike_f != null && <span className="red">Feels {cur.feelslike_f}°F</span>}
+      {cur?.wind_mph != null && (
+        <span className="dodger">
+          {cur.wind_mph}mph {cur.wind_dir ?? ''}
+          {cur.gust_mph != null ? ` g${Math.round(cur.gust_mph)}` : ''}
+        </span>
+      )}
       {cur?.humidity != null && <span className="green">{cur.humidity}%</span>}
       {pa?.['pm2.5'] != null && <span className="blue">AQI {pa['pm2.5']}</span>}
+      {cur?.uv != null && <span className="violet">UV {cur.uv}</span>}
+      {cur?.vis_miles != null && <span className="peru">{cur.vis_miles}mi vis</span>}
+      {cur?.precip_in != null && cur.precip_in > 0 && <span className="dodger">{cur.precip_in}in</span>}
+      {cur?.cloud != null && <span className="green">{cur.cloud}% cloud</span>}
       {cur?.pressure_mb != null && <span className="peru">{Math.round(cur.pressure_mb)} mb</span>}
       {astro?.sunrise && <span className="gold">↑{astro.sunrise}</span>}
       {astro?.sunset && <span className="violet">↓{astro.sunset}</span>}
-
-      <span className="wx-sep" aria-hidden />
-      <StocksStrip compact />
     </section>
   );
 }
