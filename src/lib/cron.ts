@@ -672,16 +672,27 @@ const OSM_GROUPS: Array<{ name: string; filters: string[] }> = [
   },
 ];
 
-// Rectangle scoping the places fetch to (roughly) all of Martinez —
-// from the Carquinez Strait waterfront in the north down past Alhambra
-// Valley / Briones in the south, and from the Hwy-4 corridor in the
-// west out to Vine Hill / Pacheco in the east. Edit these to
-// widen/narrow the search area; lat goes N→positive, lng goes
-// W→negative.
-const MARTINEZ_BOUNDS = {
-  low:  { latitude: 37.9300, longitude: -122.1700 },  // SW corner
-  high: { latitude: 38.0450, longitude: -122.0700 },  // NE corner
-};
+// Polygon tracing the Martinez city footprint (the hand-drawn boundary:
+// Carquinez Strait waterfront on the north, east to the Hwy-4/I-680 /
+// Pacheco Blvd interchange taking in Vine Hill, south along Hwy 4, and
+// back up the western hills past Franklin Crest). Overpass `poly` takes
+// a flat "lat lon lat lon …" string and auto-closes the ring. Edit
+// vertices to reshape; keep them in order around the perimeter.
+const MARTINEZ_POLY: Array<[number, number]> = [
+  [38.0320, -122.1620],  // NW shoreline (above Ozol / McEwen)
+  [38.0345, -122.1300],  // waterfront mid
+  [38.0340, -122.1130],  // near the I-680 Benicia bridge approach
+  [38.0250, -122.0980],  // E end of the refinery
+  [38.0040, -122.0860],  // down the Boatwright Hwy corridor
+  [37.9830, -122.0810],  // Hwy-4 / I-680 / Pacheco Blvd interchange
+  [37.9700, -122.0950],  // Hwy 4 near Blum Rd
+  [37.9675, -122.1150],  // Hwy 4 (Morello)
+  [37.9665, -122.1330],  // Hwy 4 (Alhambra Ave)
+  [37.9690, -122.1450],  // Old Martinez Summit / Alhambra Valley
+  [37.9870, -122.1580],  // Franklin Crest (western hills)
+  [38.0150, -122.1645],  // up the west side
+];
+const MARTINEZ_POLY_STR = MARTINEZ_POLY.map(([la, lo]) => `${la} ${lo}`).join(' ');
 
 // Name-pattern blocklist for chains that slip past the type filter
 // (most coffee + casual-dining chains aren't tagged "fast_food").
@@ -746,12 +757,10 @@ async function osmPlaces(json: Record<string, unknown>) {
   const seen = new Set<string>();
   const debugRaw: Record<string, unknown> = {};
 
-  // Overpass bbox order is (south, west, north, east).
-  const b = MARTINEZ_BOUNDS;
-  const bbox = `${b.low.latitude},${b.low.longitude},${b.high.latitude},${b.high.longitude}`;
+  const poly = MARTINEZ_POLY_STR;
 
   for (const group of OSM_GROUPS) {
-    const q = `[out:json][timeout:25];(${group.filters.map((f) => `${f}(${bbox});`).join('')});out center tags;`;
+    const q = `[out:json][timeout:25];(${group.filters.map((f) => `${f}(poly:"${poly}");`).join('')});out center tags;`;
     try {
       let r: Response | null = null;
       for (const ep of OVERPASS_ENDPOINTS) {
