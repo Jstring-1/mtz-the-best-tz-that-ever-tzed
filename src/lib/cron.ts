@@ -781,8 +781,12 @@ async function osmPlaces(json: Record<string, unknown>) {
         seen.add(key);
         // Chain blocklist — strips national brands by name pattern.
         if (CHAIN_RE.test(name)) continue;
+        // The bbox is a rectangle, so it bleeds into neighboring towns
+        // (Pleasant Hill, Pacheco, Concord, …). Keep only entries whose
+        // OSM city tag is Martinez — or has no city tag at all (lots of
+        // POIs omit it; those are still inside the box and usually MTZ).
         const city = (t['addr:city'] ?? '').trim();
-        if (/\bbenicia\b/i.test(city)) continue;
+        if (city && !/\bmartinez\b/i.test(city)) continue;
         const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ').trim();
         // Only build an address when we have a real street line — a
         // bare "Martinez, CA" would trip the city-prefix housekeeping
@@ -820,6 +824,10 @@ async function osmPlaces(json: Record<string, unknown>) {
   // Same Benicia / regional-entry housekeeping as before, in case the
   // address-based filters above ever miss something.
   await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
+  // Drop rows whose *city* field is a neighboring town (the rectangular
+  // bbox bleeds into them). Anchored on ", <city> ," so a Martinez
+  // street like "Pacheco Blvd, Martinez" is NOT matched.
+  await sql`DELETE FROM places WHERE addy ~* ',\\s*(pleasant hill|pacheco|concord|walnut creek|lafayette|clyde|bay point|pittsburg|hercules|crockett|rodeo|antioch|benicia)\\s*,'`;
   const cityPattern = `^[[:space:]]*${escapeRegex(loc.short)}[[:space:]]*,`;
   await sql`DELETE FROM places WHERE addy ~* ${cityPattern}`;
   // And purge any chain rows already in the DB whose name matches the
