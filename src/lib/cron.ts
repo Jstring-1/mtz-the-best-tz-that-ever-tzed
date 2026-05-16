@@ -666,7 +666,9 @@ const OSM_GROUPS: Array<{ name: string; filters: string[] }> = [
     ],
   },
   { name: 'retail',
-    filters: ['nwr["shop"~"^(supermarket|greengrocer|books|clothes|gift|florist|jewelry|hardware|bicycle|art|deli|farm|wine|variety_store|second_hand)$"]'],
+    // Any shop=* except pure services / noise (car repair, salons,
+    // laundromats, vacant units, …). Chains are stripped by name later.
+    filters: ['nwr["shop"]["shop"!~"^(car_repair|car|car_parts|tyres|fuel|storage_rental|funeral_directors|trade|vacant|hairdresser|beauty|massage|tattoo|laundry|dry_cleaning|pawnbroker|bookmaker|e-cigarette|no)$"]'],
   },
 ];
 
@@ -798,7 +800,9 @@ async function osmPlaces(json: Record<string, unknown>) {
         // so the category is filterable ("restaurant", not "italian").
         // Cuisine is only a last-resort fallback.
         const rawCat = t.amenity || t.leisure || t.tourism || t.shop || t.cuisine || group.name;
-        const cats = String(rawCat).replace(/[_;]+/g, ' ').trim() + ', ';
+        // Tag with the OSM group so the UI filter is exact instead of
+        // regex-guessing: "<group>|<human label>".
+        const cats = `${group.name}|${String(rawCat).replace(/[_;]+/g, ' ').trim()}`;
         const lat = el.lat ?? el.center?.lat ?? null;
         const lon = el.lon ?? el.center?.lon ?? null;
         collected.push({ fsq_id: key, name, addy, cats, dist: null, images: '', lat, lon });

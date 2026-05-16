@@ -23,15 +23,24 @@ export interface Spot {
 
 type Group = 'all' | 'food' | 'parks' | 'retail' | 'rec';
 
-// Bucket a spot into a filter group from its kind + category tag text.
-// The Overpass scraper only ever pulls 3 kinds of place (food amenities,
-// rec/culture, retail shops) plus scraped parks — so we positively match
-// parks / retail / rec and treat *everything else* (incl. arbitrary
-// cuisine values like "spanish", "donut", "hot_dog") as food.
+// Category is stored as "<group>|<human label>" by the scraper. Split
+// it; tolerate legacy rows that have no "<group>|" prefix.
+function parseCat(cat?: string): { group?: Exclude<Group, 'all'>; label: string } {
+  if (!cat) return { label: '' };
+  const m = cat.match(/^(food|parks|rec|retail)\|([\s\S]*)$/i);
+  if (m) return { group: m[1].toLowerCase() as Exclude<Group, 'all'>, label: m[2].replace(/,\s*$/, '').trim() };
+  return { label: cat.split(',')[0].trim() };
+}
+
+// Bucket a spot into a filter group. Prefer the scraper's group tag;
+// parks are detected first (the scraper lumps OSM parks under "rec").
+// Legacy rows with no group tag fall back to keyword guessing.
 function classify(s: Spot): Exclude<Group, 'all'> {
   if (s.kind === 'park') return 'parks';
-  const c = (s.category ?? '').toLowerCase();
+  const { group, label } = parseCat(s.category);
+  const c = (label || s.category || '').toLowerCase();
   if (/\b(park|garden|nature.?reserve|playground|dog.?park|picnic)\b/.test(c)) return 'parks';
+  if (group) return group;
   if (/shop|store|supermarket|greengrocer|book|cloth|gift|florist|jewel|hardware|bicycle|\bwine\b|market|second.?hand|variety|grocery|pharmacy|boutique|antique/.test(c)) return 'retail';
   if (/museum|gallery|\bart\b|artwork|library|theat(re|er)|arts?.?cent|community.?cent|attraction|viewpoint|fitness|sports?.?cent|leisure.?cent|cinema|aquarium|\bzoo\b|monument|memorial|tourism|tourist/.test(c)) return 'rec';
   return 'food';
@@ -99,7 +108,7 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
               </span>
               <span className="sub">
                 {[
-                  s.category ? (s.category.split(',')[0] ?? '').trim() : '',
+                  parseCat(s.category).label,
                   shortAddr(s.address),
                   s.kind === 'park' && s.amenities && s.amenities.length
                     ? `${s.amenities.length} amenities`
@@ -155,7 +164,7 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
         {open && open.kind === 'place' && (
           <>
             {open.address && <div className="meta" style={{ marginBottom: 8 }}>{open.address}</div>}
-            {open.category && <div className="meta muted" style={{ marginBottom: 12 }}>{open.category.replace(/,\s*$/, '')}</div>}
+            {parseCat(open.category).label && <div className="meta muted" style={{ marginBottom: 12 }}>{parseCat(open.category).label}</div>}
             <MiniMap query={mapQuery(open)} />
             <p style={{ marginTop: 14 }}>
               <a
