@@ -405,8 +405,63 @@ function nextOccurrenceTs(month?: number, day?: number): number | null {
   if (thisYear * 1000 >= Date.now() - 24 * 3600 * 1000) return thisYear;
   return ptEpoch(y + 1, month - 1, useDay, 12, 0);
 }
+// Roxx on Main embeds its music calendar via an Elfsight Event Calendar
+// widget — the page HTML is just a shell, so the generic scraper finds
+// nothing. Elfsight's public "boot" endpoint returns the full widget
+// state as JSON; the events live at
+//   data.widgets[<widgetId>].data.settings.events[]
+const ROXX_WIDGET_ID = '5459f63e-6530-4372-9d5a-5758c19be835';
+
+interface ElfsightEvent {
+  id: string;
+  name?: string;
+  start?: { date?: string; time?: string };
+  end?: { date?: string; time?: string };
+  description?: string;
+  image?: { url?: string };
+  buttonLink?: { value?: string };
+  repeatPeriod?: string;
+}
+
+function elfDateToTs(date?: string, time?: string, defHour = 19): number | null {
+  const m = (date ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const [h, mn] = (time ?? '').split(':').map((n) => Number(n));
+  return ptEpoch(
+    Number(m[1]), Number(m[2]) - 1, Number(m[3]),
+    Number.isFinite(h) ? h : defHour,
+    Number.isFinite(mn) ? mn : 0,
+  );
+}
+
 async function scrapeRoxxOnMain(): Promise<LocalEvent[]> {
-  return scrapeGenericPage('https://www.roxxonmain.com/music-events', 'roxxonmain', 'Roxx on Main', 'Roxx on Main');
+  const pageUrl = 'https://www.roxxonmain.com/music-events';
+  const text = await safeFetch(`https://core.service.elfsight.com/p/boot/?w=${ROXX_WIDGET_ID}`);
+  if (!text) return [];
+  let j: { data?: { widgets?: Record<string, { data?: { settings?: { events?: ElfsightEvent[] } } }> } };
+  try { j = JSON.parse(text); } catch { return []; }
+  const events = j.data?.widgets?.[ROXX_WIDGET_ID]?.data?.settings?.events ?? [];
+  const out: LocalEvent[] = [];
+  for (const e of events) {
+    const start_at = elfDateToTs(e.start?.date, e.start?.time, 19);
+    if (start_at == null) continue;
+    const title = (decodeEntities(e.name || 'Event')
+      .replace(/^\s*ROXX\s+ON\s+MAIN\s+PRES[A-Z]*\s*:?\s*/i, '')
+      .trim()) || 'Event';
+    out.push({
+      id: `roxxonmain-${e.id}`,
+      source: 'roxxonmain',
+      source_label: 'Roxx on Main',
+      title,
+      start_at,
+      end_at: elfDateToTs(e.end?.date, e.end?.time, 22),
+      venue: 'Roxx on Main',
+      url: e.buttonLink?.value || pageUrl,
+      description: stripHtml(e.description || ''),
+      image: e.image?.url,
+    });
+  }
+  return out;
 }
 async function scrapeSlowHandBBQ(): Promise<LocalEvent[]> {
   return scrapeGenericPage('https://www.slowhandbbq.com/events', 'slowhand', 'Slow Hand BBQ', 'Slow Hand BBQ');
