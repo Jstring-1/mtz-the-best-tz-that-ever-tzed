@@ -7,7 +7,6 @@ import {
 import type { PlaceRow, NoaaAlert } from '@/lib/types';
 import AlertsCard from '@/components/AlertsCard';
 import NewsCard from '@/components/NewsCard';
-import QuakesCard, { type QuakeRow } from '@/components/QuakesCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
 import PlacesCard, { type Spot } from '@/components/PlacesCard';
 import PetsCard from '@/components/PetsCard';
@@ -52,13 +51,23 @@ export default async function MainPage() {
     pleaseNote: e.please_note ?? undefined,
   }));
 
-  const quakes: QuakeRow[] = storedQuakes.map((q) => ({
-    id: q.id,
-    magnitude: q.magnitude ?? null,
-    place: q.place,
-    occurred_at: q.occurred_at,
-    url: q.url ?? '',
-  }));
+  // Earthquakes now live inside the Events list (Local tab) with a
+  // distinct date color + magnitude tag. Most-recent first, ahead of
+  // the upcoming venue events.
+  const quakeEvents: UEvent[] = storedQuakes
+    .slice()
+    .sort((a, b) => b.occurred_at - a.occurred_at)
+    .map((q) => ({
+      id: `quake-${q.id ?? q.occurred_at}`,
+      title: q.place,
+      venue: q.place,
+      start_at: q.occurred_at,
+      url: q.url ?? undefined,
+      source: 'local',
+      source_label: 'USGS earthquake',
+      kind: 'quake',
+      magnitude: q.magnitude ?? null,
+    }));
 
   // Merge: parks first (alphabetical), then Foursquare places by distance.
   const placeRows: PlaceRow[] = places ?? [];
@@ -112,14 +121,13 @@ export default async function MainPage() {
 
   return (
     <div className="dashboard">
-      <EventsCard events={events}     tz={loc.timezone} />
+      <EventsCard events={[...quakeEvents, ...events]} tz={loc.timezone} />
       <NewsCard   items={feeds} />
       <PlacesCard spots={spots} />
       <PetsCard   pets={storedPets} />
       <div className="col-stack">
         <AlertsCard alerts={localAlerts} tz={loc.timezone} />
         <RadarCard  imgs={radarImgs} />
-        <QuakesCard quakes={quakes}    tz={loc.timezone} />
       </div>
     </div>
   );

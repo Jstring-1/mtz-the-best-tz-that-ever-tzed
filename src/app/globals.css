@@ -1149,6 +1149,20 @@ main { padding-top: var(--top-stack-h); display: block; }
 .event-row .name  { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .event-row .venue { grid-column: 2; font-size: .8em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Earthquake rows inside the events list */
+.event-row .when.quake { color: var(--accent-warm); }
+.event-row .quake-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: .82em;
+  font-weight: 700;
+  color: var(--accent-warm);
+  border: 1px solid var(--accent-warm);
+}
+
 /* Places */
 .place-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .place-row .sub  { font-size: .82em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

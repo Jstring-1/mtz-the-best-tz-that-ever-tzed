@@ -20,6 +20,8 @@ export interface UEvent {
   segment?: string;
   genre?: string;
   pleaseNote?: string;
+  kind?: 'quake';                // earthquakes get a distinct date color + tag
+  magnitude?: number | null;
 }
 
 type Tab = 'local' | 'municipal' | 'regional';
@@ -80,8 +82,15 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                 className="event-row clickable"
                 onClick={() => setOpen(e)}
               >
-                <span className="when">{e.start_at ? fmtDateShort(e.start_at * 1000, tz) : 'TBA'}</span>
-                <span className="name">{e.title}</span>
+                <span className={`when${e.kind === 'quake' ? ' quake' : ''}`}>
+                  {e.start_at ? fmtDateShort(e.start_at * 1000, tz) : 'TBA'}
+                </span>
+                <span className="name">
+                  {e.kind === 'quake' && e.magnitude != null && (
+                    <span className="quake-tag">M{e.magnitude.toFixed(1)}</span>
+                  )}
+                  {e.title}
+                </span>
                 <span className="venue">{e.source_label}{e.venue && e.venue !== e.source_label ? ` · ${e.venue}` : ''}</span>
               </button>
             ))}
