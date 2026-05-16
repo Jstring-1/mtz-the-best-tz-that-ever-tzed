@@ -985,6 +985,24 @@ main { padding-top: var(--top-stack-h); display: block; }
   border-color: var(--accent);
 }
 
+/* News / Events / Places / Pets are the direct card children (the
+   weather stack is .col-stack). Pin them to the viewport height and
+   scroll their list internally so all content is reachable without a
+   "Load more" button while the header stays put. */
+.dashboard > .card-section {
+  height: calc(100vh - var(--top-stack-h) - 28px);
+  overflow: hidden;
+}
+.dashboard > .card-section > h2 { flex: 0 0 auto; }
+.dashboard > .card-section > .stack-sm,
+.dashboard > .card-section > .pets-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
 /* Reusable clickable row inside any card. */
 .dashboard .clickable {
   display: flex; flex-direction: column;

@@ -115,12 +115,12 @@ export default async function MainPage() {
       <NewsCard   items={feeds} />
       <EventsCard events={events}     tz={loc.timezone} />
       <PlacesCard spots={spots} />
+      <PetsCard   pets={storedPets} />
       <div className="col-stack">
         <AlertsCard alerts={localAlerts} tz={loc.timezone} />
         <RadarCard  imgs={radarImgs} />
         <QuakesCard quakes={quakes}    tz={loc.timezone} />
       </div>
-      <PetsCard   pets={storedPets} />
     </div>
   );
 }

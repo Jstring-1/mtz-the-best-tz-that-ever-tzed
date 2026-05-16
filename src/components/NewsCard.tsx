@@ -5,12 +5,8 @@ import Modal from './Modal';
 import type { FeedRow } from '@/lib/types';
 import { relativeFromUnixSeconds } from '@/lib/time';
 
-const PAGE = 12;
-
 export default function NewsCard({ items }: { items: FeedRow[] }) {
   const [open, setOpen] = useState<FeedRow | null>(null);
-  const [shown, setShown] = useState(PAGE);
-  const remaining = Math.max(0, items.length - shown);
 
   return (
     <section className="card-section news-card">
@@ -20,7 +16,7 @@ export default function NewsCard({ items }: { items: FeedRow[] }) {
       ) : (
         <>
           <div className="stack-sm">
-            {items.slice(0, shown).map((f) => (
+            {items.map((f) => (
               <button
                 key={f.ts}
                 type="button"
@@ -32,13 +28,6 @@ export default function NewsCard({ items }: { items: FeedRow[] }) {
               </button>
             ))}
           </div>
-          {remaining > 0 && (
-            <button
-              type="button"
-              className="load-more"
-              onClick={() => setShown((n) => n + PAGE)}
-            >Load more ({remaining})</button>
-          )}
         </>
       )}
 

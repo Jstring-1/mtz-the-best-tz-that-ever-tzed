@@ -23,21 +23,18 @@ export interface UEvent {
 }
 
 type Tab = 'local' | 'municipal' | 'regional';
-const PAGE = 12;
 
 export default function EventsCard({ events, tz }: { events: UEvent[]; tz: string }) {
   const [open, setOpen] = useState<UEvent | null>(null);
   const [tab, setTab] = useState<Tab>('local');
-  const [shown, setShown] = useState(PAGE);
 
   const local     = events.filter((e) => e.source === 'local');
   const municipal = events.filter((e) => e.source === 'municipal');
   const regional  = events.filter((e) => e.source === 'ticketmaster');
   const list = tab === 'local' ? local : tab === 'municipal' ? municipal : regional;
-  const visible = list.slice(0, shown);
-  const remaining = Math.max(0, list.length - shown);
+  const visible = list;
 
-  const switchTab = (t: Tab) => { setTab(t); setShown(PAGE); };
+  const switchTab = (t: Tab) => setTab(t);
 
   return (
     <section className="card-section events-card">
@@ -54,17 +51,17 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
           <button
             type="button"
             role="tab"
-            aria-selected={tab === 'municipal'}
-            className={`event-tab ${tab === 'municipal' ? 'on' : ''}`}
-            onClick={() => switchTab('municipal')}
-          >Municipal <span className="count">{municipal.length}</span></button>
-          <button
-            type="button"
-            role="tab"
             aria-selected={tab === 'regional'}
             className={`event-tab ${tab === 'regional' ? 'on' : ''}`}
             onClick={() => switchTab('regional')}
           >Regional <span className="count">{regional.length}</span></button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'municipal'}
+            className={`event-tab ${tab === 'municipal' ? 'on' : ''}`}
+            onClick={() => switchTab('municipal')}
+          >Municipal <span className="count">{municipal.length}</span></button>
         </span>
       </h2>
       {list.length === 0 ? (
@@ -89,13 +86,6 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
               </button>
             ))}
           </div>
-          {remaining > 0 && (
-            <button
-              type="button"
-              className="load-more"
-              onClick={() => setShown((n) => n + PAGE)}
-            >Load more ({remaining})</button>
-          )}
         </>
       )}
 

@@ -20,25 +20,35 @@ export interface Pet {
   shelter: string | null;
 }
 
-const PAGE = 9;
-
 type Tab = 'all' | 'dog' | 'cat';
+
+// Round-robin interleave so the "All" view alternates species instead
+// of showing every cat (or dog) stacked on top.
+function interleaveBySpecies(pets: Pet[]): Pet[] {
+  const buckets = new Map<string, Pet[]>();
+  for (const p of pets) {
+    const k = (p.species ?? 'other').toLowerCase();
+    (buckets.get(k) ?? buckets.set(k, []).get(k)!).push(p);
+  }
+  const lists = [...buckets.values()];
+  const out: Pet[] = [];
+  for (let i = 0; out.length < pets.length; i++) {
+    for (const l of lists) if (i < l.length) out.push(l[i]);
+  }
+  return out;
+}
 
 export default function PetsCard({ pets }: { pets: Pet[] }) {
   const [open, setOpen] = useState<Pet | null>(null);
   const [tab, setTab] = useState<Tab>('all');
-  const [shown, setShown] = useState(PAGE);
 
-  const filtered = pets.filter((p) => {
-    if (tab === 'all') return true;
-    return (p.species ?? '').toLowerCase() === tab;
-  });
-  const visible = filtered.slice(0, shown);
-  const remaining = Math.max(0, filtered.length - shown);
+  const visible = tab === 'all'
+    ? interleaveBySpecies(pets)
+    : pets.filter((p) => (p.species ?? '').toLowerCase() === tab);
   const dogs = pets.filter((p) => (p.species ?? '').toLowerCase() === 'dog').length;
   const cats = pets.filter((p) => (p.species ?? '').toLowerCase() === 'cat').length;
 
-  const switchTab = (t: Tab) => { setTab(t); setShown(PAGE); };
+  const switchTab = (t: Tab) => setTab(t);
 
   return (
     <section className="card-section pets-card">
@@ -56,7 +66,7 @@ export default function PetsCard({ pets }: { pets: Pet[] }) {
           </button>
         </span>
       </h2>
-      {filtered.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="empty">No pets cached yet.</p>
       ) : (
         <>
@@ -79,11 +89,6 @@ export default function PetsCard({ pets }: { pets: Pet[] }) {
               </button>
             ))}
           </div>
-          {remaining > 0 && (
-            <button type="button" className="load-more" onClick={() => setShown((n) => n + PAGE)}>
-              Load more ({remaining})
-            </button>
-          )}
         </>
       )}
 

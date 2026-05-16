@@ -19,12 +19,8 @@ export interface Spot {
   url?: string;               // parks
 }
 
-const PAGE = 12;
-
 export default function PlacesCard({ spots }: { spots: Spot[] }) {
   const [open, setOpen] = useState<Spot | null>(null);
-  const [shown, setShown] = useState(PAGE);
-  const remaining = Math.max(0, spots.length - shown);
 
   return (
     <section className="card-section places-card">
@@ -34,7 +30,7 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
       ) : (
         <>
         <div className="stack-sm">
-          {spots.slice(0, shown).map((s) => (
+          {spots.map((s) => (
             <button
               key={s.id}
               type="button"
@@ -57,13 +53,6 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
             </button>
           ))}
         </div>
-        {remaining > 0 && (
-          <button
-            type="button"
-            className="load-more"
-            onClick={() => setShown((n) => n + PAGE)}
-          >Load more ({remaining})</button>
-        )}
         </>
       )}
 
