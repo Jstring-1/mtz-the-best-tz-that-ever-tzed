@@ -1003,6 +1003,23 @@ main { padding-top: var(--top-stack-h); display: block; }
   padding-right: 4px;
 }
 
+/* Dark-theme scrollbars for the scrollable columns (and anything else
+   that scrolls). Firefox uses scrollbar-color; WebKit/Chromium uses
+   the ::-webkit-scrollbar pseudo-elements. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+  border: 2px solid var(--bg-elev);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+::-webkit-scrollbar-corner { background: transparent; }
+
 /* Reusable clickable row inside any card. */
 .dashboard .clickable {
   display: flex; flex-direction: column;
