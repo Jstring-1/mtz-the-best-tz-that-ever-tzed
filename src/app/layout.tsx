@@ -18,9 +18,44 @@ export const revalidate = 0;
 
 export async function generateMetadata(): Promise<Metadata> {
   const loc = getLocation();
+  const siteUrl = (process.env.SITE_URL?.trim() || 'https://mtz.city').replace(/\/$/, '');
+  const title = `${loc.siteName} — ${loc.name} weather, news & events`;
+  const description =
+    `Hyperlocal dashboard for ${loc.name}: live weather and air quality, local news, ` +
+    `community & music events, adoptable pets, parks and places, and civic alerts — all on one page.`;
   return {
-    title: `${loc.siteName} — ${loc.name}`,
-    description: `Hyperlocal weather, news, events, places, and civic info for ${loc.name}.`,
+    metadataBase: new URL(siteUrl),
+    title: {
+      default: title,
+      template: `%s — ${loc.siteName}`,
+    },
+    description,
+    applicationName: loc.siteName,
+    keywords: [
+      loc.short, loc.name, `${loc.short} weather`, `${loc.short} news`,
+      `${loc.short} events`, `${loc.short} things to do`, `${loc.short} CA`,
+      'Contra Costa County', 'hyperlocal', 'community calendar', 'adoptable pets',
+    ],
+    category: 'news',
+    alternates: { canonical: '/' },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1 },
+    },
+    openGraph: {
+      type: 'website',
+      siteName: loc.siteName,
+      url: siteUrl,
+      title,
+      description,
+      locale: 'en_US',
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description,
+    },
   };
 }
 
