@@ -115,7 +115,7 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                 className="event-row clickable"
                 onClick={() => setOpen(e)}
               >
-                <span className={`when${e.kind === 'quake' ? ' quake' : ''}`}>
+                <span className={`when${e.kind === 'quake' ? ' when-quake' : ''}`}>
                   {e.start_at ? fmtDateShort(e.start_at * 1000, tz) : 'TBA'}
                 </span>
                 {e.kind === 'quake' ? (

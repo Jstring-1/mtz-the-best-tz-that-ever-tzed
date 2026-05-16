@@ -1168,7 +1168,7 @@ main { padding-top: var(--top-stack-h); display: block; }
 
 /* Earthquake rows render identically to normal event rows — the only
    difference is the date is red instead of gold. */
-.event-row .when.quake { color: crimson; }
+.event-row .when.when-quake { color: crimson; }
 
 /* Places */
 .place-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
