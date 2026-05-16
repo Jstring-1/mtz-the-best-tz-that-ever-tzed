@@ -656,7 +656,10 @@ async function foursquarePlaces(json: Record<string, unknown>) {
 // list below still strips chain brands by name pattern.
 const OSM_GROUPS: Array<{ name: string; filters: string[] }> = [
   { name: 'food',
-    filters: ['nwr["amenity"~"^(restaurant|cafe|bar|pub|bakery|biergarten|ice_cream)$"]'],
+    filters: [
+      'nwr["amenity"~"^(restaurant|cafe|bar|pub|bakery|biergarten|ice_cream)$"]',
+      'nwr["shop"~"^(deli)$"]',
+    ],
   },
   { name: 'rec',
     filters: [
@@ -666,9 +669,9 @@ const OSM_GROUPS: Array<{ name: string; filters: string[] }> = [
     ],
   },
   { name: 'retail',
-    // Any shop=* except pure services / noise (car repair, salons,
-    // laundromats, vacant units, …). Chains are stripped by name later.
-    filters: ['nwr["shop"]["shop"!~"^(car_repair|car|car_parts|tyres|fuel|storage_rental|funeral_directors|trade|vacant|hairdresser|beauty|massage|tattoo|laundry|dry_cleaning|pawnbroker|bookmaker|e-cigarette|no)$"]'],
+    // Curated to interesting specialty shops only: bikes, furniture,
+    // antiques/vintage, games, crafts/hobbies, record stores.
+    filters: ['nwr["shop"~"^(bicycle|furniture|antiques|games|video_games|craft|hobby|vintage|second_hand|music|collector)$"]'],
   },
 ];
 
