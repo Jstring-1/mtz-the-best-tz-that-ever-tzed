@@ -731,7 +731,9 @@ interface GPlace {
 async function googlePlaces(json: Record<string, unknown>) {
   const loc = getLocation();
   const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? '';
-  if (!apiKey) { console.warn('[places] no GOOGLE_PLACES_API_KEY set'); return; }
+  if (!apiKey) {
+    throw new Error('GOOGLE_PLACES_API_KEY env var is not set (check the exact name in Railway)');
+  }
   // Ensure the last_seen column exists before we touch it — otherwise
   // an early return on an empty result blows up on the DELETE below.
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()`;
@@ -762,7 +764,9 @@ async function googlePlaces(json: Record<string, unknown>) {
         cache: 'no-store',
       });
       if (!r.ok) {
-        console.warn(`[places] google ${group.name}: HTTP ${r.status}`);
+        const errBody = (await r.text().catch(() => '')).slice(0, 300);
+        console.warn(`[places] google ${group.name}: HTTP ${r.status} ${errBody}`);
+        debugRaw[group.name] = { httpStatus: r.status, error: errBody };
         continue;
       }
       const j = await r.json() as { places?: GPlace[] };
@@ -793,6 +797,10 @@ async function googlePlaces(json: Record<string, unknown>) {
     }
   }
   json.google_places = { scrapedAt, totals: debugRaw, count: collected.length };
+
+  if (!collected.length) {
+    throw new Error(`google places returned 0 usable rows — ${JSON.stringify(debugRaw)}`);
+  }
 
   if (collected.length) {
     await upsertPlaces(collected);
