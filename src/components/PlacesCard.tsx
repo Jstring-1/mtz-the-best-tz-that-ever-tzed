@@ -19,6 +19,15 @@ export interface Spot {
   url?: string;               // parks
 }
 
+// Drop the ", Martinez, CA, 94553" city/state/zip tail — every place is
+// in downtown Martinez, so only the street line is useful.
+function shortAddr(a?: string): string {
+  if (!a) return '';
+  const i = a.search(/\bMartinez\b/i);
+  const head = i >= 0 ? a.slice(0, i) : a;
+  return head.replace(/[,\s]+$/, '').trim();
+}
+
 export default function PlacesCard({ spots }: { spots: Spot[] }) {
   const [open, setOpen] = useState<Spot | null>(null);
 
@@ -42,13 +51,13 @@ export default function PlacesCard({ spots }: { spots: Spot[] }) {
                 {s.name}
               </span>
               <span className="sub">
-                {s.address ?? ''}
-                {s.category
-                  ? `${s.address ? ' · ' : ''}${(s.category.split(',')[0] ?? '').trim()}`
-                  : ''}
-                {s.kind === 'park' && s.amenities && s.amenities.length
-                  ? `${s.address ? ' · ' : ''}${s.amenities.length} amenities`
-                  : ''}
+                {[
+                  s.category ? (s.category.split(',')[0] ?? '').trim() : '',
+                  shortAddr(s.address),
+                  s.kind === 'park' && s.amenities && s.amenities.length
+                    ? `${s.amenities.length} amenities`
+                    : '',
+                ].filter(Boolean).join(' · ')}
               </span>
             </button>
           ))}

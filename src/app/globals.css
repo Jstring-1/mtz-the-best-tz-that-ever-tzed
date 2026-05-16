@@ -30,6 +30,7 @@
   --strip-h:      28px;
   --row2-h:       26px;
   --top-stack-h:  calc(var(--strip-h) + var(--row2-h));
+  --ftr-h:        20px;
   --maxw:         1400px;
 
   /* Weather data palette — one color per data point, used site-wide.
@@ -732,12 +733,14 @@ main { padding-top: var(--top-stack-h); display: block; }
 /* --- Site footer ------------------------------------------------------- */
 
 .site-ftr {
-  border-top: 1px solid var(--border);
-  padding: 24px;
-  font-size: .8em;
+  height: var(--ftr-h);
+  line-height: var(--ftr-h);
+  padding: 0 12px;
+  font-size: .7em;
   color: var(--text-muted);
   text-align: center;
   font-family: var(--mono);
+  overflow: hidden;
 }
 
 
@@ -928,10 +931,14 @@ main { padding-top: var(--top-stack-h); display: block; }
 
 .dashboard {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
   padding: 14px;
   align-items: start;
+  /* Fill exactly the space between the fixed top strips and the footer
+     so the page itself never scrolls — only the columns do. */
+  height: calc(100vh - var(--top-stack-h) - var(--ftr-h));
+  overflow: hidden;
 }
 
 /* Wrapper for stacking multiple cards inside one grid column. */
@@ -939,6 +946,8 @@ main { padding-top: var(--top-stack-h); display: block; }
   display: flex; flex-direction: column;
   gap: 14px;
   min-width: 0;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .dashboard .card-section {
@@ -990,7 +999,7 @@ main { padding-top: var(--top-stack-h); display: block; }
    scroll their list internally so all content is reachable without a
    "Load more" button while the header stays put. */
 .dashboard > .card-section {
-  height: calc(100vh - var(--top-stack-h) - 28px);
+  height: 100%;
   overflow: hidden;
 }
 .dashboard > .card-section > h2 { flex: 0 0 auto; }
