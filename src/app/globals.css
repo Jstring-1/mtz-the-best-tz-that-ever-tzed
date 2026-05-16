@@ -1166,36 +1166,30 @@ main { padding-top: var(--top-stack-h); display: block; }
 .event-row .name  { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .event-row .venue { grid-column: 2; font-size: .8em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Earthquake rows inside the events list */
-.event-row .when.quake { color: var(--accent-warm); }
-.event-row .quake-tag {
+/* Earthquake rows inside the events list. Same 2-col grid as a normal
+   event: date in col 1, magnitude tag in col 1-row-1's sibling cell,
+   location wrapping on the second row. */
+.event-row .when.quake { color: var(--accent-warm); align-self: center; }
+.event-row .name .quake-tag {
   display: inline-block;
-  margin-right: 6px;
   padding: 0 5px;
   border-radius: 3px;
   font-family: var(--mono);
-  font-size: .82em;
+  font-size: .8em;
   font-weight: 700;
+  line-height: 1.5;
   color: var(--accent-warm);
   border: 1px solid var(--accent-warm);
 }
-/* Quake cell: magnitude tag, then the location wrapping below it. */
-.event-row .name.quake-name {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  overflow: visible;
-  white-space: normal;
-}
-.event-row .name.quake-name .quake-tag { margin-right: 0; }
-.event-row .quake-place {
-  font-weight: 400;
-  font-size: .85em;
+/* Location: wrap fully, not truncated/muted like a normal venue. */
+.event-row .venue.quake-place {
+  font-size: .82em;
   color: var(--text);
   white-space: normal;
   overflow: visible;
+  text-overflow: clip;
   line-height: 1.35;
+  padding-top: 1px;
 }
 
 /* Places */

@@ -119,10 +119,12 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                   {e.start_at ? fmtDateShort(e.start_at * 1000, tz) : 'TBA'}
                 </span>
                 {e.kind === 'quake' ? (
-                  <span className="name quake-name">
-                    <span className="quake-tag">M{e.magnitude != null ? e.magnitude.toFixed(1) : '—'}</span>
-                    <span className="quake-place">{e.venue}</span>
-                  </span>
+                  <>
+                    <span className="name">
+                      <span className="quake-tag">M{e.magnitude != null ? e.magnitude.toFixed(1) : '—'}</span>
+                    </span>
+                    <span className="venue quake-place">{e.venue}</span>
+                  </>
                 ) : (
                   <>
                     <span className="name">{e.title}</span>
