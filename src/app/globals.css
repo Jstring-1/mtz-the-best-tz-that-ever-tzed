@@ -950,6 +950,23 @@ main { padding-top: var(--top-stack-h); display: block; }
   overflow-y: auto;
 }
 
+/* Mobile: the viewport-lock (each column a short scroll box) makes the
+   single stacked column unreadable. Let the page scroll normally and
+   give each card a tall, content-driven height (capped so a 900-row
+   list doesn't make an endless page — it still scrolls inside). */
+@media (max-width: 768px) {
+  .dashboard {
+    height: auto;
+    overflow: visible;
+    grid-template-columns: 1fr;
+  }
+  .dashboard .col-stack { height: auto; overflow: visible; }
+  .dashboard > .card-section {
+    height: auto;
+    max-height: 80vh;
+  }
+}
+
 .dashboard .card-section {
   background: var(--bg-elev);
   border: 1px solid var(--border);
