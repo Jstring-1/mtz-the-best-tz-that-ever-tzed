@@ -24,13 +24,17 @@ export interface Spot {
 type Group = 'all' | 'food' | 'parks' | 'retail' | 'rec';
 
 // Bucket a spot into a filter group from its kind + category tag text.
+// The Overpass scraper only ever pulls 3 kinds of place (food amenities,
+// rec/culture, retail shops) plus scraped parks — so we positively match
+// parks / retail / rec and treat *everything else* (incl. arbitrary
+// cuisine values like "spanish", "donut", "hot_dog") as food.
 function classify(s: Spot): Exclude<Group, 'all'> {
   if (s.kind === 'park') return 'parks';
   const c = (s.category ?? '').toLowerCase();
   if (/\b(park|garden|nature.?reserve|playground|dog.?park|picnic)\b/.test(c)) return 'parks';
-  if (/restaurant|cafe|coffee|\bbar\b|\bpub\b|bakery|biergarten|ice.?cream|deli|diner|bistro|tavern|eatery|grill|food|fast.?food|cuisine|brew|pizza|sushi|burger|sandwich|taco|bbq|barbecue|noodle|ramen|thai|mexican|italian|chinese|indian|japanese|vietnamese|korean|mediterranean|greek|american|seafood|steak|breakfast|brunch|kitchen/.test(c)) return 'food';
-  if (/shop|store|supermarket|greengrocer|book|cloth|gift|florist|jewel|hardware|bicycle|wine|market|second.?hand|variety|grocery|pharmacy|boutique|antique/.test(c)) return 'retail';
-  return 'rec';   // museums, galleries, libraries, theatres, fitness, etc.
+  if (/shop|store|supermarket|greengrocer|book|cloth|gift|florist|jewel|hardware|bicycle|\bwine\b|market|second.?hand|variety|grocery|pharmacy|boutique|antique/.test(c)) return 'retail';
+  if (/museum|gallery|\bart\b|artwork|library|theat(re|er)|arts?.?cent|community.?cent|attraction|viewpoint|fitness|sports?.?cent|leisure.?cent|cinema|aquarium|\bzoo\b|monument|memorial|tourism|tourist/.test(c)) return 'rec';
+  return 'food';
 }
 
 // Drop the ", Martinez, CA, 94553" city/state/zip tail — only the
