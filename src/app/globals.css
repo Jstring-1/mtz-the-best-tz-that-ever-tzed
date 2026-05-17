@@ -1252,6 +1252,13 @@ main { padding-top: var(--top-stack-h); display: block; }
 .alerts-card .card.alert.local.clickable:hover { background: #220a0a; }
 .alerts-card .card.alert.local.clickable h3 { margin: 0 0 4px; font-size: 1em; }
 .alerts-card .card.alert.local.clickable .meta { font-size: .82em; color: var(--text-muted); }
+/* Keep alert rows concise — clamp the headline to two lines. */
+.alerts-card .alert-headline {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* Radar grid + thumbs */
 .radar-card .radar-grid {

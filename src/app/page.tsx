@@ -2,10 +2,10 @@ import { getLocation } from '@/lib/location';
 import { getFeeds, getMisc, getPlaces } from '@/lib/cache';
 import {
   listUpcomingEvents, listParks, listActiveAlerts,
-  listAvailablePets,
+  listAvailablePets, listRecentQuakes,
 } from '@/lib/store';
 import type { PlaceRow, NoaaAlert } from '@/lib/types';
-import AlertsCard from '@/components/AlertsCard';
+import AlertsCard, { type QuakeLite } from '@/components/AlertsCard';
 import NewsCard from '@/components/NewsCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
 import PlacesCard, { type Spot } from '@/components/PlacesCard';
@@ -20,16 +20,28 @@ export default async function MainPage() {
 
   const [
     storedEvents, storedParks, storedAlerts,
-    storedPets, feeds, misc, places,
+    storedPets, storedQuakes, feeds, misc, places,
   ] = await Promise.all([
     listUpcomingEvents(),
     listParks(),
     listActiveAlerts(),
     listAvailablePets(),
+    listRecentQuakes(10),
     getFeeds(120),
     getMisc(),
     getPlaces(),
   ]);
+
+  const quakeAlerts: QuakeLite[] = storedQuakes
+    .slice()
+    .sort((a, b) => b.occurred_at - a.occurred_at)
+    .map((q) => ({
+      id: q.id,
+      magnitude: q.magnitude ?? null,
+      place: q.place,
+      occurred_at: q.occurred_at,
+      url: q.url ?? '',
+    }));
 
   // Map structured rows back into the UI shapes the cards already expect.
   const events: UEvent[] = storedEvents.map((e) => ({
@@ -114,7 +126,7 @@ export default async function MainPage() {
       <PlacesCard spots={spots} />
       <PetsCard   pets={storedPets} />
       <div className="col-stack">
-        <AlertsCard alerts={localAlerts} tz={loc.timezone} />
+        <AlertsCard alerts={localAlerts} quakes={quakeAlerts} tz={loc.timezone} />
         <RadarCard  imgs={radarImgs} />
       </div>
     </div>

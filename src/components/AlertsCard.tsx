@@ -3,6 +3,15 @@
 import { useState } from 'react';
 import Modal from './Modal';
 import type { NoaaAlert } from '@/lib/types';
+import { relativeFromUnixSeconds } from '@/lib/time';
+
+export interface QuakeLite {
+  id?: string;
+  magnitude: number | null;
+  place: string;
+  occurred_at: number;
+  url: string;
+}
 
 function fmtEpoch(sec?: number, tz = 'America/Los_Angeles'): string {
   if (!sec) return '';
@@ -12,26 +21,44 @@ function fmtEpoch(sec?: number, tz = 'America/Los_Angeles'): string {
   });
 }
 
-export default function AlertsCard({ alerts, tz }: { alerts: NoaaAlert[]; tz: string }) {
+export default function AlertsCard({
+  alerts, quakes = [], tz,
+}: { alerts: NoaaAlert[]; quakes?: QuakeLite[]; tz: string }) {
   const [open, setOpen] = useState<NoaaAlert | null>(null);
+  const [openQuake, setOpenQuake] = useState<QuakeLite | null>(null);
+  const total = alerts.length + quakes.length;
 
   return (
     <section className="card-section alerts-card">
-      <h2>Active alerts <span className="count">{alerts.length}</span></h2>
-      {alerts.length === 0 ? (
+      <h2>Active alerts <span className="count">{total}</span></h2>
+      {total === 0 ? (
         <p className="empty">No active local alerts.</p>
       ) : (
         <div className="stack-sm">
           {alerts.map((a, i) => (
             <button
-              key={i}
+              key={`a-${i}`}
               type="button"
               className="card alert local clickable"
               onClick={() => setOpen(a)}
             >
               <h3 style={{ color: 'gold' }}>{a.event ?? 'Alert'}</h3>
-              {a.NWSheadline && <div className="meta">{a.NWSheadline}</div>}
-              {a.severity && <div className="meta muted">{a.severity}{a.urgency ? ` · ${a.urgency}` : ''}</div>}
+              {a.NWSheadline && <div className="meta alert-headline">{a.NWSheadline}</div>}
+            </button>
+          ))}
+          {quakes.map((q, i) => (
+            <button
+              key={`q-${q.id ?? i}`}
+              type="button"
+              className="card alert local clickable"
+              onClick={() => setOpenQuake(q)}
+            >
+              <h3 style={{ color: 'gold' }}>
+                M{q.magnitude != null ? q.magnitude.toFixed(1) : '—'} Earthquake
+              </h3>
+              <div className="meta alert-headline">
+                {q.place} · {relativeFromUnixSeconds(q.occurred_at)}
+              </div>
             </button>
           ))}
         </div>
@@ -51,6 +78,31 @@ export default function AlertsCard({ alerts, tz }: { alerts: NoaaAlert[]; tz: st
               )}
             </div>
             {open.description && <p style={{ whiteSpace: 'pre-line', marginTop: 14, lineHeight: 1.5 }}>{open.description}</p>}
+          </>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!openQuake}
+        onClose={() => setOpenQuake(null)}
+        title={openQuake ? `M${openQuake.magnitude != null ? openQuake.magnitude.toFixed(1) : '—'} earthquake` : 'Earthquake'}
+        size="lg"
+      >
+        {openQuake && (
+          <>
+            <div className="meta" style={{ marginBottom: 10 }}><b>{openQuake.place}</b></div>
+            <div className="meta" style={{ marginBottom: 10 }}>
+              {fmtEpoch(openQuake.occurred_at, tz)} · {relativeFromUnixSeconds(openQuake.occurred_at)}
+            </div>
+            {openQuake.url && (
+              <a
+                className="event-modal-btn primary"
+                href={openQuake.url}
+                target="_blank"
+                rel="noopener"
+                style={{ marginTop: 14, display: 'inline-block' }}
+              >USGS event page →</a>
+            )}
           </>
         )}
       </Modal>
