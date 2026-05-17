@@ -705,6 +705,92 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// ----- Martinez Farmers Market — recurring weekly ----------------------
+// Year-round Sunday market on Main St, 9 AM–1 PM. Project the next N
+// Sundays (same as the Luigi recurring approach).
+const FARMERS_WEEKS_AHEAD = 8;
+async function farmersMarketRecurring(): Promise<LocalEvent[]> {
+  const out: LocalEvent[] = [];
+  const todayPT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  for (let w = 0; w < FARMERS_WEEKS_AHEAD; w++) {
+    const sun = nextWeekday(todayPT, 0, w);   // Sundays
+    out.push({
+      id: `farmers-${ymd(sun)}`,
+      source: 'farmers',
+      source_label: 'Martinez Farmers Market',
+      title: 'Martinez Farmers Market',
+      start_at: ptEpoch(sun.getFullYear(), sun.getMonth(), sun.getDate(), 9, 0),
+      end_at:   ptEpoch(sun.getFullYear(), sun.getMonth(), sun.getDate(), 13, 0),
+      venue: 'Main Street, Martinez, CA',
+      url: 'https://www.pcfma.org/martinez',
+      description: 'Year-round Sunday farmers market on Main Street, 9 AM – 1 PM.',
+    });
+  }
+  return out;
+}
+
+// ----- Martinez Chamber of Commerce calendar (ChamberMaster) -----------
+// ASP.NET WebForms calendar grid. Each event start day is a
+// <div id="ccaId_divEvtInfo<MMDD>_<evtid>" class="… ccaFromDate …">
+// block containing the title link + a time; the year comes from the
+// adjacent btnEvtDate<YYYYMMDD> day buttons. Continuation days
+// (ccaContinuedDate) are skipped so multi-day events aren't duplicated.
+const CHAMBER_URL = 'https://cca.martinezchamber.com/EvtListingMainSearch.aspx?dbid2=CAMART&class=B';
+
+function parseClock(s: string): { h: number; m: number } | null {
+  const m = s.match(/(\d{1,2})(?::(\d{2}))?\s*([AaPp])\.?[Mm]/);
+  if (!m) return null;
+  let h = Number(m[1]) % 12;
+  if (/p/i.test(m[3])) h += 12;
+  return { h, m: m[2] ? Number(m[2]) : 0 };
+}
+
+async function scrapeMartinezChamber(): Promise<LocalEvent[]> {
+  const html = await safeFetch(CHAMBER_URL);
+  if (!html) return [];
+  const dateMap = new Map<string, string>();   // "MMDD" -> "YYYYMMDD"
+  const dRe = /btnEvtDate(\d{4})(\d{2})(\d{2})/g;
+  let dm: RegExpExecArray | null;
+  while ((dm = dRe.exec(html))) dateMap.set(dm[2] + dm[3], dm[1] + dm[2] + dm[3]);
+
+  const out: LocalEvent[] = [];
+  const seen = new Set<string>();
+  const parts = html.split(/<div id="ccaId_divEvtInfo(\d{2})(\d{2})_(\d+)"/);
+  for (let i = 1; i + 3 < parts.length; i += 4) {
+    const mm = parts[i], dd = parts[i + 1], evtid = parts[i + 2];
+    const block = parts[i + 3].slice(0, 1500);
+    if (!/^[^>]*ccaFromDate/.test(block)) continue;   // start day only
+    if (seen.has(evtid)) continue;
+    const a = block.match(/ccaEvtName[^>]*>\s*<a href="([^"]+)">([\s\S]*?)<\/a>/i);
+    if (!a) continue;
+    const ymdStr = dateMap.get(mm + dd);
+    if (!ymdStr) continue;
+    const y = Number(ymdStr.slice(0, 4));
+    const mo = Number(ymdStr.slice(4, 6)) - 1;
+    const da = Number(ymdStr.slice(6, 8));
+    const tm = block.match(/ccaEvtTime[^>]*>([^<]*)</i);
+    const clock = parseClock(tm ? tm[1] : '');
+    const href = a[1].replace(/&amp;/g, '&');
+    const url = /^https?:/i.test(href)
+      ? href
+      : `https://cca.martinezchamber.com/${href.replace(/^\//, '')}`;
+    const title = stripHtml(a[2]);
+    if (!title) continue;
+    seen.add(evtid);
+    out.push({
+      id: `martinezchamber-${evtid}`,
+      source: 'martinezchamber',
+      source_label: 'Martinez Chamber',
+      title,
+      start_at: ptEpoch(y, mo, da, clock?.h ?? 9, clock?.m ?? 0),
+      end_at: null,
+      venue: 'Martinez, CA',
+      url,
+    });
+  }
+  return out;
+}
+
 // ----- public entry ----------------------------------------------------
 
 const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
@@ -718,6 +804,8 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
   ['countybbq',      scrapeCountyBBQ],
   ['martinezmartini', scrapeMartinezMartini],
   ['luigi',          luigiRecurring],
+  ['farmers',        farmersMarketRecurring],
+  ['martinezchamber', scrapeMartinezChamber],
   ['contracosta',    scrapeContraCosta],
 ];
 
