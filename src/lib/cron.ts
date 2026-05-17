@@ -648,34 +648,43 @@ async function foursquarePlaces(json: Record<string, unknown>) {
   await sql`DELETE FROM places WHERE addy ~* ${cityPattern}`;
 }
 
-// OpenStreetMap via the Overpass API — free, no key, no billing.
-// Each group is a set of Overpass tag filters; we union them inside a
-// single bbox-scoped query. `out center tags` returns a representative
-// lat/lon for ways/relations plus the tag dictionary.
-//
-// food deliberately omits amenity=fast_food; rec covers parks /
-// recreation / culture; retail is a curated shop whitelist so we don't
-// drag in every gas station and phone-repair kiosk. The CHAIN_NAMES
-// list below still strips chain brands by name pattern.
-const OSM_GROUPS: Array<{ name: string; filters: string[] }> = [
-  { name: 'food',
-    filters: [
-      'nwr["amenity"~"^(restaurant|cafe|bar|pub|bakery|biergarten|ice_cream)$"]',
-      'nwr["shop"~"^(deli)$"]',
-    ],
-  },
-  { name: 'rec',
-    filters: [
-      'nwr["leisure"~"^(park|garden|nature_reserve|playground|sports_centre|fitness_centre)$"]',
-      'nwr["tourism"~"^(museum|gallery|attraction|artwork|viewpoint)$"]',
-      'nwr["amenity"~"^(library|theatre|arts_centre|community_centre)$"]',
-    ],
-  },
-  { name: 'retail',
-    // Curated to interesting specialty shops only: bikes, furniture,
-    // antiques/vintage, games, crafts/hobbies, record stores.
-    filters: ['nwr["shop"~"^(bicycle|furniture|antiques|games|video_games|craft|hobby|vintage|second_hand|music|collector)$"]'],
-  },
+// Curated Places list. We no longer sweep every POI — instead we look
+// up this hand-picked set by name in OpenStreetMap (Overpass) to pull
+// address / category / coordinates, and still list an entry even when
+// OSM has no match (the UI falls back to a name-based map). `q` is the
+// case-insensitive OSM name regex; `group` drives the UI filter;
+// `label` is the category text shown under the name.
+// ("All Parks" isn't here — Martinez city parks come from the parks
+// scraper and are merged into Places separately.)
+type CuratedGroup = 'food' | 'retail' | 'rec' | 'parks';
+const CURATED_PLACES: Array<{ name: string; group: CuratedGroup; label: string; q: string }> = [
+  { name: 'States Coffee',            group: 'food',   label: 'Coffee',          q: 'States Coffee' },
+  { name: 'Devine Records',           group: 'retail', label: 'Record store',    q: 'Devine Record' },
+  { name: 'Martinez Museum',          group: 'rec',    label: 'Museum',          q: 'Martinez Museum' },
+  { name: 'Main Street Arts Gallery', group: 'rec',    label: 'Art gallery',     q: 'Main Street Arts' },
+  { name: 'Carquinez Regional Shoreline', group: 'parks', label: 'Regional shoreline', q: 'Carquinez.*Shoreline' },
+  { name: 'Busywork Craft Supply',    group: 'retail', label: 'Craft supply',    q: 'Busywork' },
+  { name: 'La Primavera',             group: 'food',   label: 'Restaurant',      q: 'La Primavera' },
+  { name: 'Bar Cava',                 group: 'food',   label: 'Bar',             q: 'Bar Cava' },
+  { name: 'Sisaket Thai Kitchen',     group: 'food',   label: 'Thai restaurant', q: 'Sisaket' },
+  { name: 'Del Cielo Brewing Co',     group: 'food',   label: 'Brewery',         q: 'Del Cielo' },
+  { name: 'Cinco de Mayo',            group: 'food',   label: 'Mexican restaurant', q: 'Cinco de Mayo' },
+  { name: 'Roxx on Main',             group: 'food',   label: 'Bar / live music', q: 'Roxx' },
+  { name: 'Sunflower Garden',         group: 'food',   label: 'Restaurant',      q: 'Sunflower Garden' },
+  { name: 'Copper Skillet',           group: 'food',   label: 'Restaurant',      q: 'Copper Skillet' },
+  { name: 'Slow Hand BBQ',            group: 'food',   label: 'BBQ',             q: 'Slow Hand' },
+  { name: 'LC Galleries',             group: 'rec',    label: 'Gallery',         q: 'LC Galler' },
+  { name: 'Martinez Library',         group: 'rec',    label: 'Library',         q: 'Martinez Library|Contra Costa County Library' },
+  { name: 'Attic Child',              group: 'retail', label: 'Furniture / vintage', q: 'Attic Child' },
+  { name: 'Ember Rest',               group: 'food',   label: 'Restaurant',      q: 'Ember Rest' },
+  { name: 'The Spotted Cow',          group: 'food',   label: 'Restaurant',      q: 'Spotted Cow' },
+  { name: 'Barrelista Coffee House',  group: 'food',   label: 'Coffee house',    q: 'Barrelista' },
+  { name: 'Troy Greek',               group: 'food',   label: 'Greek restaurant', q: "Troy.?s? Greek|Troy Greek" },
+  { name: 'Martinez Athletic Club',   group: 'rec',    label: 'Athletic club',   q: 'Martinez Athletic' },
+  { name: "Luigi's Deli",             group: 'food',   label: 'Deli',            q: 'Luigi' },
+  { name: 'Campbell Theater',         group: 'rec',    label: 'Theater',         q: 'Campbell Theat' },
+  { name: 'Pegasus Bicycle Works',    group: 'retail', label: 'Bicycle shop',    q: 'Pegasus Bicycle' },
+  { name: 'Five Suns Brewing',        group: 'food',   label: 'Brewery',         q: 'Five Suns|5 Suns|5 Sons' },
 ];
 
 // Polygon tracing the Martinez city footprint (the hand-drawn boundary:
@@ -700,44 +709,6 @@ const MARTINEZ_POLY: Array<[number, number]> = [
 ];
 const MARTINEZ_POLY_STR = MARTINEZ_POLY.map(([la, lo]) => `${la} ${lo}`).join(' ');
 
-// Name-pattern blocklist for chains that slip past the type filter
-// (most coffee + casual-dining chains aren't tagged "fast_food").
-// Each entry is matched case-insensitively against the place name as
-// a substring, so "McDonald's #4287" still gets caught.
-const CHAIN_NAMES: string[] = [
-  // Burger / fast food
-  "McDonald's", 'Burger King', "Wendy's", 'KFC', 'Taco Bell',
-  'In-N-Out', "Carl's Jr", 'Jack in the Box', "Arby's", 'Sonic',
-  'Five Guys', "Chick-fil-A", 'Popeyes', 'White Castle', 'Hardee',
-  'Panda Express', 'Chipotle', 'Habit Burger', 'El Pollo Loco',
-  // Sandwiches / sub chains
-  'Subway', "Jimmy John's", 'Jersey Mike', 'Quiznos', "Togo's",
-  'Panera', "Au Bon Pain", "McAlister's",
-  // Pizza chains
-  'Pizza Hut', "Domino's", "Papa John's", 'Little Caesars',
-  'Round Table', 'Mountain Mike', "Sbarro", "Papa Murphy's",
-  // Coffee / drink chains
-  'Starbucks', "Peet's Coffee", 'Dunkin', 'Coffee Bean', "Tully's",
-  'Boba Guys', "Philz",
-  // Casual / chain dining
-  'Applebee', "Chili's", 'TGI Friday', 'Olive Garden', 'IHOP',
-  "Denny's", "BJ's Restaurant", 'Buffalo Wild Wings', 'Black Angus',
-  'Outback Steakhouse', 'Red Lobster', 'Red Robin', 'Cheesecake Factory',
-  "Hooters", 'Cracker Barrel', 'P.F. Chang', 'California Pizza Kitchen',
-  // Dessert / ice cream chains
-  'Dairy Queen', 'Cold Stone', 'Baskin-Robbins', "Ben & Jerry's",
-  '31 Flavors', 'Yogurtland',
-  // Convenience / grocery chains
-  '7-Eleven', 'AM/PM', 'Circle K', 'Walmart', 'Target',
-  'Safeway', 'Trader Joe', 'Whole Foods', 'Costco', 'Lucky',
-  // Pharmacy chains
-  'CVS', 'Walgreens', 'Rite Aid',
-];
-const CHAIN_RE = new RegExp(
-  CHAIN_NAMES.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
-  'i',
-);
-
 interface OsmEl {
   type: 'node' | 'way' | 'relation';
   id: number;
@@ -753,109 +724,104 @@ const OVERPASS_ENDPOINTS = [
 ];
 
 async function osmPlaces(json: Record<string, unknown>) {
-  const loc = getLocation();
   // Ensure the last_seen column exists before we touch it — otherwise
   // an early return on an empty result blows up on the DELETE below.
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()`;
 
   const scrapedAt = new Date().toISOString();
-  const collected: Array<{ fsq_id: string; name: string; addy: string; cats: string; dist: number | null; images: string; lat: number | null; lon: number | null }> = [];
-  const seen = new Set<string>();
-  const debugRaw: Record<string, unknown> = {};
-
   const poly = MARTINEZ_POLY_STR;
 
-  for (const group of OSM_GROUPS) {
-    const q = `[out:json][timeout:25];(${group.filters.map((f) => `${f}(poly:"${poly}");`).join('')});out center tags;`;
-    try {
-      let r: Response | null = null;
-      for (const ep of OVERPASS_ENDPOINTS) {
-        r = await fetch(ep, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': 'mtz.city/1.0 (hyperlocal dashboard; contact via github.com/Jstring-1)',
-          },
-          body: 'data=' + encodeURIComponent(q),
-          cache: 'no-store',
-        });
-        if (r.ok) break;
-      }
-      if (!r || !r.ok) {
-        const errBody = r ? (await r.text().catch(() => '')).slice(0, 300) : 'no response';
-        console.warn(`[places] osm ${group.name}: HTTP ${r?.status} ${errBody}`);
-        debugRaw[group.name] = { httpStatus: r?.status ?? 0, error: errBody };
-        continue;
-      }
-      const j = await r.json() as { elements?: OsmEl[] };
-      debugRaw[group.name] = { count: j.elements?.length ?? 0 };
-      for (const el of j.elements ?? []) {
-        const t = el.tags ?? {};
-        const name = (t.name ?? '').trim();
-        if (!name) continue;
-        const key = `osm-${el.type}-${el.id}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        // Chain blocklist — strips national brands by name pattern.
-        if (CHAIN_RE.test(name)) continue;
-        // The bbox is a rectangle, so it bleeds into neighboring towns
-        // (Pleasant Hill, Pacheco, Concord, …). Keep only entries whose
-        // OSM city tag is Martinez — or has no city tag at all (lots of
-        // POIs omit it; those are still inside the box and usually MTZ).
-        const city = (t['addr:city'] ?? '').trim();
-        if (city && !/\bmartinez\b/i.test(city)) continue;
-        const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ').trim();
-        // Only build an address when we have a real street line — a
-        // bare "Martinez, CA" would trip the city-prefix housekeeping
-        // DELETE and wipe parks that carry no street address.
-        const addy = street
-          ? [street, city || loc.short, t['addr:state'], t['addr:postcode']].filter(Boolean).join(', ')
-          : '';
-        // Prefer the structural OSM type (amenity/leisure/tourism/shop)
-        // so the category is filterable ("restaurant", not "italian").
-        // Cuisine is only a last-resort fallback.
-        const rawCat = t.amenity || t.leisure || t.tourism || t.shop || t.cuisine || group.name;
-        // Tag with the OSM group so the UI filter is exact instead of
-        // regex-guessing: "<group>|<human label>".
-        const cats = `${group.name}|${String(rawCat).replace(/[_;]+/g, ' ').trim()}`;
-        const lat = el.lat ?? el.center?.lat ?? null;
-        const lon = el.lon ?? el.center?.lon ?? null;
-        collected.push({ fsq_id: key, name, addy, cats, dist: null, images: '', lat, lon });
-      }
-    } catch (e) {
-      console.warn(`[places] osm ${group.name} threw:`, e instanceof Error ? e.message : e);
-      debugRaw[group.name] = { error: e instanceof Error ? e.message : String(e) };
-    }
-    // Politeness pause between Overpass queries (shared free service).
-    await new Promise((res) => setTimeout(res, 1000));
-  }
-  json.osm_places = { scrapedAt, totals: debugRaw, count: collected.length };
+  // One Overpass query: union a name-regex lookup for every curated
+  // entry, scoped to the Martinez polygon. `out center tags` gives a
+  // representative lat/lon plus the tag dictionary.
+  const union = CURATED_PLACES
+    .map((c) => `nwr["name"~"${c.q}",i](poly:"${poly}");`)
+    .join('');
+  const query = `[out:json][timeout:25];(${union});out center tags;`;
 
-  if (!collected.length) {
-    throw new Error(`overpass returned 0 usable rows — ${JSON.stringify(debugRaw)}`);
+  let elements: OsmEl[] = [];
+  let httpInfo: Record<string, unknown> = {};
+  try {
+    let r: Response | null = null;
+    for (const ep of OVERPASS_ENDPOINTS) {
+      r = await fetch(ep, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'mtz.city/1.0 (hyperlocal dashboard; contact via github.com/Jstring-1)',
+        },
+        body: 'data=' + encodeURIComponent(query),
+        cache: 'no-store',
+      });
+      if (r.ok) break;
+    }
+    if (!r || !r.ok) {
+      const errBody = r ? (await r.text().catch(() => '')).slice(0, 300) : 'no response';
+      console.warn(`[places] osm curated: HTTP ${r?.status} ${errBody}`);
+      httpInfo = { httpStatus: r?.status ?? 0, error: errBody };
+    } else {
+      elements = (await r.json() as { elements?: OsmEl[] }).elements ?? [];
+    }
+  } catch (e) {
+    console.warn('[places] osm curated threw:', e instanceof Error ? e.message : e);
+    httpInfo = { error: e instanceof Error ? e.message : String(e) };
   }
+
+  // Match each OSM element back to the first curated entry whose regex
+  // matches its name; keep the best element per curated entry (prefer
+  // one with a street address, then most tags).
+  const best = new Map<string, OsmEl>();
+  for (const el of elements) {
+    const nm = (el.tags?.name ?? '').trim();
+    if (!nm) continue;
+    for (const c of CURATED_PLACES) {
+      let re: RegExp;
+      try { re = new RegExp(c.q, 'i'); } catch { continue; }
+      if (!re.test(nm)) continue;
+      const prev = best.get(c.name);
+      if (!prev) { best.set(c.name, el); break; }
+      const score = (x: OsmEl) =>
+        (x.tags?.['addr:street'] ? 100 : 0) + Object.keys(x.tags ?? {}).length;
+      if (score(el) > score(prev)) best.set(c.name, el);
+      break;
+    }
+  }
+
+  const collected = CURATED_PLACES.map((c) => {
+    const el = best.get(c.name);
+    const t = el?.tags ?? {};
+    const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ').trim();
+    const addy = street
+      ? [street, t['addr:city'] || 'Martinez', t['addr:state'], t['addr:postcode']].filter(Boolean).join(', ')
+      : '';
+    return {
+      fsq_id: `cur-${slugify(c.name)}`,
+      name: c.name,
+      addy,
+      cats: `${c.group}|${c.label}`,
+      dist: null,
+      images: '',
+      lat: el?.lat ?? el?.center?.lat ?? null,
+      lon: el?.lon ?? el?.center?.lon ?? null,
+    };
+  });
+
+  const matched = collected.filter((c) => c.lat != null).length;
+  json.osm_places = {
+    scrapedAt, count: collected.length, matched,
+    missing: collected.filter((c) => c.lat == null).map((c) => c.name),
+    ...httpInfo,
+  };
 
   await upsertPlaces(collected);
-  // Delete every row not in this run's result set — wipes residual
-  // Foursquare / Google rows (different id format) immediately.
+  // Wipe any rows not in this curated set (old broad-scrape / Foursquare
+  // / Google rows have different id prefixes).
   const keepIds = collected.map((c) => c.fsq_id);
   await sql`DELETE FROM places WHERE NOT (fsq_id = ANY(${keepIds}))`;
-  // Same Benicia / regional-entry housekeeping as before, in case the
-  // address-based filters above ever miss something.
-  await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
-  // Drop rows whose *city* field is a neighboring town (the rectangular
-  // bbox bleeds into them). Anchored on ", <city> ," so a Martinez
-  // street like "Pacheco Blvd, Martinez" is NOT matched.
-  await sql`DELETE FROM places WHERE addy ~* ',\\s*(pleasant hill|pacheco|concord|walnut creek|lafayette|clyde|bay point|pittsburg|hercules|crockett|rodeo|antioch|benicia)\\s*,'`;
-  const cityPattern = `^[[:space:]]*${escapeRegex(loc.short)}[[:space:]]*,`;
-  await sql`DELETE FROM places WHERE addy ~* ${cityPattern}`;
-  // And purge any chain rows already in the DB whose name matches the
-  // blocklist — keeps the table clean if the regex changes between
-  // scrapes.
-  const chainPgRe = '(' + CHAIN_NAMES
-    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('|') + ')';
-  await sql`DELETE FROM places WHERE name ~* ${chainPgRe}`;
+}
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 async function ticketmasterEvents(json: Record<string, unknown>) {
