@@ -29,7 +29,8 @@
   --hdr-h:        56px;
   --strip-h:      28px;
   --row2-h:       26px;
-  --top-stack-h:  calc(var(--strip-h) + var(--row2-h));
+  --gov-h:        24px;
+  --top-stack-h:  calc(var(--strip-h) + var(--row2-h) + var(--gov-h));
   --ftr-h:        20px;
   --maxw:         1400px;
 
@@ -272,6 +273,38 @@ main { padding-top: var(--top-stack-h); display: block; }
 }
 .wx-row-2::-webkit-scrollbar { display: none; }
 .wx-row-2 .label { color: var(--text-muted); }
+
+/* Civic / gov data scroller — same horizontal-scroll style as the
+   forecast row, sits directly below it. Populated by the 12h cron
+   (gov_local). */
+.gov-strip {
+  position: fixed; left: 0; width: 100%;
+  top: calc(var(--strip-h) + var(--row2-h));
+  height: var(--gov-h);
+  background: #000;
+  z-index: 1001;
+  display: flex; align-items: center;
+  gap: 8px; padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: .68em;
+  line-height: 1;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.gov-strip::-webkit-scrollbar { display: none; }
+.gov-strip .gov-item { display: inline-flex; align-items: baseline; gap: 4px; }
+.gov-strip .gov-label { color: var(--text-muted); }
+.gov-strip .gov-sep { color: var(--text-muted); padding: 0 2px; }
+.gov-strip a { color: inherit; text-decoration: none; }
+.gov-strip a:hover { text-decoration: underline; }
+.gov-strip .gold   { color: var(--wx-cond); }
+.gov-strip .red    { color: var(--wx-temp); }
+.gov-strip .green  { color: var(--wx-humid); }
+.gov-strip .blue   { color: var(--wx-aqi); }
+.gov-strip .peru   { color: var(--wx-pressure); }
+.gov-strip .violet { color: var(--wx-sunset); }
+.gov-strip .dodger { color: var(--wx-wind); }
 .wx-row-2 .hf-cell {
   display: inline-flex; gap: 4px; align-items: baseline;
 }

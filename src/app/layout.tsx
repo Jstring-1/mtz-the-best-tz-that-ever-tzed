@@ -7,6 +7,7 @@ import { getLocation } from '@/lib/location';
 import WeatherStrip from '@/components/WeatherStrip';
 import HourlyStrip from '@/components/HourlyStrip';
 import ForecastStrip from '@/components/ForecastStrip';
+import GovStrip from '@/components/GovStrip';
 import './globals.css';
 
 const mono = Source_Code_Pro({ subsets: ['latin'], weight: ['200', '400', '600', '800'], variable: '--font-mono' });
@@ -80,6 +81,7 @@ gtag('config', '${GA_ID}');`}
           <span className="wx-sep" aria-hidden />
           <ForecastStrip />
         </section>
+        <GovStrip />
         <main>{children}</main>
         <footer className="site-ftr">
           {loc.siteName} · {loc.name}

@@ -382,6 +382,11 @@ async function localEvents(json: Record<string, unknown>) {
   })));
 }
 
+async function govLocal(json: Record<string, unknown>) {
+  const { fetchGovLocal } = await import('./gov');
+  json['gov_local'] = await fetchGovLocal();
+}
+
 async function localParks(json: Record<string, unknown>) {
   const { scrapeAllParks } = await import('./scrape-parks');
   const parks = await scrapeAllParks();
@@ -968,6 +973,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('osm_places',         () => osmPlaces(json),          ok, errors);
     await safe('ticketmaster_events',() => ticketmasterEvents(json), ok, errors);
     await safe('local_parks',        () => localParks(json),         ok, errors);
+    await safe('gov_local',          () => govLocal(json),            ok, errors);
     await safe('purge_stores',       () => purgeStores(),             ok, errors);
   }
 
