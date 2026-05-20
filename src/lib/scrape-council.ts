@@ -45,7 +45,15 @@ export interface CouncilScrapeResult {
   meetings: number;
   votes: CouncilVote[];
   // Debug info for /admin so we can see why parsing returned 0:
-  diag: { source: string; minutesLinks: number; pdfBytes: number; voteAnchors: number; httpFailures: string[] };
+  diag: {
+    source: string;
+    minutesLinks: number;
+    pdfBytes: number;
+    voteAnchors: number;
+    httpFailures: string[];
+    sampleLinks?: Array<{ href: string; text: string }>;   // first ~30 hrefs from the index
+    pdfsFound?: Array<{ href: string; text: string }>;     // any PDF links seen (even if not matched as minutes)
+  };
 }
 
 async function fetchHtml(url: string): Promise<string | null> {
@@ -106,23 +114,26 @@ function extractMinutesLinks(html: string): { direct: string[]; followUps: strin
     const href = abs(m[1])?.replace(/&amp;/g, '&');
     if (!href) continue;
     const text = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    const looksLikeMinutes =
+    const isPdf = /\.pdf(\?|$)/i.test(href);
+    const minutesContext =
       /minute|\bmin[_-]|\bmin\.|cc[_-]?min/i.test(href) ||
       /minute/i.test(text);
-    if (/\.pdf(\?|$)/i.test(href) && looksLikeMinutes) {
-      direct.add(href);
-      continue;
-    }
-    // Candidate meeting-detail page (we'll follow if pass-1 empty).
-    if (/meeting|agenda|council|event|node\/\d+/i.test(href) &&
-        !/\.(jpg|png|gif|svg|css|js)(\?|$)/i.test(href) &&
-        href.startsWith(BASE)) {
-      followUps.add(href);
-    }
+    if (isPdf && minutesContext) { direct.add(href); continue; }
+
+    // Non-PDF candidates to follow one level deep.
+    if (!href.startsWith(BASE)) continue;
+    if (/\.(jpg|jpeg|png|gif|svg|css|js|webp|woff2?|ttf)(\?|$)/i.test(href)) continue;
+    if (href === BASE || href === `${BASE}/`) continue;
+    const looksLikeMeeting =
+      /meeting|agenda|council|event|minute|node\/\d+/i.test(href) ||
+      /minute|council|meeting|agenda/i.test(text) ||
+      /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(text) ||
+      /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}/i.test(text);
+    if (looksLikeMeeting) followUps.add(href);
   }
   return {
     direct: [...direct].slice(0, 12),
-    followUps: [...followUps].slice(0, 20),
+    followUps: [...followUps].slice(0, 30),
   };
 }
 
@@ -219,6 +230,7 @@ function parseVoteBlocks(rawText: string): Array<Omit<CouncilVote, 'meetingDate'
 export async function scrapeCouncilVotes(): Promise<CouncilScrapeResult> {
   const diag: CouncilScrapeResult['diag'] = {
     source: '', minutesLinks: 0, pdfBytes: 0, voteAnchors: 0, httpFailures: [],
+    sampleLinks: [], pdfsFound: [],
   };
   let html: string | null = null;
   let source = '';
@@ -231,6 +243,23 @@ export async function scrapeCouncilVotes(): Promise<CouncilScrapeResult> {
   if (!html) {
     return { scrapedAt: new Date().toISOString(), meetings: 0, votes: [], diag };
   }
+
+  // Capture a sample of all anchors + every PDF link so we can refine
+  // the matcher next time around.
+  const allAnchorRe = /<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let am: RegExpExecArray | null;
+  const samples: Array<{ href: string; text: string }> = [];
+  const pdfs: Array<{ href: string; text: string }> = [];
+  while ((am = allAnchorRe.exec(html))) {
+    const href = abs(am[1])?.replace(/&amp;/g, '&') ?? '';
+    if (!href) continue;
+    const text = am[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (samples.length < 30) samples.push({ href, text });
+    if (/\.pdf(\?|$)/i.test(href)) pdfs.push({ href, text });
+  }
+  diag.sampleLinks = samples;
+  diag.pdfsFound = pdfs.slice(0, 40);
+
   let { direct, followUps } = extractMinutesLinks(html);
 
   // Pass 2: if the index page had no inline PDF links to minutes, dig
