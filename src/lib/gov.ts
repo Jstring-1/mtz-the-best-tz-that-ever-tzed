@@ -289,55 +289,76 @@ interface HouseVoteListItem {
   sessionNumber?: number;
   rollCallNumber?: number;
   startDate?: string;
-  voteQuestion?: string;
-  result?: string;
-  bill?: { congress?: number; type?: string; number?: string; title?: string };
-  legislationType?: string; legislationNumber?: string;
+  updateDate?: string;
 }
 interface HouseVoteList { houseRollCallVotes?: HouseVoteListItem[] }
+interface HouseVoteMetaResp {
+  houseRollCallVote?: {
+    congress?: number; sessionNumber?: number; rollCallNumber?: number;
+    startDate?: string;
+    voteQuestion?: string;
+    result?: string;
+    legislationType?: string; legislationNumber?: string;
+  };
+}
 interface HouseVoteMembers {
   houseRollCallVoteMemberVotes?: {
     results?: Array<{ bioguideID?: string; voteCast?: string }>;
   };
 }
 
+// Current Congress (119th = Jan 2025 – Jan 2027). Update on the next
+// new Congress.
+const CURRENT_CONGRESS = 119;
+
 export async function fetchRepVotes(limit = 20): Promise<RepVotesPayload> {
   const out: RepVote[] = [];
   if (!KEY) return { scrapedAt: new Date().toISOString(), votes: out };
 
+  // Scope to the current Congress and sort by updateDate desc so we
+  // actually get *recent* votes (the default ordering returns the
+  // earliest votes of the dataset).
   const listUrl =
-    `https://api.congress.gov/v3/house-vote?api_key=${KEY}&format=json&limit=${limit}`;
+    `https://api.congress.gov/v3/house-vote/${CURRENT_CONGRESS}` +
+    `?api_key=${KEY}&format=json&limit=${limit}&sort=updateDate+desc`;
   const list = await safeJson<HouseVoteList>(listUrl);
   const items = list?.houseRollCallVotes ?? [];
 
+  // For each list item we have to fetch BOTH the vote metadata
+  // (question/result/bill) AND the per-member tally — the list
+  // endpoint doesn't include any of that.
   const lookups = items.slice(0, limit).map(async (it) => {
     const cg = it.congress, ss = it.sessionNumber, vn = it.rollCallNumber;
     if (!cg || !ss || !vn) return null;
-    const memUrl =
-      `https://api.congress.gov/v3/house-vote/${cg}/${ss}/${vn}/members` +
-      `?api_key=${KEY}&format=json&limit=600`;
-    const m = await safeJson<HouseVoteMembers>(memUrl);
-    const me = m?.houseRollCallVoteMemberVotes?.results?.find(
+    const base = `https://api.congress.gov/v3/house-vote/${cg}/${ss}/${vn}`;
+    const [metaJ, memJ] = await Promise.all([
+      safeJson<HouseVoteMetaResp>(`${base}?api_key=${KEY}&format=json`),
+      safeJson<HouseVoteMembers>(`${base}/members?api_key=${KEY}&format=json&limit=600`),
+    ]);
+    const meta = metaJ?.houseRollCallVote;
+    const me = memJ?.houseRollCallVoteMemberVotes?.results?.find(
       (r) => (r.bioguideID ?? '').toUpperCase() === REP_BIOGUIDE,
     );
     if (!me) return null;
+    const billType = meta?.legislationType;
+    const billNumber = meta?.legislationNumber;
     const row: RepVote = {
       congress: cg,
       session: ss,
       voteNumber: vn,
-      date: (it.startDate ?? '').slice(0, 10),
-      question: it.voteQuestion ?? '',
-      result: it.result ?? '',
+      date: (meta?.startDate ?? it.startDate ?? '').slice(0, 10),
+      question: meta?.voteQuestion ?? '',
+      result: meta?.result ?? '',
       position: me.voteCast ?? '',
-      billCongress: it.bill?.congress,
-      billType: it.bill?.type,
-      billNumber: it.bill?.number,
-      billTitle: it.bill?.title,
+      billCongress: billType && billNumber ? cg : undefined,
+      billType,
+      billNumber,
     };
     return row;
   });
   const settled = await Promise.allSettled(lookups);
   for (const s of settled) if (s.status === 'fulfilled' && s.value) out.push(s.value);
+  // Belt-and-suspenders sort in case the API doesn't honor sort param.
   out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   return { scrapedAt: new Date().toISOString(), votes: out };
 }
