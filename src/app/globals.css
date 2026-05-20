@@ -355,10 +355,22 @@ main { padding-top: var(--top-stack-h); display: block; }
 .rep-detail .rep-list a, .rep-detail .rep-list .bill-trigger {
   width: 100%; background: transparent; border: 0; padding: 0;
   text-align: left; cursor: pointer; color: inherit; font: inherit;
-  display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: baseline;
+  display: grid; grid-template-columns: 32px 80px 1fr; gap: 8px; align-items: baseline;
 }
+.rep-detail .rep-list .kind {
+  font-family: var(--mono); font-size: .72em; font-weight: 700;
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 1px 5px; text-align: center; color: var(--text-muted);
+}
+.rep-detail .rep-list .kind-sp { color: var(--accent);       border-color: var(--accent); }
+.rep-detail .rep-list .kind-co { color: var(--accent-cool);  border-color: var(--accent-cool); }
 .rep-detail .bill-trigger:hover .title,
 .rep-detail .rep-list a:hover .title { color: var(--accent); }
+.rep-detail .voted-tag {
+  display: inline-block; margin-left: 6px;
+  font-size: .75em; padding: 0 5px; border-radius: 3px;
+  color: var(--accent-green); border: 1px solid var(--accent-green);
+}
 
 /* Votes list */
 .rep-detail .rep-votes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -406,6 +418,22 @@ main { padding-top: var(--top-stack-h); display: block; }
 .grants-list .recipient { font-weight: 600; flex: 1 1 auto; }
 .grants-list .date { font-family: var(--mono); font-size: .82em; color: var(--text-muted); }
 .grants-list .desc { font-size: .85em; color: #ccc; line-height: 1.4; margin-top: 2px; }
+.grants-list .grant-trigger {
+  width: 100%; background: transparent; border: 0; padding: 4px 0;
+  color: inherit; font: inherit; cursor: pointer; text-align: left;
+  border-radius: 3px;
+}
+.grants-list .grant-trigger:hover { background: var(--bg-elev-2); }
+.grants-list .grant-trigger:hover .recipient { color: var(--accent); }
+
+/* Grant detail modal */
+.grant-detail .grant-desc { font-size: .9em; line-height: 1.55; }
+.grant-detail .grant-cfda { margin-bottom: 10px; }
+.grant-detail .grant-cfda .num { font-weight: 600; }
+.grant-detail .grant-cfda .objectives { font-size: .85em; color: #ccc; line-height: 1.5; margin: 4px 0 0; }
+.grant-detail .grant-officers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.grant-detail .grant-officers li { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px dashed var(--border-soft); }
+.grant-detail .grant-officers .amt { font-family: var(--mono); color: var(--accent-green); }
 
 /* Crime modal */
 .crime-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }

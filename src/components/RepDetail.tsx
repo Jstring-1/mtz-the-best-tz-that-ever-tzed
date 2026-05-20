@@ -38,23 +38,36 @@ function parseBillRef(b: Bill, urlFallback: string): { congress: number; type: s
   return { congress: Number(cgMatch[1]), type: m[1], number: m[2] };
 }
 
-function BillButton({ b, onOpen }: { b: Bill; onOpen: (ref: { congress: number; type: string; number: string }) => void }) {
+function BillButton({ b, onOpen, kind }: {
+  b: Bill;
+  onOpen: (ref: { congress: number; type: string; number: string }) => void;
+  kind?: 'Sp' | 'Co';
+}) {
   const ref = parseBillRef(b, b.url);
-  if (!ref) {
-    return (
-      <a href={b.url} target="_blank" rel="noopener">
-        <span className="num">{b.number}</span>
-        <span className="title">{b.title}</span>
-      </a>
-    );
-  }
-  return (
-    <button type="button" className="bill-trigger" onClick={() => onOpen(ref)}>
+  const head = (
+    <>
+      {kind && <span className={`kind kind-${kind.toLowerCase()}`}>{kind}</span>}
       <span className="num">{b.number}</span>
       <span className="title">{b.title}</span>
-    </button>
+    </>
+  );
+  if (!ref) {
+    return <a href={b.url} target="_blank" rel="noopener">{head}</a>;
+  }
+  return (
+    <button type="button" className="bill-trigger" onClick={() => onOpen(ref)}>{head}</button>
   );
 }
+
+// Date used for sorting. Prefer the most recent action; fall back to
+// introduction date.
+function billOrderDate(b: Bill): string {
+  return (b.latestActionDate || b.introduced || '');
+}
+// Crude indicator of vote activity — Congress.gov "Latest action"
+// strings include phrases like "Passed/agreed to", "Failed", "Became
+// Public Law", etc.
+const VOTED_RE = /\b(passed|agreed\s+to|failed|became\s+(?:public\s+)?law|enacted|signed)\b/i;
 
 export default function RepDetail({ label, tooltip }: { label: string; tooltip?: string }) {
   const [open, setOpen] = useState(false);
@@ -123,8 +136,8 @@ export default function RepDetail({ label, tooltip }: { label: string; tooltip?:
                       <div className="question">{v.question}</div>
                       {billRefV && (
                         <button type="button" className="bill-trigger small" onClick={() => setBillRef(billRefV)}>
-                          {v.billType?.toUpperCase()} {v.billNumber}
-                          {v.billTitle ? ` — ${v.billTitle}` : ''}
+                          <span className="num">{v.billType?.toUpperCase()} {v.billNumber}</span>
+                          {v.billTitle && <span className="title"> — {v.billTitle}</span>}
                         </button>
                       )}
                     </li>
@@ -133,39 +146,53 @@ export default function RepDetail({ label, tooltip }: { label: string; tooltip?:
               </ul>
             )}
 
-            <h3 className="rep-h">Sponsored ({data.sponsored.length})</h3>
-            {data.sponsored.length === 0 ? <p className="muted">None.</p> : (
-              <ul className="rep-list">
-                {data.sponsored.map((b, i) => (
-                  <li key={`s-${i}`}>
-                    <BillButton b={b} onOpen={setBillRef} />
-                    {(b.latestAction || b.introduced) && (
-                      <div className="meta muted">
-                        {b.introduced && <>Introduced {b.introduced}</>}
-                        {b.latestAction && <> · Latest: {b.latestAction}{b.latestActionDate && ` (${b.latestActionDate})`}</>}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <h3 className="rep-h">Cosponsored ({data.cosponsored.length})</h3>
-            {data.cosponsored.length === 0 ? <p className="muted">None.</p> : (
-              <ul className="rep-list">
-                {data.cosponsored.map((b, i) => (
-                  <li key={`c-${i}`}>
-                    <BillButton b={b} onOpen={setBillRef} />
-                    {(b.latestAction || b.introduced) && (
-                      <div className="meta muted">
-                        {b.introduced && <>Introduced {b.introduced}</>}
-                        {b.latestAction && <> · Latest: {b.latestAction}{b.latestActionDate && ` (${b.latestActionDate})`}</>}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+            {(() => {
+              const merged: Array<Bill & { kind: 'Sp' | 'Co' }> = [
+                ...data.sponsored.map((b) => ({ ...b, kind: 'Sp' as const })),
+                ...data.cosponsored.map((b) => ({ ...b, kind: 'Co' as const })),
+              ];
+              // De-dupe (rare: same bill in both lists) by number+kind
+              // shouldn't collapse, but if number repeats prefer Sp.
+              const dedup = new Map<string, typeof merged[number]>();
+              for (const b of merged) {
+                const k = b.number.replace(/\s+/g, '');
+                if (!dedup.has(k) || (dedup.get(k)!.kind === 'Co' && b.kind === 'Sp')) dedup.set(k, b);
+              }
+              const sorted = [...dedup.values()].sort((a, b) =>
+                billOrderDate(b).localeCompare(billOrderDate(a)),
+              );
+              return (
+                <>
+                  <h3 className="rep-h">Legislation — sponsored &amp; cosponsored ({sorted.length})</h3>
+                  {sorted.length === 0 ? <p className="muted">None.</p> : (
+                    <ul className="rep-list">
+                      {sorted.map((b, i) => (
+                        <li key={`b-${i}`}>
+                          <BillButton b={b} onOpen={setBillRef} kind={b.kind} />
+                          {(b.latestAction || b.introduced) && (
+                            <div className="meta muted">
+                              {b.introduced && <>Introduced {b.introduced}</>}
+                              {b.latestAction && (
+                                <>
+                                  {' · Latest: '}{b.latestAction}
+                                  {b.latestActionDate && ` (${b.latestActionDate})`}
+                                  {VOTED_RE.test(b.latestAction) && <span className="voted-tag">voted</span>}
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="muted" style={{ fontSize: '.75em', marginTop: 6 }}>
+                    Most introduced bills never reach a floor vote. Look for the
+                    “voted” tag (or “Passed/Agreed to/Failed” in the latest
+                    action) for ones that did.
+                  </p>
+                </>
+              );
+            })()}
 
             {data.votesScrapedAt && (
               <p className="muted" style={{ fontSize: '.72em', marginTop: 12 }}>

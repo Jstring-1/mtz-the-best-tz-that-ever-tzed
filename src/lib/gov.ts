@@ -78,6 +78,7 @@ export interface GrantRow {
   description: string;
   agency: string;
   awardDate: string;
+  internalId?: string;   // generated_internal_id for /api/v2/awards/{id} lookups
 }
 interface SpendingResp { results?: Array<{
   'Award Amount'?: number;
@@ -88,6 +89,7 @@ interface SpendingResp { results?: Array<{
   'Start Date'?: string;
   'Action Date'?: string;
   'Period of Performance Start Date'?: string;
+  generated_internal_id?: string;
 }> }
 
 async function ccGrants(days = 90): Promise<{ total: string; count: number; days: number; rows: GrantRow[] } | null> {
@@ -119,6 +121,7 @@ async function ccGrants(days = 90): Promise<{ total: string; count: number; days
     description: r['Award Description'] ?? '',
     agency: r['Awarding Sub Agency'] || r['Awarding Agency'] || '',
     awardDate: (r['Start Date'] ?? r['Action Date'] ?? '').slice(0, 10),
+    internalId: r.generated_internal_id,
   }));
   return { total: fmtMoney(sum), count: j.results.length, days, rows };
 }
@@ -342,6 +345,16 @@ export async function fetchRepVotes(limit = 20): Promise<RepVotesPayload> {
     if (!me) return null;
     const billType = meta?.legislationType;
     const billNumber = meta?.legislationNumber;
+    // Resolve the bill's official title so the vote row shows what was
+    // actually voted on, not just "HR 1234".
+    let billTitle: string | undefined;
+    if (billType && billNumber) {
+      const billJ = await safeJson<{ bill?: { title?: string; titles?: Array<{ title?: string }> } }>(
+        `https://api.congress.gov/v3/bill/${cg}/${billType.toLowerCase()}/${billNumber}` +
+        `?api_key=${KEY}&format=json`,
+      );
+      billTitle = billJ?.bill?.title ?? billJ?.bill?.titles?.[0]?.title;
+    }
     const row: RepVote = {
       congress: cg,
       session: ss,
@@ -353,6 +366,7 @@ export async function fetchRepVotes(limit = 20): Promise<RepVotesPayload> {
       billCongress: billType && billNumber ? cg : undefined,
       billType,
       billNumber,
+      billTitle,
     };
     return row;
   });

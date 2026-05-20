@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
+import GrantDetailModal from './GrantDetailModal';
 
 export interface GrantRow {
   amount: number;
@@ -9,6 +10,7 @@ export interface GrantRow {
   description: string;
   agency: string;
   awardDate: string;
+  internalId?: string;
 }
 
 function fmtMoney(n: number): string {
@@ -22,6 +24,8 @@ export default function GrantsDetail({ label, tooltip, rows }: {
   label: string; tooltip?: string; rows: GrantRow[];
 }) {
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<GrantRow | null>(null);
+
   return (
     <>
       <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
@@ -33,20 +37,35 @@ export default function GrantsDetail({ label, tooltip, rows }: {
         ) : (
           <>
             <p className="muted" style={{ fontSize: '.85em', marginBottom: 10 }}>
-              Top {rows.length} awards by amount. Source: USAspending.gov.
+              Top {rows.length} awards by amount — click any row for full detail. Source: USAspending.gov.
             </p>
             <ul className="grants-list">
-              {rows.map((r, i) => (
-                <li key={i}>
-                  <div className="row1">
-                    <span className="amt">{fmtMoney(r.amount)}</span>
-                    <span className="recipient">{r.recipient || '(unnamed recipient)'}</span>
-                    {r.awardDate && <span className="date">{r.awardDate}</span>}
-                  </div>
-                  {r.agency && <div className="meta muted">via {r.agency}</div>}
-                  {r.description && <div className="desc">{r.description}</div>}
-                </li>
-              ))}
+              {rows.map((r, i) => {
+                const head = (
+                  <>
+                    <div className="row1">
+                      <span className="amt">{fmtMoney(r.amount)}</span>
+                      <span className="recipient">{r.recipient || '(unnamed recipient)'}</span>
+                      {r.awardDate && <span className="date">{r.awardDate}</span>}
+                    </div>
+                    {r.agency && <div className="meta muted">via {r.agency}</div>}
+                    {r.description && <div className="desc">{r.description}</div>}
+                  </>
+                );
+                return (
+                  <li key={i}>
+                    {r.internalId
+                      ? (
+                        <button
+                          type="button"
+                          className="grant-trigger"
+                          onClick={() => setSelected(r)}
+                        >{head}</button>
+                      )
+                      : head}
+                  </li>
+                );
+              })}
             </ul>
             <p style={{ marginTop: 12 }}>
               <a
@@ -59,6 +78,15 @@ export default function GrantsDetail({ label, tooltip, rows }: {
           </>
         )}
       </Modal>
+
+      {selected?.internalId && (
+        <GrantDetailModal
+          open={!!selected}
+          id={selected.internalId}
+          fallbackRecipient={selected.recipient}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </>
   );
 }
