@@ -1,15 +1,14 @@
 import { getLocation } from '@/lib/location';
-import { getFeeds, getMisc, getPlaces } from '@/lib/cache';
+import { getFeeds, getMisc } from '@/lib/cache';
 import {
-  listUpcomingEvents, listParks, listActiveAlerts,
+  listUpcomingEvents, listActiveAlerts,
   listAvailablePets, listRecentQuakes,
 } from '@/lib/store';
-import type { PlaceRow, NoaaAlert } from '@/lib/types';
+import type { NoaaAlert } from '@/lib/types';
 import AlertsCard, { type QuakeLite } from '@/components/AlertsCard';
 import LocalCivicCard from '@/components/LocalCivicCard';
 import NewsCard from '@/components/NewsCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
-import PlacesCard, { type Spot } from '@/components/PlacesCard';
 import PetsCard from '@/components/PetsCard';
 import RadarCard, { type RadarImg } from '@/components/RadarCard';
 
@@ -20,17 +19,15 @@ export default async function MainPage() {
   const loc = getLocation();
 
   const [
-    storedEvents, storedParks, storedAlerts,
-    storedPets, storedQuakes, feeds, misc, places,
+    storedEvents, storedAlerts,
+    storedPets, storedQuakes, feeds, misc,
   ] = await Promise.all([
     listUpcomingEvents(),
-    listParks(),
     listActiveAlerts(),
     listAvailablePets(),
     listRecentQuakes(10),
     getFeeds(120),
     getMisc(),
-    getPlaces(),
   ]);
 
   // Quakes only from the last 7 days; AlertsCard hides itself when empty.
@@ -67,35 +64,6 @@ export default async function MainPage() {
   }));
 
 
-  // Merge: parks first (alphabetical), then Foursquare places by distance.
-  const placeRows: PlaceRow[] = places ?? [];
-  const spots: Spot[] = [
-    ...storedParks.map((p): Spot => ({
-      id: `park-${p.id}`,
-      kind: 'park',
-      name: p.name,
-      address: p.address ?? undefined,
-      description: p.description ?? undefined,
-      amenities: p.amenities ?? undefined,
-      image: p.image ?? undefined,
-      url: p.url ?? undefined,
-    })),
-    ...placeRows.map((p): Spot => {
-      const lat = p.lat != null ? Number(p.lat) : undefined;
-      const lon = p.lon != null ? Number(p.lon) : undefined;
-      return {
-        id: `fsq-${p.fsq_id}`,
-        kind: 'place',
-        name: p.name ?? 'Unnamed',
-        address: p.addy ?? undefined,
-        category: p.cats ?? undefined,
-        distance: p.dist ?? undefined,
-        lat: lat != null && Number.isFinite(lat) ? lat : undefined,
-        lon: lon != null && Number.isFinite(lon) ? lon : undefined,
-      };
-    }),
-  ];
-
   // Alerts: card type wants NoaaAlert shape (epoch numbers etc).
   const localAlerts: NoaaAlert[] = storedAlerts
     .filter((a) => a.scope === 'LOCAL')
@@ -127,7 +95,6 @@ export default async function MainPage() {
     <div className="dashboard">
       <EventsCard events={events} tz={loc.timezone} />
       <NewsCard   items={feeds} />
-      <PlacesCard spots={spots} />
       <PetsCard   pets={storedPets} />
       <div className="col-stack">
         <LocalCivicCard />

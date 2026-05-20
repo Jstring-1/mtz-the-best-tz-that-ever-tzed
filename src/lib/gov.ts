@@ -278,11 +278,9 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
   const items: GovStripItem[] = [
     {
       key: 'unemp',
-      label: 'Unemp',
-      // Compact value: just the three numbers (county / state / US)
-      // separated by middots so it stays on one line in the card.
+      label: 'Unemployment',
       value: u
-        ? [u.county, u.state, u.nation].map((x) => (x ?? '—').replace('%', '')).join('·') || '—'
+        ? `CC ${u.county ?? '—'}/CA ${u.state ?? '—'}/US ${u.nation ?? '—'}`
         : '—',
       tooltip: u
         ? `Unemployment rate (latest ${u.period}) — Contra Costa ${u.county ?? '—'} · California ${u.state ?? '—'} · United States ${u.nation ?? '—'}. Sources: BLS LAUS (county+state, NSA), BLS LNS (US, SA).`

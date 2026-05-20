@@ -1187,7 +1187,9 @@ main { padding-top: var(--top-stack-h); display: block; }
 
 .dashboard {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  /* 4 columns on wide screens; Events + News get 2x the width of Pets
+     + the weather stack. Tightens down on medium screens. */
+  grid-template-columns: 2fr 2fr 1fr 1fr;
   gap: 14px;
   padding: 14px 14px 2px;
   align-items: start;
@@ -1195,6 +1197,9 @@ main { padding-top: var(--top-stack-h); display: block; }
      so the page itself never scrolls — only the columns do. */
   height: calc(100vh - var(--top-stack-h) - var(--ftr-h));
   overflow: hidden;
+}
+@media (max-width: 1100px) {
+  .dashboard { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 }
 
 /* Wrapper for stacking multiple cards inside one grid column. */
