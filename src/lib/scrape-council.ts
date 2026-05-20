@@ -13,9 +13,10 @@ import { PDFParse } from 'pdf-parse';
 
 const BASE = 'https://www.cityofmartinez.org';
 const INDEX_URLS = [
+  `${BASE}/government/meetings-and-agendas`,
+  `${BASE}/government/meetings-and-agendas?locale=en`,
+  `${BASE}/government/mayor-and-city-council`,
   `${BASE}/AgendaCenter`,
-  `${BASE}/government/city-council/agendas-minutes`,
-  `${BASE}/government/city-council`,
 ];
 
 const UA =
@@ -80,25 +81,49 @@ async function fetchPdfText(url: string): Promise<{ text: string; bytes: number 
   }
 }
 
-// Pull every Minutes-PDF link out of an Agenda Center page. CivicEngage
-// links look like /AgendaCenter/ViewFile/Minutes/_MMDDYYYY-NNN?bidId=,
-// but we also accept any *.pdf URL whose path or filename contains
-// "Minutes".
-function extractMinutesLinks(html: string): string[] {
-  const re = /href="([^"]+)"/gi;
-  const out = new Set<string>();
+function abs(href: string): string | null {
+  if (!href) return null;
+  if (href.startsWith('//')) return 'https:' + href;
+  if (href.startsWith('http')) return href;
+  if (href.startsWith('/')) return BASE + href;
+  return `${BASE}/${href}`;
+}
+
+// Pull every Minutes-PDF link out of a meetings index page. Martinez
+// doesn't use the default CivicEngage /AgendaCenter; the real page is
+// /government/meetings-and-agendas, with meeting cards that link to
+// PDF files under /sites/default/files/... or similar.
+//
+// Two-pass: (1) grab any PDF whose URL or link text mentions
+// "minutes" / "min_"; (2) if pass-1 finds nothing, follow non-PDF
+// meeting-detail links one level deep and look there.
+function extractMinutesLinks(html: string): { direct: string[]; followUps: string[] } {
+  const direct = new Set<string>();
+  const followUps = new Set<string>();
+  const linkRe = /<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    const raw = m[1];
-    if (!/minutes/i.test(raw)) continue;
-    if (!/\.pdf|ViewFile\/Minutes/i.test(raw)) continue;
-    const full = raw.startsWith('http')
-      ? raw
-      : raw.startsWith('/') ? BASE + raw
-      : `${BASE}/${raw}`;
-    out.add(full.replace(/&amp;/g, '&'));
+  while ((m = linkRe.exec(html))) {
+    const href = abs(m[1])?.replace(/&amp;/g, '&');
+    if (!href) continue;
+    const text = m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const looksLikeMinutes =
+      /minute|\bmin[_-]|\bmin\.|cc[_-]?min/i.test(href) ||
+      /minute/i.test(text);
+    if (/\.pdf(\?|$)/i.test(href) && looksLikeMinutes) {
+      direct.add(href);
+      continue;
+    }
+    // Candidate meeting-detail page (we'll follow if pass-1 empty).
+    if (/meeting|agenda|council|event|node\/\d+/i.test(href) &&
+        !/\.(jpg|png|gif|svg|css|js)(\?|$)/i.test(href) &&
+        href.startsWith(BASE)) {
+      followUps.add(href);
+    }
   }
-  return [...out];
+  return {
+    direct: [...direct].slice(0, 12),
+    followUps: [...followUps].slice(0, 20),
+  };
 }
 
 function extractMeetingDate(text: string): string | null {
@@ -206,7 +231,24 @@ export async function scrapeCouncilVotes(): Promise<CouncilScrapeResult> {
   if (!html) {
     return { scrapedAt: new Date().toISOString(), meetings: 0, votes: [], diag };
   }
-  const links = extractMinutesLinks(html).slice(0, 8);   // last 8 meetings
+  let { direct, followUps } = extractMinutesLinks(html);
+
+  // Pass 2: if the index page had no inline PDF links to minutes, dig
+  // into the first handful of meeting-detail pages and harvest their
+  // PDF links. Lots of cities list meetings as cards/links that open a
+  // detail page where Agenda + Minutes PDFs live.
+  if (direct.length === 0 && followUps.length > 0) {
+    const follow = followUps.slice(0, 10);
+    for (const f of follow) {
+      const sub = await fetchHtml(f);
+      if (!sub) continue;
+      const inner = extractMinutesLinks(sub);
+      for (const u of inner.direct) direct.push(u);
+      if (direct.length >= 8) break;
+    }
+  }
+
+  const links = direct.slice(0, 8);   // last 8 meetings
   diag.minutesLinks = links.length;
   const votes: CouncilVote[] = [];
   let anchors = 0;
