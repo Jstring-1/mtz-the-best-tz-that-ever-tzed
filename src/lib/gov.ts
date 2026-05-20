@@ -13,8 +13,15 @@ const COMMON_HEADERS: Record<string, string> = {
   'Accept': 'application/json',
 };
 const KEY = process.env.GOV_API_TOKEN ?? '';
+const BLS_KEY = process.env.BLS_API_KEY ?? '';   // optional — bumps quota 25/day -> 500/day
 
-async function safeJson<T = unknown>(url: string, init?: RequestInit): Promise<T | null> {
+// Last-failure tracker — populated by safeJson and surfaced in the
+// gov_local payload as a `debug` map so we can see which fetcher
+// returned nothing without trawling Railway logs.
+const lastFail: Record<string, string> = {};
+
+async function safeJson<T = unknown>(url: string, init?: RequestInit, tag?: string): Promise<T | null> {
+  const t = tag ?? new URL(url).hostname;
   try {
     const r = await fetch(url, {
       ...init,
@@ -22,12 +29,17 @@ async function safeJson<T = unknown>(url: string, init?: RequestInit): Promise<T
       cache: 'no-store',
     });
     if (!r.ok) {
-      console.warn(`[gov] ${url} → ${r.status}`);
+      const body = (await r.text().catch(() => '')).slice(0, 200);
+      const msg = `HTTP ${r.status}${body ? ` — ${body.replace(/\s+/g, ' ')}` : ''}`;
+      console.warn(`[gov] ${t}: ${msg}`);
+      lastFail[t] = msg;
       return null;
     }
     return await r.json() as T;
   } catch (e) {
-    console.warn(`[gov] ${url} threw:`, e instanceof Error ? e.message : e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[gov] ${t} threw:`, msg);
+    lastFail[t] = msg;
     return null;
   }
 }
@@ -36,18 +48,38 @@ async function safeJson<T = unknown>(url: string, init?: RequestInit): Promise<T
 
 interface BlsResp {
   status?: string;
-  Results?: { series?: Array<{ data?: Array<{ year: string; periodName: string; value: string }> }> };
+  message?: string[];
+  Results?: { series?: Array<{ seriesID?: string; data?: Array<{ year: string; periodName: string; value: string }> }> };
+}
+
+// Shared BLS fetcher — batches an array of series IDs into one POST
+// (BLS allows up to 50). Pass registrationkey when available to push
+// the quota from 25/day to 500/day.
+async function blsSeries(seriesIds: string[]): Promise<BlsResp | null> {
+  const yr = new Date().getUTCFullYear();
+  const body: Record<string, unknown> = {
+    seriesid: seriesIds,
+    startyear: String(yr - 1),
+    endyear: String(yr),
+  };
+  if (BLS_KEY) body.registrationkey = BLS_KEY;
+  const r = await safeJson<BlsResp>('https://api.bls.gov/publicAPI/v2/timeseries/data/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }, 'bls');
+  // BLS returns 200 even on quota errors — surface its own status string.
+  if (r?.status && r.status !== 'REQUEST_SUCCEEDED') {
+    lastFail['bls'] = `${r.status}${(r.message ?? []).join(' ').slice(0, 200)}`;
+    return null;
+  }
+  return r;
 }
 
 async function blsUnemployment(): Promise<{ value: string; period: string } | null> {
   // LAUS area code for Contra Costa County, CA = CN0601300; measure 03 = rate.
   const seriesId = 'LAUCN060130000000003';
-  const yr = new Date().getUTCFullYear();
-  const r = await safeJson<BlsResp>('https://api.bls.gov/publicAPI/v2/timeseries/data/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ seriesid: [seriesId], startyear: String(yr - 1), endyear: String(yr) }),
-  });
+  const r = await blsSeries([seriesId]);
   const row = r?.Results?.series?.[0]?.data?.[0];
   if (!row) return null;
   return { value: `${row.value}%`, period: `${row.periodName} ${row.year}` };
@@ -58,15 +90,23 @@ async function blsUnemployment(): Promise<{ value: string; period: string } | nu
 interface EiaResp { response?: { data?: Array<{ value?: number; period?: string }> } }
 
 async function eiaCaliforniaGas(): Promise<{ value: string; period: string } | null> {
-  if (!KEY) return null;
-  const url =
-    `https://api.eia.gov/v2/petroleum/pri/gnd/data/?api_key=${KEY}` +
-    `&frequency=weekly&data[0]=value` +
-    `&facets[duoarea][]=SCA&facets[product][]=EPMR` +
-    `&sort[0][column]=period&sort[0][direction]=desc&length=1`;
-  const j = await safeJson<EiaResp>(url);
+  if (!KEY) { lastFail['eia'] = 'GOV_API_TOKEN not set'; return null; }
+  const params = new URLSearchParams();
+  params.set('api_key', KEY);
+  params.set('frequency', 'weekly');
+  params.append('data[0]', 'value');
+  params.append('facets[duoarea][]', 'SCA');     // California (state of CA)
+  params.append('facets[product][]', 'EPMR');    // Regular grade
+  params.append('sort[0][column]', 'period');
+  params.append('sort[0][direction]', 'desc');
+  params.set('length', '1');
+  const url = `https://api.eia.gov/v2/petroleum/pri/gnd/data/?${params}`;
+  const j = await safeJson<EiaResp>(url, undefined, 'eia');
   const row = j?.response?.data?.[0];
-  if (row?.value == null) return null;
+  if (row?.value == null) {
+    if (!lastFail['eia']) lastFail['eia'] = 'no rows returned';
+    return null;
+  }
   return { value: `$${row.value.toFixed(2)}`, period: row.period ?? '' };
 }
 
@@ -197,9 +237,12 @@ export interface GovLocalPayload {
   scrapedAt: string;
   items: GovStripItem[];
   extras?: { grants?: GrantRow[] };
+  debug?: Record<string, string>;   // per-source success/failure for /admin troubleshooting
 }
 
 export async function fetchGovLocal(): Promise<GovLocalPayload> {
+  // Reset per-run debug tracker so old failures don't linger.
+  for (const k of Object.keys(lastFail)) delete lastFail[k];
   const [unemp, gas, grants, rep, crime] = await Promise.allSettled([
     blsUnemployment(),
     eiaCaliforniaGas(),
@@ -260,10 +303,21 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
     },
   ];
 
+  // Per-source result/error so we can debug "—" rows from /admin's
+  // apis_json viewer without re-running the cron.
+  const debug: Record<string, string> = {
+    bls: u ? 'ok' : (lastFail['bls'] ?? 'no data'),
+    eia: g ? 'ok' : (lastFail['eia'] ?? 'no data'),
+    usaspending: gr ? `ok (${gr.rows.length})` : (lastFail['api.usaspending.gov'] ?? 'no data'),
+    congress: r ? `ok (${r.count} bills)` : (lastFail['api.congress.gov'] ?? 'no data'),
+    fbi: cr ? `ok (${cr.year})` : (lastFail['api.usa.gov'] ?? 'no data'),
+  };
+
   return {
     scrapedAt: new Date().toISOString(),
     items,
     extras: { grants: gr?.rows ?? [] },
+    debug,
   };
 }
 
@@ -441,33 +495,27 @@ async function treasuryYields(): Promise<Array<{ maturity: string; rate: string 
 
 // ---- BLS national unemployment + CPI ---------------------------------
 
-async function blsNationalUnemployment() {
-  // Series LNS14000000 = civilian unemployment rate, seasonally adjusted.
-  const yr = new Date().getUTCFullYear();
-  const r = await safeJson<BlsResp>('https://api.bls.gov/publicAPI/v2/timeseries/data/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ seriesid: ['LNS14000000'], startyear: String(yr - 1), endyear: String(yr) }),
-  });
-  const row = r?.Results?.series?.[0]?.data?.[0];
-  if (!row) return null;
-  return { value: `${row.value}%`, period: `${row.periodName} ${row.year}` };
-}
-
-async function blsCpiYoY() {
-  // CUUR0000SA0 = CPI-U, all items, not seasonally adjusted.
-  const yr = new Date().getUTCFullYear();
-  const r = await safeJson<BlsResp>('https://api.bls.gov/publicAPI/v2/timeseries/data/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ seriesid: ['CUUR0000SA0'], startyear: String(yr - 1), endyear: String(yr) }),
-  });
-  const data = r?.Results?.series?.[0]?.data ?? [];
-  if (data.length < 13) return null;
-  const latest = data[0], yearAgo = data[12];
-  const a = Number(latest.value), b = Number(yearAgo.value);
-  if (!isFinite(a) || !isFinite(b) || b === 0) return null;
-  return { value: `${(((a - b) / b) * 100).toFixed(1)}%`, period: `${latest.periodName} ${latest.year}` };
+// Batched: one BLS call returns national unemployment + CPI series.
+async function blsNationalSnapshot() {
+  const r = await blsSeries(['LNS14000000', 'CUUR0000SA0']);
+  const series = r?.Results?.series ?? [];
+  const byId = new Map(series.map((s) => [s.seriesID, s.data ?? []]));
+  const unempData = byId.get('LNS14000000') ?? [];
+  const cpiData   = byId.get('CUUR0000SA0') ?? [];
+  let unemp: { value: string; period: string } | null = null;
+  let cpi:   { value: string; period: string } | null = null;
+  if (unempData.length) {
+    const row = unempData[0];
+    unemp = { value: `${row.value}%`, period: `${row.periodName} ${row.year}` };
+  }
+  if (cpiData.length >= 13) {
+    const latest = cpiData[0], yearAgo = cpiData[12];
+    const a = Number(latest.value), b = Number(yearAgo.value);
+    if (isFinite(a) && isFinite(b) && b !== 0) {
+      cpi = { value: `${(((a - b) / b) * 100).toFixed(1)}%`, period: `${latest.periodName} ${latest.year}` };
+    }
+  }
+  return { unemp, cpi };
 }
 
 // ---- FDA / CPSC recalls ----------------------------------------------
@@ -551,14 +599,13 @@ async function eonetActive(): Promise<EonetRow[]> {
 
 export async function fetchGovNational(): Promise<GovNationalPayload> {
   const [
-    debt, yields, unemp, cpi,
+    debt, yields, blsBatch,
     fdaFood, fdaDrug, fdaDevice, cpsc,
     fema, eonet,
   ] = await Promise.allSettled([
     treasuryDebt(),
     treasuryYields(),
-    blsNationalUnemployment(),
-    blsCpiYoY(),
+    blsNationalSnapshot(),
     fdaRecalls('food'),
     fdaRecalls('drug'),
     fdaRecalls('device'),
@@ -568,6 +615,7 @@ export async function fetchGovNational(): Promise<GovNationalPayload> {
   ]);
   const v = <T>(p: PromiseSettledResult<T>, d: T): T => (p.status === 'fulfilled' ? p.value : d);
 
+  const blsBatched = v(blsBatch, { unemp: null, cpi: null });
   const drugRecalls = v(fdaDrug, []);
   const allRecalls = [
     ...v(fdaFood, []), ...drugRecalls, ...v(fdaDevice, []), ...v(cpsc, []),
@@ -578,8 +626,8 @@ export async function fetchGovNational(): Promise<GovNationalPayload> {
     economy: {
       debt: v(debt, null),
       yields: v(yields, []),
-      unemployment: v(unemp, null),
-      cpiYoY: v(cpi, null),
+      unemployment: blsBatched.unemp,
+      cpiYoY: blsBatched.cpi,
     },
     recalls: allRecalls.slice(0, 30),
     health: {
