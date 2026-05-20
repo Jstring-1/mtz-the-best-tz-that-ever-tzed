@@ -77,8 +77,9 @@ export interface GrantRow {
   recipient: string;
   description: string;
   agency: string;
-  awardDate: string;
-  internalId?: string;   // generated_internal_id for /api/v2/awards/{id} lookups
+  actionDate: string;     // date of this transaction (what USAspending filters on)
+  periodStart: string;    // period-of-performance start (can be old for ongoing grants)
+  internalId?: string;    // generated_internal_id for /api/v2/awards/{id} lookups
 }
 interface SpendingResp { results?: Array<{
   'Award Amount'?: number;
@@ -104,7 +105,8 @@ async function ccGrants(days = 90): Promise<{ total: string; count: number; days
     },
     fields: [
       'Award Amount', 'Recipient Name', 'Award Description',
-      'Awarding Agency', 'Awarding Sub Agency', 'Start Date',
+      'Awarding Agency', 'Awarding Sub Agency',
+      'Start Date', 'Action Date',
     ],
     page: 1, limit: 100, sort: 'Award Amount', order: 'desc',
   };
@@ -120,7 +122,8 @@ async function ccGrants(days = 90): Promise<{ total: string; count: number; days
     recipient: r['Recipient Name'] ?? '',
     description: r['Award Description'] ?? '',
     agency: r['Awarding Sub Agency'] || r['Awarding Agency'] || '',
-    awardDate: (r['Start Date'] ?? r['Action Date'] ?? '').slice(0, 10),
+    actionDate: (r['Action Date'] ?? '').slice(0, 10),
+    periodStart: (r['Start Date'] ?? r['Period of Performance Start Date'] ?? '').slice(0, 10),
     internalId: r.generated_internal_id,
   }));
   return { total: fmtMoney(sum), count: j.results.length, days, rows };

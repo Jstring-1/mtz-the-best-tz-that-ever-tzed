@@ -411,6 +411,15 @@ main { padding-top: var(--top-stack-h); display: block; }
 .bill-detail .bill-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 
 /* Grants modal */
+.grants-toolbar {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: .85em;
+}
+.grants-sort select {
+  background: var(--bg-elev); color: var(--text);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 2px 6px; font: inherit; font-size: .9em;
+}
 .grants-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .grants-list li { padding: 6px 0; border-bottom: 1px dashed var(--border-soft); }
 .grants-list .row1 { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
