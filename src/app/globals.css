@@ -318,8 +318,12 @@ main { padding-top: var(--top-stack-h); display: block; }
   border-bottom: 1px dashed var(--border-soft);
 }
 .civic-card .civic-list li:last-child .civic-row { border-bottom: 0; }
-.civic-card .civic-label { color: var(--text-muted); font-size: .82em; }
-.civic-card .civic-val { font-family: var(--mono); font-size: .9em; }
+.civic-card .civic-label { color: var(--text-muted); font-size: .82em; white-space: nowrap; }
+.civic-card .civic-val {
+  font-family: var(--mono); font-size: .9em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
 .civic-card .civic-val.red    { color: var(--accent-warm); }
 .civic-card .civic-val.green  { color: var(--accent-green); }
 .civic-card .civic-val.gold   { color: var(--accent); }

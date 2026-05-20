@@ -111,18 +111,17 @@ async function blsUnemployment(): Promise<{
 
 interface EiaResp { response?: { data?: Array<{ value?: number; period?: string }> } }
 
+// California regular conventional retail gas, weekly average,
+// dollars/gallon — the legacy series ID served through EIA's v2
+// seriesid endpoint. Much more stable than the facets endpoint.
+const EIA_GAS_SERIES = 'PET.EMM_EPMR_PTE_SCA_DPG.W';
+
 async function eiaCaliforniaGas(): Promise<{ value: string; period: string } | null> {
   if (!KEY) { lastFail['eia'] = 'GOV_API_TOKEN not set'; return null; }
-  const params = new URLSearchParams();
-  params.set('api_key', KEY);
-  params.set('frequency', 'weekly');
-  params.append('data[0]', 'value');
-  params.append('facets[duoarea][]', 'SCA');     // California (state of CA)
-  params.append('facets[product][]', 'EPMR');    // Regular grade
-  params.append('sort[0][column]', 'period');
-  params.append('sort[0][direction]', 'desc');
-  params.set('length', '1');
-  const url = `https://api.eia.gov/v2/petroleum/pri/gnd/data/?${params}`;
+  const url =
+    `https://api.eia.gov/v2/seriesid/${EIA_GAS_SERIES}` +
+    `?api_key=${encodeURIComponent(KEY)}` +
+    `&sort[0][column]=period&sort[0][direction]=desc&length=1`;
   const j = await safeJson<EiaResp>(url, undefined, 'eia');
   const row = j?.response?.data?.[0];
   if (row?.value == null) {
@@ -279,16 +278,14 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
   const items: GovStripItem[] = [
     {
       key: 'unemp',
-      label: 'Unemployment',
+      label: 'Unemp',
+      // Compact value: just the three numbers (county / state / US)
+      // separated by middots so it stays on one line in the card.
       value: u
-        ? [
-            u.county ? `CC ${u.county}` : null,
-            u.state  ? `CA ${u.state}`  : null,
-            u.nation ? `US ${u.nation}` : null,
-          ].filter(Boolean).join(' · ') || '—'
+        ? [u.county, u.state, u.nation].map((x) => (x ?? '—').replace('%', '')).join('·') || '—'
         : '—',
       tooltip: u
-        ? `Unemployment rate — Contra Costa County (BLS LAUS, NSA) · California statewide (BLS LAUS, NSA) · United States (BLS LNS, SA). Latest period: ${u.period}.`
+        ? `Unemployment rate (latest ${u.period}) — Contra Costa ${u.county ?? '—'} · California ${u.state ?? '—'} · United States ${u.nation ?? '—'}. Sources: BLS LAUS (county+state, NSA), BLS LNS (US, SA).`
         : 'Unemployment (BLS) — data unavailable',
       color: 'red',
     },
