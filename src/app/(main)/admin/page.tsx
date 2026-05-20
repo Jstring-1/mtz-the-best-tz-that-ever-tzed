@@ -11,7 +11,7 @@ const BUCKETS = [
   { id: '5m',  desc: 'NOAA alerts, stocks (every 5 minutes)' },
   { id: '15m', desc: 'NOAA buoys (every 15 minutes)' },
   { id: '1h',  desc: 'NOAA forecast/hourly/aviation, WeatherAPI marine/forecast, USGS earthquakes, eBird (every hour)' },
-  { id: '4h',  desc: 'News RSS, NOAA water RSS, NOAA WeatherStory imagery, local-venue event scrape (every 4 hours)' },
+  { id: '4h',  desc: 'News RSS, NOAA water RSS, NOAA WeatherStory imagery, local-venue event scrape, gov national data (every 4 hours)' },
   { id: '12h', desc: 'OpenStreetMap places, Ticketmaster events, City of Martinez parks, gov data strip (every 12 hours)' },
   { id: 'all', desc: 'Run every bucket sequentially (manual / cold start)' },
 ];

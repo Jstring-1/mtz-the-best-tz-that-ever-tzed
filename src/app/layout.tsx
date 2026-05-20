@@ -1,19 +1,13 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { Source_Code_Pro, Inter } from 'next/font/google';
-
-const GA_ID = 'G-VR227N4QG6';
 import { getLocation } from '@/lib/location';
-import WeatherStrip from '@/components/WeatherStrip';
-import HourlyStrip from '@/components/HourlyStrip';
-import ForecastStrip from '@/components/ForecastStrip';
-import GovStrip from '@/components/GovStrip';
 import './globals.css';
 
+const GA_ID = 'G-VR227N4QG6';
 const mono = Source_Code_Pro({ subsets: ['latin'], weight: ['200', '400', '600', '800'], variable: '--font-mono' });
 const sans = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-sans' });
 
-// Layout reads live cache for the top weather strip on every render.
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -26,10 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
     `community & music events, adoptable pets, parks and places, and civic alerts — all on one page.`;
   return {
     metadataBase: new URL(siteUrl),
-    title: {
-      default: title,
-      template: `%s — ${loc.siteName}`,
-    },
+    title: { default: title, template: `%s — ${loc.siteName}` },
     description,
     applicationName: loc.siteName,
     keywords: [
@@ -40,28 +31,18 @@ export async function generateMetadata(): Promise<Metadata> {
     category: 'news',
     alternates: { canonical: '/' },
     robots: {
-      index: true,
-      follow: true,
+      index: true, follow: true,
       googleBot: { index: true, follow: true, 'max-image-preview': 'large', 'max-snippet': -1 },
     },
-    openGraph: {
-      type: 'website',
-      siteName: loc.siteName,
-      url: siteUrl,
-      title,
-      description,
-      locale: 'en_US',
-    },
-    twitter: {
-      card: 'summary',
-      title,
-      description,
-    },
+    openGraph: { type: 'website', siteName: loc.siteName, url: siteUrl, title, description, locale: 'en_US' },
+    twitter: { card: 'summary', title, description },
   };
 }
 
+// Root layout: HTML shell, fonts, analytics. The main site's chrome
+// (weather/forecast/gov strips + footer) lives in (main)/layout.tsx so
+// alt routes like /gov can render bare.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const loc = getLocation();
   return (
     <html lang="en" className={`${mono.variable} ${sans.variable}`}>
       <body>
@@ -75,17 +56,7 @@ function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', '${GA_ID}');`}
         </Script>
-        <WeatherStrip />
-        <section className="wx-row-2" aria-label="Hourly and 7-day forecast">
-          <HourlyStrip />
-          <span className="wx-sep" aria-hidden />
-          <ForecastStrip />
-        </section>
-        <GovStrip />
-        <main>{children}</main>
-        <footer className="site-ftr">
-          {loc.siteName} · {loc.name}
-        </footer>
+        {children}
       </body>
     </html>
   );

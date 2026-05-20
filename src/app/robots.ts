@@ -8,7 +8,7 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: '*',
       allow: '/',
       // Internal/operational routes — no SEO value, keep them out.
-      disallow: ['/admin', '/api/', '/overlay'],
+      disallow: ['/admin', '/api/', '/overlay', '/gov'],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
     host: SITE_URL,
