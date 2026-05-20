@@ -454,23 +454,31 @@ main { padding-top: var(--top-stack-h); display: block; }
 .crime-list .label { color: var(--text); }
 .crime-list .count { font-family: var(--mono); color: var(--accent-warm); }
 
-/* Council vote modal */
-.council-meeting { margin: 12px 0; }
-.council-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.council-list li { padding: 6px 0; border-bottom: 1px dashed var(--border-soft); }
-.council-list .title { font-weight: 600; line-height: 1.35; }
-.council-list .meta { font-size: .82em; line-height: 1.4; margin-top: 2px; }
-.council-list .tally { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .82em; margin-top: 4px; }
-.council-list .t-ayes  b { color: var(--accent-green); }
-.council-list .t-noes  b { color: var(--accent-warm); }
-.council-list .t-abst  b,
-.council-list .t-absent b { color: var(--text-muted); }
-.council-list .t-result {
-  padding: 0 6px; border-radius: 3px; font-weight: 700; font-size: .82em;
+/* Council meetings modal */
+.council-meetings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.council-meetings li {
+  padding: 8px 4px; border-bottom: 1px dashed var(--border-soft);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
-.council-list .t-result-passed  { color: var(--accent-green); border: 1px solid var(--accent-green); }
-.council-list .t-result-failed  { color: var(--accent-warm);  border: 1px solid var(--accent-warm); }
-.council-list .t-result-unknown { color: var(--text-muted);   border: 1px solid var(--border); }
+.council-meetings .meeting-head {
+  display: flex; align-items: baseline; gap: 8px;
+  flex: 1 1 auto; min-width: 220px;
+}
+.council-meetings .meeting-head .title { font-weight: 600; line-height: 1.3; }
+.council-meetings .meeting-head .date  { font-family: var(--mono); font-size: .82em; color: var(--text-muted); }
+.council-meetings .meeting-links { display: flex; gap: 6px; flex-wrap: wrap; }
+.council-meetings .meeting-links button { font-size: .82em; padding: 3px 10px; }
+.council-meetings .missing { font-size: .75em; color: var(--text-muted); font-style: italic; }
+
+/* PDF embed inside the nested council viewer modal */
+.council-pdf-wrap { display: flex; flex-direction: column; }
+.council-pdf-frame {
+  width: 100%;
+  height: min(72vh, 800px);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-elev-2);
+}
 
 /* ======================================================================
    /gov page (personal-use national dashboard, no site chrome)

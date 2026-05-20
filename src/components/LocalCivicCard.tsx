@@ -25,18 +25,18 @@ export default async function LocalCivicCard() {
   const grants = payload?.extras?.grants ?? [];
 
   // Council row summary (always shown when we have any cache).
-  const councilCount = council?.votes?.length ?? 0;
-  const councilDate = council?.votes?.[0]?.meetingDate ?? '';
+  const councilCount = council?.meetings?.length ?? 0;
+  const councilDate = council?.meetings?.[0]?.date ?? '';
   const councilLabelHtml =
     `<span class="civic-label">Council</span>` +
     `<span class="civic-val gold">${
       councilCount > 0
-        ? `${councilCount} actions${councilDate ? ` · ${councilDate}` : ''}`
+        ? `${councilCount} meetings${councilDate ? ` · ${councilDate}` : ''}`
         : '—'
     }</span>`;
   const councilTooltip = councilCount > 0
-    ? `Recent Martinez City Council motions & roll-call votes parsed from minutes PDFs (${council?.meetings ?? 0} meetings).`
-    : 'Council votes — no parseable votes yet. Run /admin → 12h once minutes are published.';
+    ? `Martinez City Council meetings from Granicus — click to browse agendas & minutes (read in-page).`
+    : 'Council meetings — no cache yet. Run /admin → 12h.';
 
   return (
     <section className="card-section civic-card">
