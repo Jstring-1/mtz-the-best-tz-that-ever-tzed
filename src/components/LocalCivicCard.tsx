@@ -1,8 +1,10 @@
 import { getJson } from '@/lib/cache';
 import type { GovLocalPayload, GovStripItem } from '@/lib/gov';
+import type { CouncilScrapeResult } from '@/lib/scrape-council';
 import RepDetail from './RepDetail';
 import GrantsDetail from './GrantsDetail';
 import CrimeDetail from './CrimeDetail';
+import CouncilDetail from './CouncilDetail';
 
 // Local civic / economy card rendered in the weather column. Reads the
 // gov_local cache that the 12h cron populates — fast load, no fetches.
@@ -10,16 +12,35 @@ import CrimeDetail from './CrimeDetail';
 // that open a modal.
 export default async function LocalCivicCard() {
   let payload: GovLocalPayload | null = null;
-  try { payload = await getJson<GovLocalPayload>('gov_local'); }
-  catch (e) { console.warn('LocalCivicCard cache read failed:', e); }
+  let council: CouncilScrapeResult | null = null;
+  try {
+    [payload, council] = await Promise.all([
+      getJson<GovLocalPayload>('gov_local').catch(() => null),
+      getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
+    ]);
+  } catch (e) { console.warn('LocalCivicCard cache read failed:', e); }
 
   const items: GovStripItem[] = payload?.items ?? [];
-  if (!items.length) return null;
+  if (!items.length && !council) return null;
   const grants = payload?.extras?.grants ?? [];
+
+  // Council row summary (always shown when we have any cache).
+  const councilCount = council?.votes?.length ?? 0;
+  const councilDate = council?.votes?.[0]?.meetingDate ?? '';
+  const councilLabelHtml =
+    `<span class="civic-label">Council</span>` +
+    `<span class="civic-val gold">${
+      councilCount > 0
+        ? `${councilCount} actions${councilDate ? ` · ${councilDate}` : ''}`
+        : '—'
+    }</span>`;
+  const councilTooltip = councilCount > 0
+    ? `Recent Martinez City Council motions & roll-call votes parsed from minutes PDFs (${council?.meetings ?? 0} meetings).`
+    : 'Council votes — no parseable votes yet. Run /admin → 12h once minutes are published.';
 
   return (
     <section className="card-section civic-card">
-      <h2>Civic <span className="count">{items.length}</span></h2>
+      <h2>Civic <span className="count">{items.length + 1}</span></h2>
       <ul className="civic-list">
         {items.map((it) => {
           const labelHtml =
@@ -49,6 +70,7 @@ export default async function LocalCivicCard() {
             </li>
           );
         })}
+        <li><CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} /></li>
       </ul>
     </section>
   );

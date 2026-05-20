@@ -413,6 +413,24 @@ main { padding-top: var(--top-stack-h); display: block; }
 .crime-list .label { color: var(--text); }
 .crime-list .count { font-family: var(--mono); color: var(--accent-warm); }
 
+/* Council vote modal */
+.council-meeting { margin: 12px 0; }
+.council-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.council-list li { padding: 6px 0; border-bottom: 1px dashed var(--border-soft); }
+.council-list .title { font-weight: 600; line-height: 1.35; }
+.council-list .meta { font-size: .82em; line-height: 1.4; margin-top: 2px; }
+.council-list .tally { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .82em; margin-top: 4px; }
+.council-list .t-ayes  b { color: var(--accent-green); }
+.council-list .t-noes  b { color: var(--accent-warm); }
+.council-list .t-abst  b,
+.council-list .t-absent b { color: var(--text-muted); }
+.council-list .t-result {
+  padding: 0 6px; border-radius: 3px; font-weight: 700; font-size: .82em;
+}
+.council-list .t-result-passed  { color: var(--accent-green); border: 1px solid var(--accent-green); }
+.council-list .t-result-failed  { color: var(--accent-warm);  border: 1px solid var(--accent-warm); }
+.council-list .t-result-unknown { color: var(--text-muted);   border: 1px solid var(--border); }
+
 /* ======================================================================
    /gov page (personal-use national dashboard, no site chrome)
    ====================================================================== */
