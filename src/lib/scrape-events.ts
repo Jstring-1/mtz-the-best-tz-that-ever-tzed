@@ -470,8 +470,69 @@ async function scrapeRoxxOnMain(): Promise<LocalEvent[]> {
   }
   return out;
 }
+// Slow Hand BBQ's /events page is a Popmenu shell that embeds Styled
+// Calendar (embed.styledcalendar.com) — the static HTML has nothing.
+// Their public events API returns
+//   { compressedEventsAndIds: [{ compressedEvents, sourceCalendarGoogleId }] }
+// where compressedEvents is an lz-string `compressToUTF16` payload of a
+// JSON array of FullCalendar-shaped events.
+const SLOWHAND_STYLED_CAL_ID = 'DjQzeHFtBd0HOC5xbJxP';
+const SLOWHAND_PAGE = 'https://www.slowhandbbq.com/events';
+
+interface SlowHandRaw {
+  id: string;
+  title?: string;
+  start?: string;
+  end?: string;
+  extendedProps?: { location?: string; description?: string };
+}
+
 async function scrapeSlowHandBBQ(): Promise<LocalEvent[]> {
-  return scrapeGenericPage('https://www.slowhandbbq.com/events', 'slowhand', 'Slow Hand BBQ', 'Slow Hand BBQ');
+  const url = `https://embed.styledcalendar.com/api/get-styled-calendar-events-data/?styledCalendarId=${SLOWHAND_STYLED_CAL_ID}`;
+  const text = await safeFetch(url);
+  if (!text) return [];
+  let j: { compressedEventsAndIds?: Array<{ compressedEvents?: string }> };
+  try { j = JSON.parse(text); } catch { return []; }
+  const groups = j.compressedEventsAndIds ?? [];
+  if (!groups.length) return [];
+
+  // Dynamic import keeps the lz-string dep out of any non-cron bundle.
+  const LZ = (await import('lz-string')).default;
+
+  const all: SlowHandRaw[] = [];
+  for (const g of groups) {
+    if (!g.compressedEvents) continue;
+    const raw = LZ.decompressFromUTF16(g.compressedEvents);
+    if (!raw) continue;
+    try {
+      const arr = JSON.parse(raw) as SlowHandRaw[];
+      if (Array.isArray(arr)) all.push(...arr);
+    } catch { /* skip */ }
+  }
+
+  return all
+    // Calendar covers both Slow Hand locations; keep Martinez and skip
+    // Pleasant Hill (untagged ones — title/loc undefined — are kept).
+    .filter((e) => {
+      const hay = `${e.title ?? ''} ${e.extendedProps?.location ?? ''}`;
+      return !/\bpleasant\s*hill\b/i.test(hay);
+    })
+    .map((e) => {
+      const title = (e.title ?? 'Event')
+        .replace(/\s*@\s*Slow\s*Hand(?:[,\s]+(?:Martinez|MTZ))?\s*$/i, '')
+        .trim();
+      return {
+        id: `slowhand-${e.id}`,
+        source: 'slowhand',
+        source_label: 'Slow Hand BBQ',
+        title: title || 'Event',
+        start_at: tsFromIso(e.start),
+        end_at:   tsFromIso(e.end),
+        venue: 'Slow Hand BBQ',
+        url: SLOWHAND_PAGE,
+        description: stripHtml(e.extendedProps?.description ?? ''),
+      };
+    });
 }
 
 // ----- Single annual-event landing pages -------------------------------
