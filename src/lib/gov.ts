@@ -132,27 +132,23 @@ interface RidbResp { RECDATA?: Array<{ RecAreaName?: string; FacilityName?: stri
 
 async function nearbyCamping(): Promise<{ count: number; sample: string[] } | null> {
   if (!KEY) return null;
+  // RIDB only covers federal lands (NPS / USFS / BLM / USACE); state and
+  // regional parks aren't in it. Most of the campgrounds within an hour
+  // of Martinez (Mt Diablo, Briones, Black Diamond, etc.) are state /
+  // EBRPD and won't appear here — broaden radius and drop the activity
+  // filter to catch what little federal acreage is nearby (Pt Reyes,
+  // Lake Berryessa, John Muir NHS, …).
   const url =
     `https://ridb.recreation.gov/api/v1/facilities` +
-    `?latitude=38.0194&longitude=-122.1341&radius=30&limit=25&activity=9&apikey=${KEY}`;
-  // activity=9 is CAMPING in RIDB taxonomy.
+    `?latitude=38.0194&longitude=-122.1341&radius=75&limit=25&apikey=${KEY}`;
   const j = await safeJson<RidbResp>(url);
   if (!j?.RECDATA) return null;
   const names = j.RECDATA.map((f) => f.FacilityName ?? f.RecAreaName ?? '').filter(Boolean);
-  return { count: names.length, sample: names.slice(0, 4) };
+  return { count: names.length, sample: names.slice(0, 5) };
 }
 
-// ---- 6. TSA — no public live API ------------------------------------
-// TSA's MyTSA app uses an internal endpoint that's not public; the
-// scraping community has stitched things together but nothing reliable.
-// Show "—" with a tooltip explaining and link to the TSA site.
-
-function tsaStub(): { value: string; note: string } {
-  return {
-    value: '—',
-    note: 'No public real-time TSA wait API. Check tsa.gov/wait-times for live data.',
-  };
-}
+// (TSA: no public real-time wait API exists, so the strip drops it
+// entirely. The civic card links to tsa.gov as a footer instead.)
 
 // ---- 7. FBI CDE — Martinez PD violent crime, latest year ------------
 
@@ -206,7 +202,6 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
   const v = <T>(p: PromiseSettledResult<T>): T | null =>
     p.status === 'fulfilled' ? (p.value as T) : null;
   const u = v(unemp), g = v(gas), gr = v(grants), r = v(rep), c = v(camp), cr = v(crime);
-  const tsa = tsaStub();
 
   const items: GovStripItem[] = [
     {
@@ -249,19 +244,12 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
     {
       key: 'camp',
       label: 'Camp',
-      value: c ? `${c.count} nearby` : '—',
-      tooltip: c
-        ? `Campgrounds within 30 mi (Recreation.gov RIDB)${c.sample.length ? ` — ${c.sample.join(', ')}` : ''}`
-        : 'Campgrounds within 30 mi (Recreation.gov RIDB) — data unavailable',
+      value: c && c.count > 0 ? `${c.count} nearby` : '—',
+      tooltip: c && c.count > 0
+        ? `Federal campgrounds within 75 mi (Recreation.gov RIDB) — ${c.sample.join(', ')}`
+        : 'No federal campgrounds nearby — Mt Diablo / Briones / Black Diamond etc. are state/regional parks (not on RIDB).',
       color: 'green',
-    },
-    {
-      key: 'tsa',
-      label: 'TSA SFO/OAK/SMF',
-      value: tsa.value,
-      tooltip: tsa.note,
-      color: 'dodger',
-      href: 'https://www.tsa.gov/travel/security-screening/airport',
+      href: 'https://www.recreation.gov/search?inventory_type=camping',
     },
     {
       key: 'crime',

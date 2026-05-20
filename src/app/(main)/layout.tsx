@@ -2,7 +2,6 @@ import { getLocation } from '@/lib/location';
 import WeatherStrip from '@/components/WeatherStrip';
 import HourlyStrip from '@/components/HourlyStrip';
 import ForecastStrip from '@/components/ForecastStrip';
-import GovStrip from '@/components/GovStrip';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -20,7 +19,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <span className="wx-sep" aria-hidden />
         <ForecastStrip />
       </section>
-      <GovStrip />
       <main>{children}</main>
       <footer className="site-ftr">
         {loc.siteName} · {loc.name}
