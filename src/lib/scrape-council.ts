@@ -48,7 +48,7 @@ export interface CouncilScrapeResult {
     pdfsFound: number;
     pdfBytes: number;
     voteAnchors: number;
-    httpFailures: string[];
+    httpFailures: Array<{ url: string; status: number; contentType: string; snippet: string; error?: string }>;
     sample?: Array<{ title: string; pdfUrl: string | null }>;
   };
 }
@@ -63,19 +63,50 @@ async function fetchText(url: string): Promise<string | null> {
     return null;
   }
 }
-async function fetchPdfText(url: string): Promise<{ text: string; bytes: number } | null> {
+interface PdfFailure { url: string; status: number; contentType: string; snippet: string; error?: string }
+async function fetchPdfText(url: string): Promise<{ text: string; bytes: number } | PdfFailure> {
+  // Granicus's MinutesViewer.php returns a PDF stream; some servers
+  // gate it on referer + accept. Provide both to be safe.
+  const headers: Record<string, string> = {
+    ...COMMON_HEADERS,
+    'Accept': 'application/pdf,application/octet-stream;q=0.9,*/*;q=0.8',
+    'Referer': `${GRANICUS_BASE}/`,
+  };
   try {
-    const r = await fetch(url, { headers: COMMON_HEADERS, cache: 'no-store' });
-    if (!r.ok) { console.warn(`[council] PDF ${url} → ${r.status}`); return null; }
+    const r = await fetch(url, { headers, cache: 'no-store', redirect: 'follow' });
+    const ct = r.headers.get('content-type') ?? '';
+    if (!r.ok) {
+      const body = (await r.text().catch(() => '')).slice(0, 200);
+      return { url, status: r.status, contentType: ct, snippet: body.replace(/\s+/g, ' ') };
+    }
     const buf = Buffer.from(await r.arrayBuffer());
-    const parser = new PDFParse({ data: buf });
-    const out = await parser.getText();
-    await parser.destroy();
-    const text = typeof out === 'string' ? out : (out?.text ?? '');
-    return { text, bytes: buf.length };
+    // Spot-check the magic bytes; if it's HTML/error page pdf-parse will
+    // throw with an unhelpful message, so surface that ourselves.
+    const head = buf.slice(0, 8).toString('latin1');
+    if (!head.startsWith('%PDF')) {
+      return {
+        url, status: r.status, contentType: ct,
+        snippet: buf.slice(0, 200).toString('utf8').replace(/\s+/g, ' '),
+        error: `Response not a PDF (starts: ${head.replace(/[^\x20-\x7E]/g, '.')})`,
+      };
+    }
+    try {
+      const parser = new PDFParse({ data: buf });
+      const out = await parser.getText();
+      await parser.destroy();
+      const text = typeof out === 'string' ? out : (out?.text ?? '');
+      return { text, bytes: buf.length };
+    } catch (e) {
+      return {
+        url, status: r.status, contentType: ct, snippet: '',
+        error: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200),
+      };
+    }
   } catch (e) {
-    console.warn(`[council] PDF ${url} threw:`, e instanceof Error ? e.message : e);
-    return null;
+    return {
+      url, status: 0, contentType: '', snippet: '',
+      error: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200),
+    };
   }
 }
 
@@ -205,7 +236,7 @@ export async function scrapeCouncilVotes(): Promise<CouncilScrapeResult> {
   };
   const xml = await fetchText(MINUTES_RSS);
   if (!xml) {
-    diag.httpFailures.push(MINUTES_RSS);
+    diag.httpFailures.push({ url: MINUTES_RSS, status: 0, contentType: '', snippet: '', error: 'RSS fetch failed' });
     return { scrapedAt: new Date().toISOString(), meetings: 0, votes: [], diag };
   }
   const items = parseRss(xml);
@@ -220,9 +251,12 @@ export async function scrapeCouncilVotes(): Promise<CouncilScrapeResult> {
     const pdfUrl = (it.link || '').replace(/&amp;/g, '&');
     diag.sample!.push({ title: it.title.slice(0, 80), pdfUrl: pdfUrl || null });
     if (!pdfUrl) continue;
-    diag.pdfsFound++;
     const pdfRes = await fetchPdfText(pdfUrl);
-    if (!pdfRes) { diag.httpFailures.push(pdfUrl); continue; }
+    if (!('text' in pdfRes)) {
+      diag.httpFailures.push(pdfRes);
+      continue;
+    }
+    diag.pdfsFound++;
     diag.pdfBytes += pdfRes.bytes;
     const meetingDate = extractMeetingDate(it, pdfRes.text);
     const blocks = parseVoteBlocks(pdfRes.text);
