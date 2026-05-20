@@ -72,9 +72,25 @@ async function eiaCaliforniaGas(): Promise<{ value: string; period: string } | n
 
 // ---- 3. USAspending — federal grants to Contra Costa County ---------
 
-interface SpendingResp { results?: Array<{ 'Award Amount'?: number }> }
+export interface GrantRow {
+  amount: number;
+  recipient: string;
+  description: string;
+  agency: string;
+  awardDate: string;
+}
+interface SpendingResp { results?: Array<{
+  'Award Amount'?: number;
+  'Recipient Name'?: string;
+  'Award Description'?: string;
+  'Awarding Agency'?: string;
+  'Awarding Sub Agency'?: string;
+  'Start Date'?: string;
+  'Action Date'?: string;
+  'Period of Performance Start Date'?: string;
+}> }
 
-async function ccGrants(days = 90): Promise<{ total: string; count: number; days: number } | null> {
+async function ccGrants(days = 90): Promise<{ total: string; count: number; days: number; rows: GrantRow[] } | null> {
   const end = new Date();
   const start = new Date(end.getTime() - days * 24 * 3600 * 1000);
   const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -84,11 +100,11 @@ async function ccGrants(days = 90): Promise<{ total: string; count: number; days
       award_type_codes: ['02', '03', '04', '05'], // grants
       place_of_performance_locations: [{ country: 'USA', state: 'CA', county: '013' }],
     },
-    fields: ['Award Amount'],
-    page: 1,
-    limit: 100,
-    sort: 'Award Amount',
-    order: 'desc',
+    fields: [
+      'Award Amount', 'Recipient Name', 'Award Description',
+      'Awarding Agency', 'Awarding Sub Agency', 'Start Date',
+    ],
+    page: 1, limit: 100, sort: 'Award Amount', order: 'desc',
   };
   const j = await safeJson<SpendingResp>('https://api.usaspending.gov/api/v2/search/spending_by_award/', {
     method: 'POST',
@@ -97,7 +113,14 @@ async function ccGrants(days = 90): Promise<{ total: string; count: number; days
   });
   if (!j?.results) return null;
   const sum = j.results.reduce((acc, r) => acc + (r['Award Amount'] ?? 0), 0);
-  return { total: fmtMoney(sum), count: j.results.length, days };
+  const rows: GrantRow[] = j.results.slice(0, 30).map((r) => ({
+    amount: r['Award Amount'] ?? 0,
+    recipient: r['Recipient Name'] ?? '',
+    description: r['Award Description'] ?? '',
+    agency: r['Awarding Sub Agency'] || r['Awarding Agency'] || '',
+    awardDate: (r['Start Date'] ?? r['Action Date'] ?? '').slice(0, 10),
+  }));
+  return { total: fmtMoney(sum), count: j.results.length, days, rows };
 }
 
 function fmtMoney(n: number): string {
@@ -126,29 +149,8 @@ async function repSponsored(): Promise<{ count: number; latest: string; rep: str
   };
 }
 
-// ---- 5. Recreation.gov RIDB — campgrounds near Martinez -------------
-
-interface RidbResp { RECDATA?: Array<{ RecAreaName?: string; FacilityName?: string }> }
-
-async function nearbyCamping(): Promise<{ count: number; sample: string[] } | null> {
-  if (!KEY) return null;
-  // RIDB only covers federal lands (NPS / USFS / BLM / USACE); state and
-  // regional parks aren't in it. Most of the campgrounds within an hour
-  // of Martinez (Mt Diablo, Briones, Black Diamond, etc.) are state /
-  // EBRPD and won't appear here — broaden radius and drop the activity
-  // filter to catch what little federal acreage is nearby (Pt Reyes,
-  // Lake Berryessa, John Muir NHS, …).
-  const url =
-    `https://ridb.recreation.gov/api/v1/facilities` +
-    `?latitude=38.0194&longitude=-122.1341&radius=75&limit=25&apikey=${KEY}`;
-  const j = await safeJson<RidbResp>(url);
-  if (!j?.RECDATA) return null;
-  const names = j.RECDATA.map((f) => f.FacilityName ?? f.RecAreaName ?? '').filter(Boolean);
-  return { count: names.length, sample: names.slice(0, 5) };
-}
-
-// (TSA: no public real-time wait API exists, so the strip drops it
-// entirely. The civic card links to tsa.gov as a footer instead.)
+// (Removed: campground lookup — RIDB is federal-only, almost no nearby
+// matches in Martinez. TSA — no public real-time API.)
 
 // ---- 7. FBI CDE — Martinez PD violent crime, latest year ------------
 
@@ -188,20 +190,20 @@ export interface GovStripItem {
 export interface GovLocalPayload {
   scrapedAt: string;
   items: GovStripItem[];
+  extras?: { grants?: GrantRow[] };
 }
 
 export async function fetchGovLocal(): Promise<GovLocalPayload> {
-  const [unemp, gas, grants, rep, camp, crime] = await Promise.allSettled([
+  const [unemp, gas, grants, rep, crime] = await Promise.allSettled([
     blsUnemployment(),
     eiaCaliforniaGas(),
     ccGrants(90),
     repSponsored(),
-    nearbyCamping(),
     martinezCrime(),
   ]);
   const v = <T>(p: PromiseSettledResult<T>): T | null =>
     p.status === 'fulfilled' ? (p.value as T) : null;
-  const u = v(unemp), g = v(gas), gr = v(grants), r = v(rep), c = v(camp), cr = v(crime);
+  const u = v(unemp), g = v(gas), gr = v(grants), r = v(rep), cr = v(crime);
 
   const items: GovStripItem[] = [
     {
@@ -242,16 +244,6 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
       href: 'https://www.congress.gov/member/mark-desaulnier/D000623',
     },
     {
-      key: 'camp',
-      label: 'Camp',
-      value: c && c.count > 0 ? `${c.count} nearby` : '—',
-      tooltip: c && c.count > 0
-        ? `Federal campgrounds within 75 mi (Recreation.gov RIDB) — ${c.sample.join(', ')}`
-        : 'No federal campgrounds nearby — Mt Diablo / Briones / Black Diamond etc. are state/regional parks (not on RIDB).',
-      color: 'green',
-      href: 'https://www.recreation.gov/search?inventory_type=camping',
-    },
-    {
       key: 'crime',
       label: 'Crime',
       value: cr ? `${cr.count}/yr` : '—',
@@ -262,7 +254,11 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
     },
   ];
 
-  return { scrapedAt: new Date().toISOString(), items };
+  return {
+    scrapedAt: new Date().toISOString(),
+    items,
+    extras: { grants: gr?.rows ?? [] },
+  };
 }
 
 // =====================================================================

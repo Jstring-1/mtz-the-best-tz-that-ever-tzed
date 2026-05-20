@@ -398,6 +398,21 @@ main { padding-top: var(--top-stack-h); display: block; }
 .bill-detail .bill-summary h2, .bill-detail .bill-summary h3 { font-size: 1em; color: var(--accent); margin: 10px 0 4px; }
 .bill-detail .bill-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 
+/* Grants modal */
+.grants-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.grants-list li { padding: 6px 0; border-bottom: 1px dashed var(--border-soft); }
+.grants-list .row1 { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.grants-list .amt { font-family: var(--mono); color: var(--accent-green); min-width: 64px; }
+.grants-list .recipient { font-weight: 600; flex: 1 1 auto; }
+.grants-list .date { font-family: var(--mono); font-size: .82em; color: var(--text-muted); }
+.grants-list .desc { font-size: .85em; color: #ccc; line-height: 1.4; margin-top: 2px; }
+
+/* Crime modal */
+.crime-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.crime-list li { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--border-soft); }
+.crime-list .label { color: var(--text); }
+.crime-list .count { font-family: var(--mono); color: var(--accent-warm); }
+
 /* ======================================================================
    /gov page (personal-use national dashboard, no site chrome)
    ====================================================================== */

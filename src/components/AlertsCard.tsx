@@ -28,6 +28,9 @@ export default function AlertsCard({
   const [openQuake, setOpenQuake] = useState<QuakeLite | null>(null);
   const total = alerts.length + quakes.length;
 
+  // Hide the card entirely when there's nothing to show.
+  if (total === 0) return null;
+
   return (
     <section className="card-section alerts-card">
       <h2>Active alerts <span className="count">{total}</span></h2>

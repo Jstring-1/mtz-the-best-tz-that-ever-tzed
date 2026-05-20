@@ -33,7 +33,10 @@ export default async function MainPage() {
     getPlaces(),
   ]);
 
+  // Quakes only from the last 7 days; AlertsCard hides itself when empty.
+  const oneWeekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
   const quakeAlerts: QuakeLite[] = storedQuakes
+    .filter((q) => q.occurred_at >= oneWeekAgo)
     .slice()
     .sort((a, b) => b.occurred_at - a.occurred_at)
     .map((q) => ({
@@ -127,8 +130,8 @@ export default async function MainPage() {
       <PlacesCard spots={spots} />
       <PetsCard   pets={storedPets} />
       <div className="col-stack">
-        <AlertsCard alerts={localAlerts} quakes={quakeAlerts} tz={loc.timezone} />
         <LocalCivicCard />
+        <AlertsCard alerts={localAlerts} quakes={quakeAlerts} tz={loc.timezone} />
         <RadarCard  imgs={radarImgs} />
       </div>
     </div>
