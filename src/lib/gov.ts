@@ -76,13 +76,35 @@ async function blsSeries(seriesIds: string[]): Promise<BlsResp | null> {
   return r;
 }
 
-async function blsUnemployment(): Promise<{ value: string; period: string } | null> {
-  // LAUS area code for Contra Costa County, CA = CN0601300; measure 03 = rate.
-  const seriesId = 'LAUCN060130000000003';
-  const r = await blsSeries([seriesId]);
-  const row = r?.Results?.series?.[0]?.data?.[0];
-  if (!row) return null;
-  return { value: `${row.value}%`, period: `${row.periodName} ${row.year}` };
+// BLS series IDs:
+//   LAUCN060130000000003 — Contra Costa County (LAUS, NSA)
+//   LASST060000000000003 — California statewide (LAUS state, NSA)
+//   LNS14000000          — U.S. civilian unemployment (national, SA)
+async function blsUnemployment(): Promise<{
+  county: string | null; state: string | null; nation: string | null;
+  period: string;
+} | null> {
+  const r = await blsSeries([
+    'LAUCN060130000000003',
+    'LASST060000000000003',
+    'LNS14000000',
+  ]);
+  const series = r?.Results?.series ?? [];
+  if (!series.length) return null;
+  const byId = new Map(series.map((s) => [s.seriesID, s.data?.[0] ?? null]));
+  const cc = byId.get('LAUCN060130000000003');
+  const ca = byId.get('LASST060000000000003');
+  const us = byId.get('LNS14000000');
+  // Period taken from whichever is freshest (county usually lags).
+  const newest = [cc, ca, us]
+    .filter((d): d is { year: string; periodName: string; value: string } => !!d)
+    .sort((a, b) => (b.year + b.periodName).localeCompare(a.year + a.periodName))[0];
+  return {
+    county: cc ? `${cc.value}%` : null,
+    state:  ca ? `${ca.value}%` : null,
+    nation: us ? `${us.value}%` : null,
+    period: newest ? `${newest.periodName} ${newest.year}` : '',
+  };
 }
 
 // ---- 2. EIA — California regular gas weekly avg ----------------------
@@ -258,10 +280,16 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
     {
       key: 'unemp',
       label: 'Unemployment',
-      value: u ? u.value : '—',
+      value: u
+        ? [
+            u.county ? `CC ${u.county}` : null,
+            u.state  ? `CA ${u.state}`  : null,
+            u.nation ? `US ${u.nation}` : null,
+          ].filter(Boolean).join(' · ') || '—'
+        : '—',
       tooltip: u
-        ? `Contra Costa County unemployment rate, BLS LAUS, ${u.period}`
-        : 'Contra Costa County unemployment (BLS LAUS) — data unavailable',
+        ? `Unemployment rate — Contra Costa County (BLS LAUS, NSA) · California statewide (BLS LAUS, NSA) · United States (BLS LNS, SA). Latest period: ${u.period}.`
+        : 'Unemployment (BLS) — data unavailable',
       color: 'red',
     },
     {
@@ -306,7 +334,9 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
   // Per-source result/error so we can debug "—" rows from /admin's
   // apis_json viewer without re-running the cron.
   const debug: Record<string, string> = {
-    bls: u ? 'ok' : (lastFail['bls'] ?? 'no data'),
+    bls: u
+      ? `ok (cc=${u.county ?? '?'} ca=${u.state ?? '?'} us=${u.nation ?? '?'})`
+      : (lastFail['bls'] ?? 'no data'),
     eia: g ? 'ok' : (lastFail['eia'] ?? 'no data'),
     usaspending: gr ? `ok (${gr.rows.length})` : (lastFail['api.usaspending.gov'] ?? 'no data'),
     congress: r ? `ok (${r.count} bills)` : (lastFail['api.congress.gov'] ?? 'no data'),
