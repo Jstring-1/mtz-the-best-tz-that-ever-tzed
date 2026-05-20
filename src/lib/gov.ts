@@ -266,6 +266,87 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
 }
 
 // =====================================================================
+// Rep voting record — cached by the 4h cron so the popup is instant.
+// =====================================================================
+// The Congress.gov v3 API doesn't expose per-member roll-call records
+// directly; we have to list recent House votes, then look up each
+// vote's members list and find our rep. The 4h cadence keeps it fresh
+// without hammering the API (≤ 25 calls per refresh).
+
+const REP_BIOGUIDE = 'D000623';
+
+export interface RepVote {
+  congress: number; session: number; voteNumber: number;
+  date: string;
+  question: string;
+  result: string;
+  position: string;                  // 'Yea' / 'Nay' / 'Present' / 'Not Voting'
+  billCongress?: number;
+  billType?: string;                 // 'HR' / 'S' / etc.
+  billNumber?: string;
+  billTitle?: string;
+}
+export interface RepVotesPayload { scrapedAt: string; votes: RepVote[] }
+
+interface HouseVoteListItem {
+  congress?: number;
+  sessionNumber?: number;
+  rollCallNumber?: number;
+  startDate?: string;
+  voteQuestion?: string;
+  result?: string;
+  bill?: { congress?: number; type?: string; number?: string; title?: string };
+  legislationType?: string; legislationNumber?: string;
+}
+interface HouseVoteList { houseRollCallVotes?: HouseVoteListItem[] }
+interface HouseVoteMembers {
+  houseRollCallVoteMemberVotes?: {
+    results?: Array<{ bioguideID?: string; voteCast?: string }>;
+  };
+}
+
+export async function fetchRepVotes(limit = 20): Promise<RepVotesPayload> {
+  const out: RepVote[] = [];
+  if (!KEY) return { scrapedAt: new Date().toISOString(), votes: out };
+
+  const listUrl =
+    `https://api.congress.gov/v3/house-vote?api_key=${KEY}&format=json&limit=${limit}`;
+  const list = await safeJson<HouseVoteList>(listUrl);
+  const items = list?.houseRollCallVotes ?? [];
+
+  const lookups = items.slice(0, limit).map(async (it) => {
+    const cg = it.congress, ss = it.sessionNumber, vn = it.rollCallNumber;
+    if (!cg || !ss || !vn) return null;
+    const memUrl =
+      `https://api.congress.gov/v3/house-vote/${cg}/${ss}/${vn}/members` +
+      `?api_key=${KEY}&format=json&limit=600`;
+    const m = await safeJson<HouseVoteMembers>(memUrl);
+    const me = m?.houseRollCallVoteMemberVotes?.results?.find(
+      (r) => (r.bioguideID ?? '').toUpperCase() === REP_BIOGUIDE,
+    );
+    if (!me) return null;
+    const row: RepVote = {
+      congress: cg,
+      session: ss,
+      voteNumber: vn,
+      date: (it.startDate ?? '').slice(0, 10),
+      question: it.voteQuestion ?? '',
+      result: it.result ?? '',
+      position: me.voteCast ?? '',
+      billCongress: it.bill?.congress,
+      billType: it.bill?.type,
+      billNumber: it.bill?.number,
+      billTitle: it.bill?.title,
+    };
+    return row;
+  });
+  const settled = await Promise.allSettled(lookups);
+  for (const s of settled) if (s.status === 'fulfilled' && s.value) out.push(s.value);
+  out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return { scrapedAt: new Date().toISOString(), votes: out };
+}
+
+// =====================================================================
 // /gov page — "health of the nation" payload
 // =====================================================================
 

@@ -392,6 +392,11 @@ async function govNational(json: Record<string, unknown>) {
   json['gov_national'] = await fetchGovNational();
 }
 
+async function repVotes(json: Record<string, unknown>) {
+  const { fetchRepVotes } = await import('./gov');
+  json['gov_rep_votes'] = await fetchRepVotes(20);
+}
+
 async function localParks(json: Record<string, unknown>) {
   const { scrapeAllParks } = await import('./scrape-parks');
   const parks = await scrapeAllParks();
@@ -973,6 +978,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('local_events',   () => localEvents(json),          ok, errors);
     await safe('shelter_pets',   () => shelterPets(json),          ok, errors);
     await safe('gov_national',   () => govNational(json),          ok, errors);
+    await safe('rep_votes',      () => repVotes(json),             ok, errors);
   }
 
   if (bucket === '12h' || all) {

@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { getJson } from '@/lib/cache';
+import type { RepVotesPayload } from '@/lib/gov';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -58,6 +60,12 @@ export async function GET() {
   const spJson = await pick<LegResp>(spRes);
   const csJson = await pick<LegResp>(csRes);
 
+  // Cached vote-by-vote positions (populated by the 4h `rep_votes` cron).
+  let votesPayload: RepVotesPayload | null = null;
+  try { votesPayload = await getJson<RepVotesPayload>('gov_rep_votes'); }
+  catch { /* DB cold */ }
+  const votes = votesPayload?.votes ?? [];
+
   const mapBill = (b: BillItem) => ({
     number: `${b.type ?? ''} ${b.number ?? ''}`.trim(),
     title: b.title ?? '(untitled)',
@@ -76,5 +84,7 @@ export async function GET() {
     url: `https://www.congress.gov/member/mark-desaulnier/${BIOGUIDE}`,
     sponsored: (spJson?.sponsoredLegislation ?? []).slice(0, 12).map(mapBill),
     cosponsored: (csJson?.cosponsoredLegislation ?? []).slice(0, 12).map(mapBill),
+    votes,
+    votesScrapedAt: votesPayload?.scrapedAt ?? null,
   });
 }

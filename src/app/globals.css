@@ -352,6 +352,52 @@ main { padding-top: var(--top-stack-h); display: block; }
 .rep-detail .rep-list a:hover .title { color: var(--accent); }
 .rep-detail .rep-list .meta { font-size: .8em; line-height: 1.4; margin-top: 2px; }
 
+.rep-detail .rep-list a, .rep-detail .rep-list .bill-trigger {
+  width: 100%; background: transparent; border: 0; padding: 0;
+  text-align: left; cursor: pointer; color: inherit; font: inherit;
+  display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: baseline;
+}
+.rep-detail .bill-trigger:hover .title,
+.rep-detail .rep-list a:hover .title { color: var(--accent); }
+
+/* Votes list */
+.rep-detail .rep-votes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rep-detail .rep-votes li { padding: 6px 0; border-bottom: 1px dashed var(--border-soft); }
+.rep-detail .rep-votes .row1 {
+  display: flex; gap: 10px; align-items: baseline;
+  font-family: var(--mono); font-size: .82em;
+}
+.rep-detail .rep-votes .pos {
+  padding: 0 6px; border-radius: 3px; font-weight: 700; min-width: 44px; text-align: center;
+}
+.rep-detail .rep-votes .pos-yea  { color: var(--accent-green); border: 1px solid var(--accent-green); }
+.rep-detail .rep-votes .pos-nay  { color: var(--accent-warm);  border: 1px solid var(--accent-warm); }
+.rep-detail .rep-votes .pos-present,
+.rep-detail .rep-votes .pos-not-voting { color: var(--text-muted); border: 1px solid var(--border); }
+.rep-detail .rep-votes .date     { color: var(--text-muted); }
+.rep-detail .rep-votes .result   { color: var(--text-muted); }
+.rep-detail .rep-votes .question { font-weight: 600; margin: 2px 0; line-height: 1.35; }
+.rep-detail .rep-votes .bill-trigger.small {
+  background: transparent; border: 0; padding: 0;
+  color: var(--accent); cursor: pointer; font: inherit;
+  font-size: .82em; text-align: left;
+}
+.rep-detail .rep-votes .bill-trigger.small:hover { text-decoration: underline; }
+
+/* Bill detail modal */
+.bill-detail .bill-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 12px; }
+.bill-detail .bill-kv dt { color: var(--text-muted); font-size: .85em; }
+.bill-detail .bill-kv dd { margin: 0; }
+.bill-detail .bill-h { margin: 14px 0 8px; font-size: .9em; color: var(--accent); text-transform: uppercase; letter-spacing: .6px; }
+.bill-detail .bill-summary {
+  font-size: .92em; line-height: 1.55; color: var(--text);
+  max-height: 50vh; overflow-y: auto;
+  padding-right: 6px;
+}
+.bill-detail .bill-summary p { margin: 0 0 8px; }
+.bill-detail .bill-summary h2, .bill-detail .bill-summary h3 { font-size: 1em; color: var(--accent); margin: 10px 0 4px; }
+.bill-detail .bill-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
 /* ======================================================================
    /gov page (personal-use national dashboard, no site chrome)
    ====================================================================== */
