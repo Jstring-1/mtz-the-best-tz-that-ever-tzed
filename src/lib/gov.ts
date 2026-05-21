@@ -180,10 +180,15 @@ const CONTRACT_FIELDS = [
 const CCC_LOC      = [{ country: 'USA', state: 'CA', county: '013' }];
 const MARTINEZ_LOC = [{ country: 'USA', state: 'CA', city: 'MARTINEZ' }];
 
+export type FundingSourceKind = 'usaspending' | 'subaward' | 'fac' | 'link';
+
 export interface FundingSourceMeta {
   key: string;
   label: string;
   description: string;
+  kind: FundingSourceKind;
+  linkUrl?: string;             // present for kind='link' (and as a hint for other kinds)
+  linkLabel?: string;           // optional button text for link sources
 }
 interface SourceFilter {
   categories: AwardCategory[];          // one API call per category, merged
@@ -192,95 +197,136 @@ interface SourceFilter {
   programNumbers?: string[];            // CFDA program numbers
   agency?: string;                      // toptier agency name
 }
-interface SourceConfig extends FundingSourceMeta { filter: SourceFilter; }
+interface FacQuery {
+  cities: string[];                     // PostgREST in.() filter
+  yearsBack: number;                    // most recent N audit years
+}
+type SourceConfig =
+  | (FundingSourceMeta & { kind: 'usaspending'; filter: SourceFilter })
+  | (FundingSourceMeta & { kind: 'subaward';    filter: SourceFilter })
+  | (FundingSourceMeta & { kind: 'fac';         fac: FacQuery })
+  | (FundingSourceMeta & { kind: 'link' });
 
-// 20 sources — all scoped to Martinez or Contra Costa County in some
-// way. Order matters: the first one (`grants`) is the default shown and
-// also feeds the civic-strip Grants summary.
-const FUNDING_SOURCES: SourceConfig[] = [
-  { key: 'grants',         label: 'All grants — Contra Costa Co.',
-    description: 'All federal grants in CCC, last 90 days',
-    filter: { categories: ['grants'], place: 'ccc-county' } },
-  { key: 'contracts',      label: 'Contracts — Contra Costa Co.',
-    description: 'Federal contracts in CCC, last 90 days',
-    filter: { categories: ['contracts'], place: 'ccc-county' } },
-  { key: 'loans',          label: 'Loans — Contra Costa Co.',
-    description: 'Federal loans in CCC, last 90 days',
-    filter: { categories: ['loans'], place: 'ccc-county' } },
-  { key: 'direct',         label: 'Direct payments — Contra Costa Co.',
-    description: 'Federal direct payments in CCC, last 90 days',
-    filter: { categories: ['direct'], place: 'ccc-county' } },
-  { key: 'martinez-all',   label: 'All federal $ — City of Martinez',
-    description: 'All award types, place-of-performance = Martinez',
-    filter: { categories: ['grants', 'contracts', 'loans', 'direct'], place: 'martinez-city' } },
-  // Agency-scoped, in CCC.
-  { key: 'agency-va',      label: 'Veterans Affairs — CCC',
-    description: 'VA awards (grants + contracts) in CCC',
-    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Veterans Affairs' } },
-  { key: 'agency-dod',     label: 'Defense (DoD) — CCC',
-    description: 'DoD awards (grants + contracts) in CCC',
-    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Defense' } },
-  { key: 'agency-doe',     label: 'Energy (DOE) — CCC',
-    description: 'DOE awards (grants + contracts) in CCC',
-    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Energy' } },
-  { key: 'agency-epa',     label: 'EPA — CCC',
-    description: 'EPA awards (grants + contracts) in CCC',
-    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Environmental Protection Agency' } },
-  { key: 'agency-dot',     label: 'Transportation (DOT) — CCC',
-    description: 'DOT awards (highway/transit) in CCC',
-    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Transportation' } },
-  { key: 'agency-usda',    label: 'Agriculture (USDA) — CCC',
-    description: 'USDA awards (grants + contracts + direct) in CCC',
-    filter: { categories: ['grants', 'contracts', 'direct'], place: 'ccc-county', agency: 'Department of Agriculture' } },
-  { key: 'agency-hhs',     label: 'Health & Human Services — CCC',
-    description: 'HHS awards (Medicare/Medicaid/CDC/etc.) in CCC',
-    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Health and Human Services' } },
-  { key: 'agency-sba',     label: 'Small Business (SBA) — CCC',
-    description: 'SBA awards + loans in CCC',
-    filter: { categories: ['grants', 'loans'], place: 'ccc-county', agency: 'Small Business Administration' } },
-  { key: 'agency-ed',      label: 'Education — CCC',
-    description: 'Dept of Education awards in CCC',
-    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Education' } },
-  { key: 'agency-hud',     label: 'Housing (HUD) — CCC',
-    description: 'HUD awards in CCC',
-    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Housing and Urban Development' } },
-  { key: 'agency-dhs',     label: 'Homeland Security — CCC',
-    description: 'DHS awards in CCC',
-    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Homeland Security' } },
-  { key: 'cfda-head-start', label: 'Head Start (CFDA 93.600) — CCC',
-    description: 'Head Start/Early Head Start grants, place-of-performance CCC',
-    filter: { categories: ['grants'], place: 'ccc-county', programNumbers: ['93.600'] } },
-  { key: 'cfda-childcare', label: 'Childcare CCDF — CCC',
-    description: 'CCDF block grants (CFDA 93.575 / 93.596) in CCC',
-    filter: { categories: ['grants'], place: 'ccc-county', programNumbers: ['93.575', '93.596'] } },
+// Contra Costa County incorporated cities for the FAC auditee-city filter.
+// (Excludes unincorporated CDPs; auditees there file under county-level
+// entities anyway.)
+const CCC_CITIES = [
+  'MARTINEZ', 'CONCORD', 'WALNUT CREEK', 'PLEASANT HILL', 'PITTSBURG', 'ANTIOCH',
+  'BRENTWOOD', 'OAKLEY', 'RICHMOND', 'SAN PABLO', 'EL CERRITO', 'HERCULES', 'PINOLE',
+  'LAFAYETTE', 'MORAGA', 'ORINDA', 'DANVILLE', 'SAN RAMON', 'CLAYTON',
 ];
 
-function buildFilters(cfg: SourceConfig, types: string[], iso: { start: string; end: string }): Record<string, unknown> {
+// 24 sources — all scoped to Martinez or Contra Costa County in some
+// way. Order matters: the first one (`grants`) is the default shown and
+// also feeds the civic-strip Funding summary.
+const FUNDING_SOURCES: SourceConfig[] = [
+  { kind: 'usaspending', key: 'grants',         label: 'All grants — Contra Costa Co.',
+    description: 'All federal grants in CCC, last 90 days',
+    filter: { categories: ['grants'], place: 'ccc-county' } },
+  { kind: 'usaspending', key: 'contracts',      label: 'Contracts — Contra Costa Co.',
+    description: 'Federal contracts in CCC, last 90 days',
+    filter: { categories: ['contracts'], place: 'ccc-county' } },
+  { kind: 'usaspending', key: 'loans',          label: 'Loans — Contra Costa Co.',
+    description: 'Federal loans in CCC, last 90 days',
+    filter: { categories: ['loans'], place: 'ccc-county' } },
+  { kind: 'usaspending', key: 'direct',         label: 'Direct payments — Contra Costa Co.',
+    description: 'Federal direct payments in CCC, last 90 days',
+    filter: { categories: ['direct'], place: 'ccc-county' } },
+  { kind: 'usaspending', key: 'martinez-all',   label: 'All federal $ — City of Martinez',
+    description: 'All award types, place-of-performance = Martinez',
+    filter: { categories: ['grants', 'contracts', 'loans', 'direct'], place: 'martinez-city' } },
+  { kind: 'subaward',    key: 'subaward-ccc',   label: 'Sub-awards (passthrough) — CCC',
+    description: 'Sub-award totals grouped by prime award — captures state→local passthroughs USAspending prime awards miss',
+    filter: { categories: ['grants'], place: 'ccc-county' } },
+  { kind: 'fac',         key: 'fac-local',      label: 'Single Audits (FAC.gov) — CCC cities',
+    description: 'Federal Audit Clearinghouse: every entity in a CCC city that filed a Single Audit (federal expenditures ≥ $750K)',
+    fac: { cities: CCC_CITIES, yearsBack: 3 } },
+  // Agency-scoped, in CCC.
+  { kind: 'usaspending', key: 'agency-va',      label: 'Veterans Affairs — CCC',
+    description: 'VA awards (grants + contracts) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Veterans Affairs' } },
+  { kind: 'usaspending', key: 'agency-dod',     label: 'Defense (DoD) — CCC',
+    description: 'DoD awards (grants + contracts) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Defense' } },
+  { kind: 'usaspending', key: 'agency-doe',     label: 'Energy (DOE) — CCC',
+    description: 'DOE awards (grants + contracts) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Energy' } },
+  { kind: 'usaspending', key: 'agency-epa',     label: 'EPA — CCC',
+    description: 'EPA awards (grants + contracts) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Environmental Protection Agency' } },
+  { kind: 'usaspending', key: 'agency-dot',     label: 'Transportation (DOT) — CCC',
+    description: 'DOT awards (highway/transit) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Transportation' } },
+  { kind: 'usaspending', key: 'agency-usda',    label: 'Agriculture (USDA) — CCC',
+    description: 'USDA awards (grants + contracts + direct) in CCC',
+    filter: { categories: ['grants', 'contracts', 'direct'], place: 'ccc-county', agency: 'Department of Agriculture' } },
+  { kind: 'usaspending', key: 'agency-hhs',     label: 'Health & Human Services — CCC',
+    description: 'HHS awards (Medicare/Medicaid/CDC/etc.) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Health and Human Services' } },
+  { kind: 'usaspending', key: 'agency-sba',     label: 'Small Business (SBA) — CCC',
+    description: 'SBA awards + loans in CCC',
+    filter: { categories: ['grants', 'loans'], place: 'ccc-county', agency: 'Small Business Administration' } },
+  { kind: 'usaspending', key: 'agency-ed',      label: 'Education — CCC',
+    description: 'Dept of Education awards in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Education' } },
+  { kind: 'usaspending', key: 'agency-hud',     label: 'Housing (HUD) — CCC',
+    description: 'HUD awards in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Housing and Urban Development' } },
+  { kind: 'usaspending', key: 'agency-dhs',     label: 'Homeland Security — CCC',
+    description: 'DHS awards in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Homeland Security' } },
+  { kind: 'usaspending', key: 'cfda-head-start', label: 'Head Start (CFDA 93.600) — CCC',
+    description: 'Head Start/Early Head Start grants, place-of-performance CCC',
+    filter: { categories: ['grants'], place: 'ccc-county', programNumbers: ['93.600'] } },
+  { kind: 'usaspending', key: 'cfda-childcare', label: 'Childcare CCDF — CCC',
+    description: 'CCDF block grants (CFDA 93.575 / 93.596) in CCC',
+    filter: { categories: ['grants'], place: 'ccc-county', programNumbers: ['93.575', '93.596'] } },
+  // Link-out sources — datasets with no live JSON API. Open the
+  // canonical resource in a new tab.
+  { kind: 'link',        key: 'link-hud-cpd',   label: 'HUD CDBG/HOME profile — Martinez',
+    description: 'HUD entitlement allocations for City of Martinez. No live JSON API — opens HUD CPD Profiles.',
+    linkUrl: 'https://www.hud.gov/program_offices/comm_planning/budget',
+    linkLabel: 'Open HUD CPD allocations page →' },
+  { kind: 'link',        key: 'link-sba-loans', label: 'SBA 7(a) / 504 loans dataset',
+    description: 'SBA FOIA dataset — small-business loan recipients nationwide. Filter by BorrCity=Martinez, BorrState=CA after CSV download.',
+    linkUrl: 'https://data.sba.gov/en/dataset/7-a-504-foia',
+    linkLabel: 'Open SBA 7(a) / 504 dataset →' },
+  { kind: 'link',        key: 'link-martinez-budget', label: 'City of Martinez budget book',
+    description: "Martinez's annual operating budget on ClearGov. HTML/JS budget book — no public data API.",
+    linkUrl: 'https://city-martinez-ca-budget-book.cleargov.com/',
+    linkLabel: 'Open Martinez budget book →' },
+  { kind: 'link',        key: 'link-ccc-budget', label: 'Contra Costa County budget book',
+    description: "Contra Costa County's annual budget on ClearGov. HTML/JS budget book — no public data API.",
+    linkUrl: 'https://county-contra-costa-ca-budget-book.cleargov.com/',
+    linkLabel: 'Open CCC budget book →' },
+];
+
+function buildFilters(filter: SourceFilter, types: string[], iso: { start: string; end: string }): Record<string, unknown> {
   const f: Record<string, unknown> = {
     time_period: [{ start_date: iso.start, end_date: iso.end }],
     award_type_codes: types,
   };
-  if (cfg.filter.place === 'ccc-county') f.place_of_performance_locations = CCC_LOC;
-  if (cfg.filter.place === 'martinez-city') f.place_of_performance_locations = MARTINEZ_LOC;
-  if (cfg.filter.recipientPlace === 'ccc-county') f.recipient_locations = CCC_LOC;
-  if (cfg.filter.programNumbers) f.program_numbers = cfg.filter.programNumbers;
-  if (cfg.filter.agency) f.agencies = [{ type: 'awarding', tier: 'toptier', name: cfg.filter.agency }];
+  if (filter.place === 'ccc-county') f.place_of_performance_locations = CCC_LOC;
+  if (filter.place === 'martinez-city') f.place_of_performance_locations = MARTINEZ_LOC;
+  if (filter.recipientPlace === 'ccc-county') f.recipient_locations = CCC_LOC;
+  if (filter.programNumbers) f.program_numbers = filter.programNumbers;
+  if (filter.agency) f.agencies = [{ type: 'awarding', tier: 'toptier', name: filter.agency }];
   return f;
 }
 
 async function fetchSourceCategory(
-  cfg: SourceConfig, category: AwardCategory, iso: { start: string; end: string },
+  cfgKey: string, filter: SourceFilter, category: AwardCategory, iso: { start: string; end: string },
 ): Promise<GrantRow[]> {
   const fields = category === 'contracts' ? CONTRACT_FIELDS : ASSIST_FIELDS;
   const body = {
-    filters: buildFilters(cfg, CATEGORY_TYPES[category], iso),
+    filters: buildFilters(filter, CATEGORY_TYPES[category], iso),
     fields,
     page: 1, limit: 25, sort: 'Award Amount', order: 'desc',
   };
   const j = await safeJson<SpendingResp>(
     'https://api.usaspending.gov/api/v2/search/spending_by_award/',
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-    `usa:${cfg.key}:${category}`,
+    `usa:${cfgKey}:${category}`,
   );
   if (!j?.results) return [];
   return j.results.map((r) => ({
@@ -294,12 +340,111 @@ async function fetchSourceCategory(
   }));
 }
 
-async function fetchOneSource(cfg: SourceConfig, days: number): Promise<GrantRow[]> {
+// ---- USAspending sub-awards (grouped by prime award) -----------------
+// The /spending_by_subaward_grouped endpoint returns aggregate sub-award
+// dollars grouped by the prime award (no per-sub-recipient detail). It's
+// the best signal we have for state→local pass-through funding without
+// hitting a separate /awards/{id}/sub_awards/ call per row.
+
+interface SubawardGroupResp {
+  results?: Array<{
+    award_id?: string;
+    award_generated_internal_id?: string;
+    subaward_count?: number;
+    subaward_obligation?: number;
+  }>;
+}
+
+async function fetchSubawardSource(cfgKey: string, filter: SourceFilter, days: number): Promise<GrantRow[]> {
+  const end = new Date();
+  const start = new Date(end.getTime() - days * 24 * 3600 * 1000);
+  const iso = { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  const merged: GrantRow[] = [];
+  for (const cat of filter.categories) {
+    const body = {
+      filters: buildFilters(filter, CATEGORY_TYPES[cat], iso),
+      page: 1, limit: 50, sort: 'subaward_obligation', order: 'desc',
+    };
+    const j = await safeJson<SubawardGroupResp>(
+      'https://api.usaspending.gov/api/v2/search/spending_by_subaward_grouped/',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+      `usa-sub:${cfgKey}:${cat}`,
+    );
+    if (!j?.results) continue;
+    for (const r of j.results) {
+      merged.push({
+        amount:      r.subaward_obligation ?? 0,
+        recipient:   r.award_id ? `Prime award ${r.award_id}` : '(unknown prime)',
+        description: `${r.subaward_count ?? 0} sub-awards obligated under this prime — click for sub-recipients`,
+        agency:      '',
+        actionDate:  '',
+        periodStart: '',
+        internalId:  r.award_generated_internal_id,
+      });
+    }
+  }
+  merged.sort((a, b) => b.amount - a.amount);
+  return merged.slice(0, 30);
+}
+
+// ---- Federal Audit Clearinghouse -------------------------------------
+// PostgREST endpoint at api.fac.gov. Single Audit data for any entity
+// that expended ≥ $750K of federal funds in a fiscal year (cities,
+// counties, school districts, nonprofits). Captures pass-through
+// funding USAspending misses.
+
+interface FacRow {
+  report_id?: string;
+  auditee_name?: string;
+  auditee_city?: string;
+  auditee_state?: string;
+  audit_year?: number;
+  audit_type?: string;
+  total_amount_expended?: number;
+  fac_accepted_date?: string;
+  audit_period_covered?: string;
+}
+
+async function fetchFacSource(cfgKey: string, q: FacQuery): Promise<GrantRow[]> {
+  // Recent N years. FAC's audit_year is the entity's fiscal year.
+  const thisYr = new Date().getUTCFullYear();
+  const years = Array.from({ length: q.yearsBack }, (_, i) => thisYr - 1 - i);
+  const cityList = q.cities.map((c) => c.replace(/\s/g, '%20')).join(',');
+  const yearList = years.join(',');
+  const url =
+    `https://api.fac.gov/general` +
+    `?auditee_state=eq.CA` +
+    `&auditee_city=in.(${cityList})` +
+    `&audit_year=in.(${yearList})` +
+    `&select=report_id,auditee_name,auditee_city,audit_year,audit_type,total_amount_expended,fac_accepted_date,audit_period_covered` +
+    `&order=total_amount_expended.desc.nullslast` +
+    `&limit=60`;
+  // FAC requires an X-Api-Key header (api.data.gov key works).
+  const j = await safeJson<FacRow[]>(
+    url,
+    KEY ? { headers: { 'X-Api-Key': KEY } } : undefined,
+    `fac:${cfgKey}`,
+  );
+  if (!Array.isArray(j)) return [];
+  return j.map((r) => ({
+    amount:      r.total_amount_expended ?? 0,
+    recipient:   r.auditee_name ?? '(unnamed)',
+    description: `Single Audit FY${r.audit_year ?? '?'}${r.audit_type ? ` — ${r.audit_type}` : ''}${r.auditee_city ? ` · ${r.auditee_city}` : ''}`,
+    agency:      '',
+    actionDate:  (r.fac_accepted_date ?? '').slice(0, 10),
+    periodStart: (r.audit_period_covered ?? '').slice(0, 10),
+    // No drill-down on our side (FAC has its own dissemination URL). We
+    // skip internalId so the row isn't a clickable button.
+    internalId:  undefined,
+  })).filter((row) => row.amount > 0);
+}
+
+async function fetchUsaspendingSource(cfgKey: string, filter: SourceFilter, days: number): Promise<GrantRow[]> {
   const end = new Date();
   const start = new Date(end.getTime() - days * 24 * 3600 * 1000);
   const iso = { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
   const results = await Promise.allSettled(
-    cfg.filter.categories.map((cat) => fetchSourceCategory(cfg, cat, iso)),
+    filter.categories.map((cat) => fetchSourceCategory(cfgKey, filter, cat, iso)),
   );
   const merged: GrantRow[] = [];
   for (const r of results) if (r.status === 'fulfilled') merged.push(...r.value);
@@ -316,6 +461,25 @@ async function fetchOneSource(cfg: SourceConfig, days: number): Promise<GrantRow
   return out.slice(0, 30);
 }
 
+// Dispatch a single source to the right fetcher based on `kind`.
+async function fetchOneSource(cfg: SourceConfig, days: number): Promise<GrantRow[]> {
+  switch (cfg.kind) {
+    case 'usaspending': return fetchUsaspendingSource(cfg.key, cfg.filter, days);
+    case 'subaward':    return fetchSubawardSource(cfg.key, cfg.filter, days);
+    case 'fac':         return fetchFacSource(cfg.key, cfg.fac);
+    case 'link':        return [];   // link-out sources have no rows
+  }
+}
+
+// Strip private filter/fac fields so the cache payload only carries
+// what the client actually needs.
+function metaFromConfig(cfg: SourceConfig): FundingSourceMeta {
+  return {
+    key: cfg.key, label: cfg.label, description: cfg.description, kind: cfg.kind,
+    linkUrl: cfg.linkUrl, linkLabel: cfg.linkLabel,
+  };
+}
+
 async function fetchFundingAll(days = 90): Promise<{
   sources: FundingSourceMeta[];
   data: Record<string, GrantRow[]>;
@@ -328,7 +492,7 @@ async function fetchFundingAll(days = 90): Promise<{
     const r = results[i];
     data[cfg.key] = r.status === 'fulfilled' ? r.value : [];
   });
-  const sources: FundingSourceMeta[] = FUNDING_SOURCES.map(({ key, label, description }) => ({ key, label, description }));
+  const sources: FundingSourceMeta[] = FUNDING_SOURCES.map(metaFromConfig);
   return { sources, data };
 }
 

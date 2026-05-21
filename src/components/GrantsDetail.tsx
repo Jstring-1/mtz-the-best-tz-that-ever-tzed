@@ -18,6 +18,9 @@ export interface FundingSourceMeta {
   key: string;
   label: string;
   description: string;
+  kind?: 'usaspending' | 'subaward' | 'fac' | 'link';
+  linkUrl?: string;
+  linkLabel?: string;
 }
 
 type SortKey = 'action-desc' | 'action-asc' | 'amount-desc' | 'amount-asc' | 'period-desc' | 'period-asc';
@@ -109,12 +112,22 @@ export default function GrantsDetail({
             </div>
             <div className="grants-meta muted">
               {activeMeta
-                ? `${activeMeta.description} · ${activeRows.length} award${activeRows.length === 1 ? '' : 's'}`
+                ? `${activeMeta.description}${activeMeta.kind !== 'link' ? ` · ${activeRows.length} row${activeRows.length === 1 ? '' : 's'}` : ''}`
                 : `Top ${activeRows.length} awards · last 90 days`}
             </div>
-            {activeRows.length === 0 && (
+            {activeMeta?.kind === 'link' && activeMeta.linkUrl && (
+              <p style={{ marginTop: 12 }}>
+                <a
+                  className="event-modal-btn primary"
+                  href={activeMeta.linkUrl}
+                  target="_blank"
+                  rel="noopener"
+                >{activeMeta.linkLabel ?? 'Open dataset →'}</a>
+              </p>
+            )}
+            {activeMeta?.kind !== 'link' && activeRows.length === 0 && (
               <p className="muted" style={{ marginTop: 10 }}>
-                No awards for this source in the last 90 days. Try another source above.
+                No rows for this source. Try another source above.
               </p>
             )}
             <ul className="grants-list">
