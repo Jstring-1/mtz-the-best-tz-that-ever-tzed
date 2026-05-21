@@ -407,6 +407,11 @@ async function govNational(json: Record<string, unknown>) {
   json['gov_national'] = await fetchGovNational();
 }
 
+async function ccrmcData(json: Record<string, unknown>) {
+  const { fetchCcrmcData } = await import('./ccrmc');
+  json['ccrmc_data'] = await fetchCcrmcData();
+}
+
 async function repVotes(json: Record<string, unknown>) {
   const { fetchRepVotes } = await import('./gov');
   json['gov_rep_votes'] = await fetchRepVotes(20);
@@ -1033,6 +1038,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('ticketmaster_events',() => ticketmasterEvents(json), ok, errors);
     await safe('local_parks',        () => localParks(json),         ok, errors);
     await safe('gov_local',          () => govLocal(json),            ok, errors);
+    await safe('ccrmc_data',         () => ccrmcData(json),           ok, errors);
     await safe('purge_stores',       () => purgeStores(),             ok, errors);
   }
 

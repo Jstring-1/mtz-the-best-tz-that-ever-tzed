@@ -57,23 +57,30 @@ function sortRows(rows: GrantRow[], key: SortKey): GrantRow[] {
 
 export default function GrantsDetail({
   label, tooltip, rows, sources = [], data = {},
+  keyPrefix = '', triggerClassName = 'civic-row-btn', modalTitle,
 }: {
   label: string; tooltip?: string;
   rows: GrantRow[];                                   // legacy default rows (kept as fallback)
   sources?: FundingSourceMeta[];
   data?: Record<string, GrantRow[]>;
+  /** Prepended to every URL key so multiple GrantsDetail instances on
+   *  the same page (e.g. civic strip + CCRMC page) stay independent. */
+  keyPrefix?: string;
+  triggerClassName?: string;
+  modalTitle?: string;
 }) {
-  const [open, setOpen] = useUrlBool('funding');
-  const [grantId, setGrantId] = useUrlString('grant');
-  const [pdfOpen, setPdfOpen] = useUrlBool('fpdf');
+  const k = (name: string) => `${keyPrefix}${name}`;
+  const [open, setOpen] = useUrlBool(k('funding'));
+  const [grantId, setGrantId] = useUrlString(k('grant'));
+  const [pdfOpen, setPdfOpen] = useUrlBool(k('fpdf'));
   const defaultSort: SortKey = 'action-desc';
-  const [sortRaw, setSortRaw] = useUrlString('fsort');
+  const [sortRaw, setSortRaw] = useUrlString(k('fsort'));
   const sort = (SORTS.map((s) => s.key) as string[]).includes(sortRaw ?? '')
     ? (sortRaw as SortKey)
     : defaultSort;
   const setSort = (s: SortKey) => setSortRaw(s === defaultSort ? null : s);
   const defaultSourceKey = sources[0]?.key ?? 'grants';
-  const [sourceKeyRaw, setSourceKeyRaw] = useUrlString('fsrc');
+  const [sourceKeyRaw, setSourceKeyRaw] = useUrlString(k('fsrc'));
   const sourceKey = sources.some((s) => s.key === sourceKeyRaw) ? (sourceKeyRaw as string) : defaultSourceKey;
   const setSourceKey = (k: string) => setSourceKeyRaw(k === defaultSourceKey ? null : k);
 
@@ -103,10 +110,10 @@ export default function GrantsDetail({
 
   return (
     <>
-      <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
+      <button type="button" className={triggerClassName} onClick={() => setOpen(true)} title={tooltip}>
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Federal funding — Contra Costa / Martinez" size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title={modalTitle ?? 'Federal funding — Contra Costa / Martinez'} size="lg">
         {!haveAnything ? (
           <p className="muted">No funding rows in cache. Re-run /admin → 12h.</p>
         ) : (
