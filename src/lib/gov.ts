@@ -152,6 +152,8 @@ export interface GrantRow {
 }
 interface SpendingResp { results?: Array<{
   'Award Amount'?: number;
+  'Loan Value'?: number;
+  'Subsidy Cost'?: number;
   'Recipient Name'?: string;
   'Award Description'?: string;
   'Description'?: string;
@@ -184,6 +186,25 @@ const CONTRACT_FIELDS = [
   'Awarding Agency', 'Awarding Sub Agency',
   'Period of Performance Start Date', 'Action Date',
 ];
+// Loans use 'Loan Value' (the principal) — 'Award Amount' is not a
+// valid field or sort key on the Loan Award mapping.
+const LOAN_FIELDS = [
+  'Loan Value', 'Subsidy Cost', 'Recipient Name', 'Description',
+  'Awarding Agency', 'Awarding Sub Agency',
+  'Action Date', 'Period of Performance Start Date',
+];
+const FIELDS_FOR: Record<AwardCategory, string[]> = {
+  grants:    ASSIST_FIELDS,
+  contracts: CONTRACT_FIELDS,
+  loans:     LOAN_FIELDS,
+  direct:    ASSIST_FIELDS,
+};
+const SORT_FIELD_FOR: Record<AwardCategory, string> = {
+  grants:    'Award Amount',
+  contracts: 'Award Amount',
+  loans:     'Loan Value',
+  direct:    'Award Amount',
+};
 
 const CCC_LOC      = [{ country: 'USA', state: 'CA', county: '013' }];
 const MARTINEZ_LOC = [{ country: 'USA', state: 'CA', city: 'MARTINEZ' }];
@@ -330,11 +351,12 @@ function buildFilters(filter: SourceFilter, types: string[], iso: { start: strin
 async function fetchSourceCategory(
   cfgKey: string, filter: SourceFilter, category: AwardCategory, iso: { start: string; end: string },
 ): Promise<GrantRow[]> {
-  const fields = category === 'contracts' ? CONTRACT_FIELDS : ASSIST_FIELDS;
   const body = {
     filters: buildFilters(filter, CATEGORY_TYPES[category], iso),
-    fields,
-    page: 1, limit: 25, sort: 'Award Amount', order: 'desc',
+    fields: FIELDS_FOR[category],
+    page: 1, limit: 25,
+    sort: SORT_FIELD_FOR[category],
+    order: 'desc',
   };
   const j = await safeJson<SpendingResp>(
     'https://api.usaspending.gov/api/v2/search/spending_by_award/',
@@ -343,7 +365,8 @@ async function fetchSourceCategory(
   );
   if (!j?.results) return [];
   return j.results.map((r) => ({
-    amount:      r['Award Amount'] ?? 0,
+    // Loans report 'Loan Value' (principal) instead of 'Award Amount'.
+    amount:      r['Award Amount'] ?? r['Loan Value'] ?? 0,
     recipient:   r['Recipient Name'] ?? '',
     description: (r['Award Description'] ?? r['Description'] ?? ''),
     agency:      r['Awarding Sub Agency'] || r['Awarding Agency'] || '',

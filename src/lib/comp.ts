@@ -166,22 +166,27 @@ function computeTotals(rows: CompRow[]): CompPayload['totals'] {
   };
 }
 
-// State Controller's per-entity raw CSV export. Format:
-//   https://publicpay.ca.gov/Reports/RawExport.aspx?entityname=...&year=YYYY
+// State Controller's "Government Compensation in California" portal —
+// the canonical URL pattern is on gcc.sco.ca.gov, indexed by a numeric
+// `entityid`. Contra Costa County is entityid=7.
 const ENTITY = 'Contra Costa County';
+const ENTITY_ID = 7;          // CCC's gcc.sco.ca.gov entityid
+const ENTITY_TYPE = 'Counties';
 
 async function tryYear(year: number): Promise<{ csv: string; url: string } | null> {
-  // Three URL variants — most-likely-to-work ones only. Earlier we
-  // tried six but the cumulative timeouts blew the 12h cron's overall
-  // budget. 3 × 8s = 24s worst case per year now.
-  const enc = encodeURIComponent(ENTITY);
+  // Try a few likely raw-export endpoints. The HTML report itself
+  // is at /Reports/Counties/County.aspx?entityid=N&year=YYYY; the
+  // CSV download is typically exposed via one of these companion
+  // routes. We accept the first one that returns a real CSV.
   const variants = [
-    `https://publicpay.ca.gov/Reports/RawExport.aspx?entityname=${enc}&year=${year}`,
-    `https://publicpay.ca.gov/Reports/RawExport.aspx?entityname=${enc}&entitytype=Counties&year=${year}`,
-    `https://bythenumbers.sco.ca.gov/Reports/RawExport.aspx?entityname=${enc}&year=${year}`,
+    `https://gcc.sco.ca.gov/Reports/RawExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
+    `https://gcc.sco.ca.gov/Reports/RawExport.aspx?entityid=${ENTITY_ID}&entitytype=${ENTITY_TYPE}&year=${year}`,
+    `https://gcc.sco.ca.gov/Reports/RawExportFile.aspx?entityid=${ENTITY_ID}&year=${year}`,
+    `https://gcc.sco.ca.gov/Reports/CSVExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
+    `https://gcc.sco.ca.gov/Reports/Counties/County.aspx?entityid=${ENTITY_ID}&year=${year}&action=Download`,
   ];
   for (const url of variants) {
-    const csv = await safeText(url, `publicpay-${year}-${new URL(url).hostname}`);
+    const csv = await safeText(url, `gcc-${year}-${new URL(url).pathname}`);
     if (csv && csv.length > 1000 && /position/i.test(csv) && /total\s*wages/i.test(csv)) {
       return { csv, url };
     }
