@@ -851,43 +851,55 @@ async function ticketmasterEvents(json: Record<string, unknown>) {
   // No classification filter; we want every category (music + sports +
   // arts + comedy + …) so the client can offer a filter bar.
   const loc = getLocation();
-  // Future events only.  Use today's UTC date at 00:00 — Ticketmaster
-  // accepts ISO 8601 with seconds + Z, no millis.
-  const startDateTime = `${new Date().toISOString().slice(0, 10)}T00:00:00Z`;
   type TM = {
     _embedded?: { events?: Array<Record<string, unknown>> };
     page?: { totalPages?: number; totalElements?: number };
   };
-  // Ticketmaster's deep-paging cap is (page * size) < 1000, so with
-  // size=199 we can pull pages 0..4 ≈ ~1000 events — far more than the
-  // single-page ~5 days the Bay Area's event density used to give us.
+  // Ticketmaster's deep-paging cap is (page * size) < 1000, so any
+  // single query is hard-capped at ~1000 events. In a dense market
+  // (Bay Area) that's only ~2 months of coverage. To reach 4 months
+  // we split the lookahead into multiple date windows, each capped at
+  // its own ~1000 events. Two ~62-day windows ≈ 124 days ≈ 4 months.
   const SIZE = 199;
   const MAX_PAGES = 5;
+  const DAYS_PER_WINDOW = 62;
+  const WINDOWS = 2;
   const seen = new Set<string>();
   const events: Array<Record<string, unknown>> = [];
-  let totalPages = 1;
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const params = new URLSearchParams({
-      apikey: process.env.TICKETMASTER_KEY ?? '',
-      size: String(SIZE),
-      page: String(page),
-      geoPoint: `${loc.lat},${loc.lon}`,
-      radius: '50',          // miles
-      unit: 'miles',
-      sort: 'date,asc',
-      startDateTime,
-    });
-    const r = await fetchJson<TM>(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);
-    const batch = r._embedded?.events ?? [];
-    for (const ev of batch) {
-      const eid = String((ev as { id?: string }).id ?? '');
-      if (eid && seen.has(eid)) continue;
-      if (eid) seen.add(eid);
-      events.push(ev);
+  // Anchor windows to today 00:00 UTC; ISO 8601 with seconds + Z, no millis.
+  const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+  const isoZ = (d: Date) => `${d.toISOString().slice(0, 10)}T00:00:00Z`;
+  for (let w = 0; w < WINDOWS; w++) {
+    const winStart = new Date(today.getTime() + w * DAYS_PER_WINDOW * 86400000);
+    const winEnd   = new Date(today.getTime() + (w + 1) * DAYS_PER_WINDOW * 86400000);
+    const startDateTime = isoZ(winStart);
+    const endDateTime   = isoZ(winEnd);
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const params = new URLSearchParams({
+        apikey: process.env.TICKETMASTER_KEY ?? '',
+        size: String(SIZE),
+        page: String(page),
+        geoPoint: `${loc.lat},${loc.lon}`,
+        radius: '50',          // miles
+        unit: 'miles',
+        sort: 'date,asc',
+        startDateTime,
+        endDateTime,
+      });
+      const r = await fetchJson<TM>(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);
+      const batch = r._embedded?.events ?? [];
+      for (const ev of batch) {
+        const eid = String((ev as { id?: string }).id ?? '');
+        if (eid && seen.has(eid)) continue;
+        if (eid) seen.add(eid);
+        events.push(ev);
+      }
+      const totalPages = r.page?.totalPages ?? 1;
+      if (!batch.length || page + 1 >= totalPages) break;
+      await new Promise((res) => setTimeout(res, 250)); // rate-limit politeness
     }
-    totalPages = r.page?.totalPages ?? 1;
-    if (!batch.length || page + 1 >= totalPages) break;
-    await new Promise((res) => setTimeout(res, 250)); // rate-limit politeness
+    // Small breather between windows too.
+    if (w + 1 < WINDOWS) await new Promise((res) => setTimeout(res, 400));
   }
   json.TM_shows = events;
   // Mirror into the structured events table.
