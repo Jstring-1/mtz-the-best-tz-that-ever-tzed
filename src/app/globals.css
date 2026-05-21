@@ -515,6 +515,8 @@ main { padding-top: var(--top-stack-h); display: block; }
 .grant-detail .grant-officers .amt { font-family: var(--mono); color: var(--accent-green); }
 
 /* Crime modal */
+.crime-agency { margin-bottom: 18px; }
+.crime-agency:last-child { margin-bottom: 0; }
 .crime-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .crime-list li { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--border-soft); }
 .crime-list .label { color: var(--text); }
@@ -1627,14 +1629,32 @@ main { padding-top: var(--top-stack-h); display: block; }
 .page.ccrmc h1 { font-size: 1.6em; margin-bottom: 6px; }
 .page.ccrmc h2 { font-size: 1.05em; margin: 28px 0 10px; color: var(--accent); text-transform: uppercase; letter-spacing: .6px; }
 .page.ccrmc .ccrmc-facts {
-  margin-top: 18px; padding: 14px 16px; border: 1px solid var(--border);
+  margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border);
   border-radius: 6px; background: var(--bg-elev);
 }
 .page.ccrmc .ccrmc-facts dl {
-  display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0;
+  /* Two side-by-side k/v columns, each shaped as
+     [dt: max-content][dd: 1fr]. Falls back to one column on narrow
+     screens. */
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+  gap: 4px 14px; margin: 0;
+  font-size: .92em;
+}
+@media (max-width: 760px) {
+  .page.ccrmc .ccrmc-facts dl {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
 }
 .page.ccrmc .ccrmc-facts dt { color: var(--text-muted); font-size: .85em; }
 .page.ccrmc .ccrmc-facts dd { margin: 0; }
+.ccrmc-section-card {
+  display: block;
+  background: var(--bg-elev); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 14px 16px;
+}
+.ccrmc-section-card .head { font-weight: 600; font-size: 1.02em; margin-bottom: 8px; }
 .page.ccrmc .ccrmc-cards {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 16px;
 }
@@ -1683,10 +1703,10 @@ main { padding-top: var(--top-stack-h); display: block; }
   padding: 0;
   width: 92vw;
   /* Prevent the native <dialog> from expanding past its max-width when
-     a descendant has wider intrinsic content. Any horizontal overflow
-     gets clipped by the dialog edge — but combined with the wrap rules
-     below the text wraps before that ever happens. */
-  overflow-x: hidden;
+     a descendant has wider intrinsic content. Hiding overflow on the
+     dialog (not just X) also ensures only ONE scrollbar shows up —
+     scrolling happens on .detail-modal-content, not the dialog. */
+  overflow: hidden;
   box-sizing: border-box;
 }
 .detail-modal::backdrop { background: rgba(0, 0, 0, .7); }

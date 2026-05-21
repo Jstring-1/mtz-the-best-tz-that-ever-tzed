@@ -4,7 +4,19 @@ import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool } from '@/lib/useUrlState';
 
+interface AgencyData {
+  ori: string;
+  name: string;
+  year: number;
+  rows: Array<{ key: string; label: string; count: number }>;
+  violent: number;
+  property: number;
+  total: number;
+  cdeUrl: string;
+}
 interface CrimeData {
+  agencies?: AgencyData[];
+  // Legacy single-agency fields (still returned for back-compat).
   agency: string;
   year: number;
   rows: Array<{ key: string; label: string; count: number }>;
@@ -41,34 +53,47 @@ export default function CrimeDetail({ label, tooltip }: { label: string; tooltip
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={data ? `${data.agency} — ${data.year}` : 'Crime stats'}
+        title="Crime stats — Martinez & Contra Costa Co."
         size="lg"
       >
         {loading && <p className="muted">Loading…</p>}
         {error && <p className="muted">Couldn’t load: {error}</p>}
         {data && (
           <div className="crime-detail">
-            <dl className="bill-kv">
-              <dt>Total offenses</dt><dd>{data.total.toLocaleString()}</dd>
-              <dt>Violent</dt><dd>{data.violent.toLocaleString()}</dd>
-              <dt>Property</dt><dd>{data.property.toLocaleString()}</dd>
-            </dl>
-            <h3 className="bill-h">Breakdown by offense</h3>
-            <ul className="crime-list">
-              {data.rows.map((r) => (
-                <li key={r.key}>
-                  <span className="label">{r.label}</span>
-                  <span className="count">{r.count.toLocaleString()}</span>
-                </li>
-              ))}
-            </ul>
-            <p style={{ marginTop: 12 }}>
-              <a className="event-modal-btn primary" href={data.cdeUrl} target="_blank" rel="noopener">
-                Open FBI Crime Data Explorer →
-              </a>
-            </p>
+            {(data.agencies ?? [{
+              ori: '',
+              name: data.agency,
+              year: data.year,
+              rows: data.rows,
+              violent: data.violent,
+              property: data.property,
+              total: data.total,
+              cdeUrl: data.cdeUrl,
+            }]).map((a) => (
+              <section key={a.ori || a.name} className="crime-agency">
+                <h3 className="bill-h">{a.name}{a.year ? ` — ${a.year}` : ''}</h3>
+                <dl className="bill-kv ccrmc-kv">
+                  <dt>Total offenses</dt><dd>{a.total.toLocaleString()}</dd>
+                  <dt>Violent</dt><dd>{a.violent.toLocaleString()}</dd>
+                  <dt>Property</dt><dd>{a.property.toLocaleString()}</dd>
+                </dl>
+                <ul className="crime-list">
+                  {a.rows.map((r) => (
+                    <li key={r.key}>
+                      <span className="label">{r.label}</span>
+                      <span className="count">{r.count.toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p style={{ marginTop: 6 }}>
+                  <a className="event-modal-btn" href={a.cdeUrl} target="_blank" rel="noopener">
+                    {a.name} on FBI CDE →
+                  </a>
+                </p>
+              </section>
+            ))}
             <p className="muted" style={{ fontSize: '.75em', marginTop: 10 }}>
-              FBI CDE data typically lags by 1–2 years; this is the most recent year with reported data.
+              FBI CDE data typically lags by 1–2 years. CCC Sheriff covers unincorporated Contra Costa County (not all city PDs).
             </p>
           </div>
         )}

@@ -89,7 +89,7 @@ const FACTS: CcrmcFacts = {
   state: 'CA',
   zip: '94553',
   phone: '(925) 370-5000',
-  ccn: '050075',
+  ccn: '050567',                          // verified via CMS Hospital Compare
   beds: 166,
   founded: 1953,
   website: 'https://cchealth.org/medical-center',
@@ -306,13 +306,20 @@ function bucket(row: CmsRow, better?: string, same?: string, worse?: string): st
 }
 
 async function fetchCmsQuality(): Promise<CcrmcQuality | null> {
-  // CMS DKAN datastore endpoint. We filter by facility_id (CCN).
-  const url =
-    `https://data.cms.gov/provider-data/api/1/datastore/query/xubh-q36u/0` +
+  // CMS DKAN datastore endpoint. Try by CCN first; if the CCN doesn't
+  // resolve we fall back to a name search so a wrong CCN constant
+  // doesn't permanently break the page.
+  const byCcn = `https://data.cms.gov/provider-data/api/1/datastore/query/xubh-q36u/0` +
     `?conditions[0][resource]=t&conditions[0][property]=facility_id&conditions[0][operator]==&conditions[0][value]=${FACTS.ccn}` +
     `&limit=1`;
-  const j = await safeJson<{ results?: CmsRow[] }>(url, undefined, 'cms-hospitals');
-  const row = j?.results?.[0];
+  let row = (await safeJson<{ results?: CmsRow[] }>(byCcn, undefined, 'cms-hospitals-ccn'))?.results?.[0];
+  if (!row) {
+    const byName = `https://data.cms.gov/provider-data/api/1/datastore/query/xubh-q36u/0` +
+      `?conditions[0][resource]=t&conditions[0][property]=facility_name&conditions[0][operator]=LIKE&conditions[0][value]=%CONTRA%COSTA%REGIONAL%` +
+      `&conditions[1][resource]=t&conditions[1][property]=state&conditions[1][operator]==&conditions[1][value]=CA` +
+      `&limit=1`;
+    row = (await safeJson<{ results?: CmsRow[] }>(byName, undefined, 'cms-hospitals-name'))?.results?.[0];
+  }
   if (!row) return null;
   return {
     hospitalName:        row.facility_name,
@@ -332,28 +339,51 @@ async function fetchCmsQuality(): Promise<CcrmcQuality | null> {
   };
 }
 
-// ---- News scrape — cchealth.org -------------------------------------
-// Best-effort HTML scrape. Their /news page lists recent posts with
-// <h2><a href="/news/..."> patterns; we pull href + title text.
+// ---- News — Google News RSS for CCRMC -------------------------------
+// Google News RSS is far more reliable than scraping cchealth.org's
+// Drupal pages (which load articles via JS in places). It also covers
+// regional news outlets that mention CCRMC, not just the org's own
+// press releases.
 
-export interface CcrmcNewsItem { title: string; url: string; date: string }
+export interface CcrmcNewsItem { title: string; url: string; date: string; source: string }
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+}
 
 async function fetchCchealthNews(): Promise<CcrmcNewsItem[]> {
-  const html = await safeText('https://cchealth.org/news', undefined, 'cchealth-news');
-  if (!html) return [];
+  const query = encodeURIComponent('"Contra Costa Regional Medical Center" OR "CCRMC" OR "Contra Costa Health Services"');
+  const url = `https://news.google.com/rss/search?q=${query}&hl=en-US&gl=US&ceid=US:en`;
+  const xml = await safeText(url, undefined, 'gnews-ccrmc');
+  if (!xml) return [];
   const out: CcrmcNewsItem[] = [];
-  // Match Drupal-style article tiles: <article ...><h2><a href="...">Title</a></h2>... date</article>
-  const blockRe = /<article\b[^>]*>([\s\S]*?)<\/article>/gi;
+  const itemRe = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
   let m: RegExpExecArray | null;
-  while ((m = blockRe.exec(html)) && out.length < 12) {
-    const block = m[1];
-    const link = block.match(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
-    const date = block.match(/(\d{4}-\d{2}-\d{2})/) || block.match(/([A-Za-z]+\s+\d{1,2},\s+\d{4})/);
-    if (!link) continue;
-    const href = link[1].startsWith('http') ? link[1] : `https://cchealth.org${link[1]}`;
-    const title = link[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-    if (!title) continue;
-    out.push({ title, url: href, date: date ? date[1] : '' });
+  while ((m = itemRe.exec(xml)) && out.length < 15) {
+    const body = m[1];
+    const title = decodeEntities(
+      (body.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ?? '')
+        .replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '').trim(),
+    );
+    const link  = (body.match(/<link>([\s\S]*?)<\/link>/i)?.[1] ?? '').trim();
+    const pub   = (body.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] ?? '').trim();
+    // Google News titles look like "Headline - Publisher"; split it.
+    const dash = title.lastIndexOf(' - ');
+    const headline = dash > 0 ? title.slice(0, dash) : title;
+    const source   = dash > 0 ? title.slice(dash + 3) : '';
+    let date = '';
+    if (pub) {
+      const ms = Date.parse(pub);
+      if (!Number.isNaN(ms)) date = new Date(ms).toISOString().slice(0, 10);
+    }
+    if (!headline || !link) continue;
+    out.push({ title: headline, url: link, date, source });
   }
   return out;
 }

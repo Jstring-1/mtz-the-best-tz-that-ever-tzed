@@ -64,7 +64,7 @@ export default function CcrmcQuality({ data }: { data: CcrmcQuality | null }) {
               Detailed measure-level data (HCAHPS, readmission rates, infection rates, etc.) lives on CMS Care Compare.
             </p>
             <p style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <a className="event-modal-btn primary" href="https://www.medicare.gov/care-compare/details/hospital/050075" target="_blank" rel="noopener">
+              <a className="event-modal-btn primary" href="https://www.medicare.gov/care-compare/details/hospital/050567" target="_blank" rel="noopener">
                 Open Care Compare profile →
               </a>
               <a className="event-modal-btn" href="https://data.cms.gov/provider-data/dataset/xubh-q36u" target="_blank" rel="noopener">

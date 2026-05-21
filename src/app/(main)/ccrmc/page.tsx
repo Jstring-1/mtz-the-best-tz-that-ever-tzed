@@ -17,63 +17,63 @@ export const metadata = {
 // Static link tiles for sections where there's no live API. Each tile
 // opens the canonical resource on the source site in a new tab.
 const BUDGET_LINKS = [
-  { label: 'CCC budget book — Health Services',
+  { label: 'CCC ClearGov budget book',
     url:   'https://county-contra-costa-ca-budget-book.cleargov.com/',
-    note:  "Open the county's ClearGov budget book; HSD section under departmental detail." },
-  { label: 'CA HCAI — Hospital annual financial data',
-    url:   'https://hcai.ca.gov/data-and-reports/hospital-annual-financial-data/',
-    note:  'Every CA hospital files unaudited & audited financials annually (CCRMC included).' },
-  { label: 'FAC.gov — Single Audits for CCC',
-    url:   'https://app.fac.gov/dissemination/search/',
-    note:  "Search auditee_name 'Contra Costa County' to pull federal-expenditure schedules and findings." },
-  { label: 'Contra Costa County Open Budget',
+    note:  "County's interactive budget book; navigate to Health Services Dept for CCRMC line items." },
+  { label: 'CA HCAI — Hospital annual financial disclosures',
+    url:   'https://hcai.ca.gov/data-and-reports/research-data-request-information/hospital-financial-and-utilization-data/',
+    note:  'Annual unaudited & audited financial reports for every California hospital.' },
+  { label: 'FAC.gov Single Audit search',
+    url:   'https://app.fac.gov/dissemination/search/?auditee_state=CA',
+    note:  "Search 'Contra Costa County' to see federal-expenditure schedules & findings." },
+  { label: 'Contra Costa County budget documents',
     url:   'https://www.contracosta.ca.gov/770/Budget-Documents',
-    note:  'Adopted budget, mid-year reports, CIP, and ACFR PDFs straight from the county.' },
+    note:  'Adopted budget, mid-year reports, CIP, ACFR PDFs (county-published).' },
 ];
 
 const PH_LINKS = [
-  { label: 'CDPH — Disease surveillance & outbreaks',
-    url:   'https://www.cdph.ca.gov/Programs/CID/DCDC/Pages/Communicable-Disease-Control.aspx',
-    note:  'State communicable disease surveillance, alerts, outbreak reports.' },
-  { label: 'CDC — Healthcare-Associated Infections',
-    url:   'https://www.cdc.gov/nhsn/datastat/index.html',
-    note:  'NHSN national HAI dashboards (CAUTI, CLABSI, SSI, C. difficile, MRSA).' },
-  { label: 'CCC Health — Public Health division',
-    url:   'https://cchealth.org/public-health',
-    note:  'County public-health programs, disease dashboards, vital records.' },
-  { label: 'CDPH Hospital Onsite Survey reports',
-    url:   'https://www.cdph.ca.gov/Programs/CHCQ/LCP/Pages/HospitalsCAHs.aspx',
-    note:  'State licensing & certification survey reports + complaint investigations.' },
+  { label: 'CDPH — Disease control & surveillance',
+    url:   'https://www.cdph.ca.gov/Programs/CID/Pages/CommunicableDiseaseControl.aspx',
+    note:  'State surveillance, outbreak alerts, and reportable-disease guidance.' },
+  { label: 'CDC NHSN — Healthcare-Associated Infections',
+    url:   'https://www.cdc.gov/nhsn/index.html',
+    note:  "CDC's National Healthcare Safety Network — HAI reporting & dashboards." },
+  { label: 'Contra Costa Health Services',
+    url:   'https://cchealth.org/',
+    note:  'County health-department homepage — public health programs, dashboards, alerts.' },
+  { label: 'CDPH Licensing & Certification — hospital surveys',
+    url:   'https://www.cdph.ca.gov/Programs/CHCQ/LCP/Pages/LCPHome.aspx',
+    note:  'State licensing & certification survey reports and complaint investigations.' },
 ];
 
 const WORKFORCE_LINKS = [
-  { label: 'HCAI — Hospital workforce / occupational survey',
-    url:   'https://hcai.ca.gov/data/healthcare-workforce/',
-    note:  "CA's official hospital workforce dataset (RN/LVN/MD counts, vacancy rates)." },
-  { label: 'Cal-OSHA — DIR inspection records',
-    url:   'https://www.dir.ca.gov/dosh/calosha-inspections.html',
-    note:  'Workplace safety inspections and citations for CCRMC operations.' },
+  { label: 'HCAI — Healthcare workforce data',
+    url:   'https://hcai.ca.gov/data-and-reports/workforce-data-reports/',
+    note:  "CA's official healthcare workforce dataset (RN/LVN/MD/AP counts, vacancy rates)." },
+  { label: 'Cal-OSHA — Inspection records',
+    url:   'https://cadir.my.site.com/casoshacommunity/s/calosha-inspections',
+    note:  'Workplace safety inspections and citations across California.' },
   { label: 'NLRB — Case search',
     url:   'https://www.nlrb.gov/search/case',
-    note:  'Labor-relations filings; search "Contra Costa Regional".' },
-  { label: 'Transparent California — CCC employees',
+    note:  'Labor-relations case filings — search "Contra Costa Regional" or "CNA".' },
+  { label: 'Transparent California — CCC salaries',
     url:   'https://transparentcalifornia.com/salaries/contra-costa-county/',
-    note:  'Public-records salary database for county employees.' },
+    note:  'Public-records salary database for Contra Costa County employees.' },
 ];
 
 const REGULATORY_LINKS = [
   { label: 'CCC Board of Supervisors — meetings & agendas',
     url:   'https://www.contracosta.ca.gov/4541/Calendar-of-Meetings',
-    note:  'Health Services items often appear on BOS agendas (budget, contracts, policy).' },
-  { label: 'Joint Commission — Accreditation status',
-    url:   'https://www.qualitycheck.org/',
-    note:  'Search "Contra Costa Regional Medical Center" for accreditation history.' },
+    note:  'Health Services items appear on BOS agendas — budget, contracts, policy.' },
+  { label: 'The Joint Commission — Quality Check',
+    url:   'https://www.qualitycheck.org/search-results/?keyword=Contra%20Costa%20Regional',
+    note:  'Accreditation history and quality reports for accredited hospitals.' },
   { label: 'Leapfrog Hospital Safety Grade',
-    url:   'https://www.hospitalsafetygrade.org/search?findBy=hospital&hospital=Contra+Costa+Regional',
+    url:   'https://www.hospitalsafetygrade.org/h/contra-costa-regional-medical-center',
     note:  'Independent letter-grade hospital safety scoring (twice/year).' },
-  { label: 'CMS HAI public reporting',
-    url:   `https://www.medicare.gov/care-compare/details/hospital/050075`,
-    note:  "Full Care Compare profile with measure-level HAI and other stats." },
+  { label: 'CMS Care Compare — CCRMC profile',
+    url:   `https://www.medicare.gov/care-compare/details/hospital/050567`,
+    note:  "Full Care Compare profile: HAI rates, mortality, readmissions, patient experience." },
 ];
 
 function LinkTile({ label, url, note }: { label: string; url: string; note: string }) {
@@ -104,10 +104,6 @@ export default async function CcrmcPage() {
   return (
     <div className="page ccrmc">
       <h1>CCRMC Operations</h1>
-      <p className="muted">
-        Federal funding, CMS quality, public-health alerts, budgets, workforce, and news for{' '}
-        Contra Costa Regional Medical Center (Martinez). Every section is shareable — copy the URL after opening any popup.
-      </p>
       {ts['ccrmc_data'] && (
         <p className="muted" style={{ fontSize: '.78em', marginTop: 4 }}>
           Live data refreshed {relativeFromIso(ts['ccrmc_data'])}
@@ -144,19 +140,25 @@ export default async function CcrmcPage() {
 
         <CcrmcQuality data={payload?.quality ?? null} />
 
-        <div className="ccrmc-section">
-          <h2>News from cchealth.org</h2>
+        <div className="ccrmc-section-card">
+          <div className="head">Recent news (Google News)</div>
           {payload?.news.length ? (
             <ul className="ccrmc-news">
-              {payload.news.slice(0, 8).map((n, i) => (
+              {payload.news.slice(0, 6).map((n, i) => (
                 <li key={i}>
                   <a href={n.url} target="_blank" rel="noopener">{n.title}</a>
-                  {n.date && <span className="muted"> · {n.date}</span>}
+                  <span className="muted">
+                    {n.source ? ` · ${n.source}` : ''}
+                    {n.date ? ` · ${n.date}` : ''}
+                  </span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="muted">News scrape returned nothing — cchealth.org may have changed their layout. <a href="https://cchealth.org/news" target="_blank" rel="noopener">Visit cchealth.org/news directly →</a></p>
+            <p className="muted" style={{ fontSize: '.85em' }}>
+              No news cached yet — run /admin → 12h. Or{' '}
+              <a href="https://news.google.com/search?q=%22Contra+Costa+Regional+Medical+Center%22" target="_blank" rel="noopener">search Google News →</a>
+            </p>
           )}
         </div>
       </section>
