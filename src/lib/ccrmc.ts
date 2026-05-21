@@ -89,7 +89,7 @@ const FACTS: CcrmcFacts = {
   state: 'CA',
   zip: '94553',
   phone: '(925) 370-5000',
-  ccn: '050567',                          // verified via CMS Hospital Compare
+  ccn: '050276',                          // verified via CMS Hospital Compare
   beds: 166,
   founded: 1953,
   website: 'https://cchealth.org/medical-center',

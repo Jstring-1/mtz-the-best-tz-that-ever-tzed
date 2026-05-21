@@ -74,7 +74,7 @@ const REGULATORY_LINKS = [
     url:   'https://www.hospitalsafetygrade.org/h/contra-costa-regional-medical-center',
     note:  'Independent letter-grade hospital safety scoring (twice/year).' },
   { label: 'CMS Care Compare — CCRMC profile',
-    url:   `https://www.medicare.gov/care-compare/details/hospital/050567`,
+    url:   `https://www.medicare.gov/care-compare/details/hospital/050276`,
     note:  "Full Care Compare profile: HAI rates, mortality, readmissions, patient experience." },
 ];
 
