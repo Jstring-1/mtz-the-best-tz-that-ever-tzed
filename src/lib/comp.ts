@@ -47,7 +47,7 @@ const COMMON_HEADERS: Record<string, string> = {
   Accept: 'text/csv,text/plain;q=0.9,*/*;q=0.8',
 };
 
-async function safeText(url: string, tag: string, timeoutMs = 30000): Promise<string | null> {
+async function safeText(url: string, tag: string, timeoutMs = 8000): Promise<string | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -55,8 +55,16 @@ async function safeText(url: string, tag: string, timeoutMs = 30000): Promise<st
       headers: COMMON_HEADERS, signal: ctrl.signal, cache: 'no-store',
       redirect: 'follow',
     });
-    if (!r.ok) { console.warn(`[comp] ${tag}: HTTP ${r.status}`); return null; }
-    return await r.text();
+    if (!r.ok) { console.warn(`[comp] ${tag}: HTTP ${r.status} from ${new URL(url).hostname}`); return null; }
+    const ct = r.headers.get('content-type') ?? '';
+    const body = await r.text();
+    // Early reject when an upstream returns an HTML error/login page
+    // instead of a CSV — saves us scanning a 100KB shell.
+    if (ct.includes('text/html') || body.startsWith('<')) {
+      console.warn(`[comp] ${tag}: got HTML (${body.length}b, ct=${ct}) — likely blocked or wrong URL`);
+      return null;
+    }
+    return body;
   } catch (e) {
     console.warn(`[comp] ${tag} threw:`, e instanceof Error ? e.message : e);
     return null;
@@ -163,19 +171,14 @@ function computeTotals(rows: CompRow[]): CompPayload['totals'] {
 const ENTITY = 'Contra Costa County';
 
 async function tryYear(year: number): Promise<{ csv: string; url: string } | null> {
-  // State Controller has migrated this endpoint a few times. Try each
-  // known URL shape in turn and accept whichever returns a populated
-  // CSV (≥ ~1KB plus the right column headers).
+  // Three URL variants — most-likely-to-work ones only. Earlier we
+  // tried six but the cumulative timeouts blew the 12h cron's overall
+  // budget. 3 × 8s = 24s worst case per year now.
   const enc = encodeURIComponent(ENTITY);
   const variants = [
-    // Legacy publicpay.ca.gov endpoint
     `https://publicpay.ca.gov/Reports/RawExport.aspx?entityname=${enc}&year=${year}`,
     `https://publicpay.ca.gov/Reports/RawExport.aspx?entityname=${enc}&entitytype=Counties&year=${year}`,
-    `https://publicpay.ca.gov/Reports/RawExportFile.aspx?entityname=${enc}&year=${year}`,
-    // Newer bythenumbers.sco.ca.gov mirror
     `https://bythenumbers.sco.ca.gov/Reports/RawExport.aspx?entityname=${enc}&year=${year}`,
-    `https://bythenumbers.sco.ca.gov/Reports/RawExportFile.aspx?entityname=${enc}&year=${year}`,
-    `https://bythenumbers.sco.ca.gov/api/views/?entityname=${enc}&year=${year}`,
   ];
   for (const url of variants) {
     const csv = await safeText(url, `publicpay-${year}-${new URL(url).hostname}`);
@@ -187,9 +190,11 @@ async function tryYear(year: number): Promise<{ csv: string; url: string } | nul
 }
 
 export async function fetchCccCompensation(): Promise<CompPayload | null> {
-  // State Controller publishes ~12-18 months after year close.
+  // State Controller publishes ~12-18 months after year close. Walk
+  // back only 2 years to keep the cron under Railway's HTTP proxy
+  // budget — 2 years × 3 URLs × 8s ≈ 48s worst case.
   const thisYear = new Date().getUTCFullYear();
-  for (const year of [thisYear - 1, thisYear - 2, thisYear - 3]) {
+  for (const year of [thisYear - 1, thisYear - 2]) {
     const hit = await tryYear(year);
     if (!hit) continue;
     const rows = parseCompCsv(hit.csv);

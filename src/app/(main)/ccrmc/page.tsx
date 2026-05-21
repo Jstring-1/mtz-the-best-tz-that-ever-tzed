@@ -128,7 +128,6 @@ export default async function CcrmcPage() {
             <dt>Phone</dt><dd>{facts.phone}</dd>
             <dt>Beds</dt><dd>{facts.beds}</dd>
             <dt>CMS CCN</dt><dd><code>{facts.ccn}</code></dd>
-            <dt>Founded</dt><dd>{facts.founded}</dd>
             <dt>Parent</dt><dd>{facts.parentSystem}</dd>
             <dt>Website</dt><dd><a href={facts.website} target="_blank" rel="noopener">{facts.website.replace(/^https?:\/\//, '')}</a></dd>
           </dl>
