@@ -488,6 +488,12 @@ main { padding-top: var(--top-stack-h); display: block; }
 
 /* Grant detail modal */
 .grant-detail .grant-desc { font-size: .9em; line-height: 1.55; }
+.detail-modal-content .map-link {
+  font-size: .82em; color: var(--accent); white-space: nowrap;
+  text-decoration: none; border-bottom: 1px dotted var(--accent);
+  padding-left: 2px;
+}
+.detail-modal-content .map-link:hover { color: var(--text); border-bottom-color: var(--text); }
 .grant-detail .grant-cfda { margin-bottom: 10px; }
 .grant-detail .grant-cfda .num { font-weight: 600; }
 .grant-detail .grant-cfda .objectives { font-size: .85em; color: #ccc; line-height: 1.5; margin: 4px 0 0; }

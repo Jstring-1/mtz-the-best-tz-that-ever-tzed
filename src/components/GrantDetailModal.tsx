@@ -31,6 +31,25 @@ function fmtMoney(n: number): string {
   return `$${(n ?? 0).toLocaleString()}`;
 }
 
+function mapsUrl(addr: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+}
+function AddressWithMap({ addr }: { addr: string }) {
+  return (
+    <>
+      {addr}{' '}
+      <a
+        className="map-link"
+        href={mapsUrl(addr)}
+        target="_blank"
+        rel="noopener"
+        title={`Open ${addr} in Google Maps`}
+        aria-label={`Open ${addr} in Google Maps`}
+      >↗ map</a>
+    </>
+  );
+}
+
 export default function GrantDetailModal({
   open, id, fallbackRecipient, onClose,
 }: { open: boolean; id: string; fallbackRecipient?: string; onClose: () => void }) {
@@ -69,8 +88,12 @@ export default function GrantDetailModal({
             {data.outlay > 0       && <><dt>Outlaid</dt><dd>{fmtMoney(data.outlay)}</dd></>}
             {data.typeLabel        && <><dt>Award type</dt><dd>{data.typeLabel}</dd></>}
             {data.category         && <><dt>Category</dt><dd>{data.category}</dd></>}
-            {data.recipientLocation&& <><dt>Recipient</dt><dd>{data.recipientLocation}</dd></>}
-            {data.placeOfPerformance && <><dt>Place of performance</dt><dd>{data.placeOfPerformance}</dd></>}
+            {data.recipientLocation && (
+              <><dt>Recipient</dt><dd><AddressWithMap addr={data.recipientLocation} /></dd></>
+            )}
+            {data.placeOfPerformance && (
+              <><dt>Place of performance</dt><dd><AddressWithMap addr={data.placeOfPerformance} /></dd></>
+            )}
             {data.awardingAgency   && <><dt>Awarding agency</dt><dd>{data.awardingAgency}</dd></>}
             {data.fundingAgency && data.fundingAgency !== data.awardingAgency &&
               <><dt>Funding agency</dt><dd>{data.fundingAgency}</dd></>}
