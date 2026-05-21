@@ -42,11 +42,16 @@ export default function CcrmcCompensation({ totalsHint }: { totalsHint?: { year?
   const [loading, setLoading] = useState(false);
   const [empty, setEmpty] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Track whether we've already attempted a fetch this open-session.
+  // Without this, an `empty`-or-`error` response leaves `data` null
+  // and the effect would keep re-firing every time `loading` flips.
+  const [tried, setTried] = useState(false);
 
   // Lazy-fetch on first open (works for shared URLs too).
   useEffect(() => {
-    if (!open || data || loading) return;
-    setLoading(true); setError(null); setEmpty(null);
+    if (!open) { setTried(false); return; }   // re-arm on close
+    if (data || loading || tried) return;
+    setLoading(true); setTried(true); setError(null); setEmpty(null);
     fetch('/api/ccc-comp', { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -58,7 +63,7 @@ export default function CcrmcCompensation({ totalsHint }: { totalsHint?: { year?
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [open, data, loading]);
+  }, [open, data, loading, tried]);
 
   // Filter + sort happens on the full ~10k-row dataset. Memoized so
   // typing is responsive.
@@ -114,7 +119,9 @@ export default function CcrmcCompensation({ totalsHint }: { totalsHint?: { year?
         title={data ? `CCC employee compensation — FY ${data.year}` : 'CCC employee compensation'}
         size="xl"
       >
-        {loading && <p className="muted">Loading {totalsHint?.employees ? `${totalsHint.employees.toLocaleString()} rows` : '~10k rows'}…</p>}
+        {loading && !empty && !error && !data && (
+          <p className="muted">Loading {totalsHint?.employees ? `${totalsHint.employees.toLocaleString()} rows` : '~10k rows'}…</p>
+        )}
         {empty && (
           <div>
             <p className="muted">{empty}</p>
