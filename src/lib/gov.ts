@@ -20,11 +20,16 @@ const BLS_KEY = process.env.BLS_API_KEY ?? '';   // optional — bumps quota 25/
 // returned nothing without trawling Railway logs.
 const lastFail: Record<string, string> = {};
 
-async function safeJson<T = unknown>(url: string, init?: RequestInit, tag?: string): Promise<T | null> {
+async function safeJson<T = unknown>(url: string, init?: RequestInit, tag?: string, timeoutMs = 12000): Promise<T | null> {
   const t = tag ?? new URL(url).hostname;
+  // Per-request abort so a single slow upstream can't stall the whole
+  // cron run past Railway's HTTP proxy timeout.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(url, {
       ...init,
+      signal: ctrl.signal,
       headers: { ...COMMON_HEADERS, ...(init?.headers || {}) },
       cache: 'no-store',
     });
@@ -37,10 +42,13 @@ async function safeJson<T = unknown>(url: string, init?: RequestInit, tag?: stri
     }
     return await r.json() as T;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const aborted = e instanceof Error && e.name === 'AbortError';
+    const msg = aborted ? `timeout after ${timeoutMs}ms` : (e instanceof Error ? e.message : String(e));
     console.warn(`[gov] ${t} threw:`, msg);
     lastFail[t] = msg;
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -491,14 +499,20 @@ async function fetchFundingAll(days = 90): Promise<{
   sources: FundingSourceMeta[];
   data: Record<string, GrantRow[]>;
 }> {
-  const results = await Promise.allSettled(
-    FUNDING_SOURCES.map((cfg) => fetchOneSource(cfg, days)),
-  );
+  // Bound concurrency: 24 sources × up to 4 category calls each is too
+  // many parallel HTTP requests for USAspending under load (the cron
+  // started 502'ing once we crossed ~50 in-flight calls). Six at a
+  // time keeps wall-clock low while staying polite.
+  const BATCH = 6;
   const data: Record<string, GrantRow[]> = {};
-  FUNDING_SOURCES.forEach((cfg, i) => {
-    const r = results[i];
-    data[cfg.key] = r.status === 'fulfilled' ? r.value : [];
-  });
+  for (let i = 0; i < FUNDING_SOURCES.length; i += BATCH) {
+    const slice = FUNDING_SOURCES.slice(i, i + BATCH);
+    const results = await Promise.allSettled(slice.map((cfg) => fetchOneSource(cfg, days)));
+    slice.forEach((cfg, j) => {
+      const r = results[j];
+      data[cfg.key] = r.status === 'fulfilled' ? r.value : [];
+    });
+  }
   const sources: FundingSourceMeta[] = FUNDING_SOURCES.map(metaFromConfig);
   return { sources, data };
 }

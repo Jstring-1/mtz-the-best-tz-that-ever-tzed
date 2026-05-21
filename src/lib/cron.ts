@@ -47,22 +47,37 @@ function userAgent() {
   return `${loc.siteName} (mtz-city; +https://${loc.siteName})`;
 }
 
+// Per-request abort so a single slow upstream can't stall a whole
+// cron bucket past Railway's HTTP proxy timeout (~90s).
+const DEFAULT_HTTP_TIMEOUT_MS = 15000;
+
+async function withTimeout<T>(p: (signal: AbortSignal) => Promise<T>, timeoutMs = DEFAULT_HTTP_TIMEOUT_MS): Promise<T> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try { return await p(ctrl.signal); }
+  finally { clearTimeout(timer); }
+}
+
 async function fetchJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, {
-    ...init,
-    headers: { 'User-Agent': userAgent(), Accept: 'application/json', ...(init?.headers ?? {}) },
+  return withTimeout(async (signal) => {
+    const r = await fetch(url, {
+      ...init, signal,
+      headers: { 'User-Agent': userAgent(), Accept: 'application/json', ...(init?.headers ?? {}) },
+    });
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText} ${url}`);
+    return (await r.json()) as T;
   });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText} ${url}`);
-  return (await r.json()) as T;
 }
 
 async function fetchText(url: string, init?: RequestInit): Promise<string> {
-  const r = await fetch(url, {
-    ...init,
-    headers: { 'User-Agent': userAgent(), ...(init?.headers ?? {}) },
+  return withTimeout(async (signal) => {
+    const r = await fetch(url, {
+      ...init, signal,
+      headers: { 'User-Agent': userAgent(), ...(init?.headers ?? {}) },
+    });
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText} ${url}`);
+    return await r.text();
   });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText} ${url}`);
-  return await r.text();
 }
 
 function noaaHeaders() {
@@ -864,12 +879,13 @@ async function ticketmasterEvents(json: Record<string, unknown>) {
   const MAX_PAGES = 5;
   const DAYS_PER_WINDOW = 62;
   const WINDOWS = 2;
-  const seen = new Set<string>();
-  const events: Array<Record<string, unknown>> = [];
   // Anchor windows to today 00:00 UTC; ISO 8601 with seconds + Z, no millis.
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   const isoZ = (d: Date) => `${d.toISOString().slice(0, 10)}T00:00:00Z`;
-  for (let w = 0; w < WINDOWS; w++) {
+  // Run each date window's paginated fetch in parallel — they share
+  // nothing except the dedupe set we apply after both finish.
+  const fetchWindow = async (w: number): Promise<Array<Record<string, unknown>>> => {
+    const out: Array<Record<string, unknown>> = [];
     const winStart = new Date(today.getTime() + w * DAYS_PER_WINDOW * 86400000);
     const winEnd   = new Date(today.getTime() + (w + 1) * DAYS_PER_WINDOW * 86400000);
     const startDateTime = isoZ(winStart);
@@ -886,20 +902,33 @@ async function ticketmasterEvents(json: Record<string, unknown>) {
         startDateTime,
         endDateTime,
       });
-      const r = await fetchJson<TM>(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);
-      const batch = r._embedded?.events ?? [];
-      for (const ev of batch) {
-        const eid = String((ev as { id?: string }).id ?? '');
-        if (eid && seen.has(eid)) continue;
-        if (eid) seen.add(eid);
-        events.push(ev);
+      let r: TM;
+      try {
+        r = await fetchJson<TM>(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);
+      } catch (e) {
+        console.warn(`[ticketmaster] window=${w} page=${page} failed:`, e instanceof Error ? e.message : e);
+        break;
       }
+      const batch = r._embedded?.events ?? [];
+      out.push(...batch);
       const totalPages = r.page?.totalPages ?? 1;
       if (!batch.length || page + 1 >= totalPages) break;
       await new Promise((res) => setTimeout(res, 250)); // rate-limit politeness
     }
-    // Small breather between windows too.
-    if (w + 1 < WINDOWS) await new Promise((res) => setTimeout(res, 400));
+    return out;
+  };
+  const windowEvents = await Promise.all(
+    Array.from({ length: WINDOWS }, (_, w) => fetchWindow(w)),
+  );
+  const seen = new Set<string>();
+  const events: Array<Record<string, unknown>> = [];
+  for (const batch of windowEvents) {
+    for (const ev of batch) {
+      const eid = String((ev as { id?: string }).id ?? '');
+      if (eid && seen.has(eid)) continue;
+      if (eid) seen.add(eid);
+      events.push(ev);
+    }
   }
   json.TM_shows = events;
   // Mirror into the structured events table.
