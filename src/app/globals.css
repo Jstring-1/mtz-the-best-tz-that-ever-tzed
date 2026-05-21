@@ -1623,7 +1623,16 @@ main { padding-top: var(--top-stack-h); display: block; }
   padding: 18px 22px 20px;
   position: relative;
   font-family: var(--sans);
+  /* Wrap long unbreakable tokens (URLs, addresses, CFDA objective
+     blocks) instead of forcing a horizontal scroll. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
+/* Lets grid cells shrink below their intrinsic content width so long
+   values wrap into the available column instead of pushing the grid
+   off-screen. */
+.detail-modal-content .bill-kv dd,
+.detail-modal-content .grant-detail dd { min-width: 0; }
 .detail-modal-close {
   position: absolute; top: 6px; right: 10px;
   background: transparent; border: 0; color: var(--text-muted);
