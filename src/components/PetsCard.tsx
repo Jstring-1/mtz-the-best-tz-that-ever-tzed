@@ -82,9 +82,8 @@ export default function PetsCard({ pets }: { pets: Pet[] }) {
                   ? <img src={p.photo_url} alt={p.name} loading="lazy" />
                   : <div className="pet-no-photo">no photo</div>}
                 <span className="pet-name">{p.name}</span>
-                <span className="pet-sub">
-                  {[p.breed, p.age].filter(Boolean).join(' · ')}
-                </span>
+                {p.breed && <span className="pet-sub">{p.breed}</span>}
+                {p.age && <span className="pet-age">{p.age}</span>}
               </button>
             ))}
           </div>

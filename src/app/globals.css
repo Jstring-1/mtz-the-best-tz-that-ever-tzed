@@ -1450,10 +1450,12 @@ main { padding-top: var(--top-stack-h); display: block; }
   font-weight: 600; font-size: .9em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.pets-card .pet-tile .pet-sub {
+.pets-card .pet-tile .pet-sub,
+.pets-card .pet-tile .pet-age {
   font-size: .72em; color: var(--text-muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.pets-card .pet-tile .pet-age { font-style: italic; }
 
 /* Birds */
 .bird-row .name { font-weight: 600; }
