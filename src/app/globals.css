@@ -1618,6 +1618,12 @@ main { padding-top: var(--top-stack-h); display: block; }
   border-radius: 8px;
   padding: 0;
   width: 92vw;
+  /* Prevent the native <dialog> from expanding past its max-width when
+     a descendant has wider intrinsic content. Any horizontal overflow
+     gets clipped by the dialog edge — but combined with the wrap rules
+     below the text wraps before that ever happens. */
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 .detail-modal::backdrop { background: rgba(0, 0, 0, .7); }
 .detail-modal.size-sm { max-width: 380px; }
@@ -1629,16 +1635,34 @@ main { padding-top: var(--top-stack-h); display: block; }
   padding: 18px 22px 20px;
   position: relative;
   font-family: var(--sans);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: calc(100vh - 24px);
   /* Wrap long unbreakable tokens (URLs, addresses, CFDA objective
      blocks) instead of forcing a horizontal scroll. */
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-/* Lets grid cells shrink below their intrinsic content width so long
-   values wrap into the available column instead of pushing the grid
-   off-screen. */
-.detail-modal-content .bill-kv dd,
-.detail-modal-content .grant-detail dd { min-width: 0; }
+/* Force every block child to respect the modal's width so long text
+   actually wraps. min-width: 0 unblocks flex/grid shrinking; max-width
+   100% caps any descendant that would otherwise size to its content. */
+.detail-modal-content > *,
+.detail-modal-content p,
+.detail-modal-content dl,
+.detail-modal-content dt,
+.detail-modal-content dd,
+.detail-modal-content h2,
+.detail-modal-content h3,
+.detail-modal-content li,
+.detail-modal-content div {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .detail-modal-close {
   position: absolute; top: 6px; right: 10px;
   background: transparent; border: 0; color: var(--text-muted);
