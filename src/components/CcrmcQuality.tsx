@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment } from 'react';
 import Modal from './Modal';
 import { useUrlBool } from '@/lib/useUrlState';
 import type { CcrmcQuality } from '@/lib/ccrmc';
@@ -60,8 +61,40 @@ export default function CcrmcQuality({ data }: { data: CcrmcQuality | null }) {
               <dt>Medical imaging</dt><dd>{data.imagingComparison}</dd>
             </dl>
 
+            {data.hcahpsStars.length > 0 && (
+              <>
+                <h3 className="bill-h">Patient experience — HCAHPS survey (star ratings)</h3>
+                <dl className="bill-kv ccrmc-kv">
+                  {data.hcahpsStars.map((m) => (
+                    <Fragment key={m.measure}>
+                      <dt>{m.measure}</dt>
+                      <dd>
+                        <Stars value={m.stars} />
+                        {m.footnote ? <span className="muted" style={{ fontSize: '.82em' }}> · {m.footnote}</span> : null}
+                      </dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </>
+            )}
+
+            {data.hcahpsLinear.length > 0 && (
+              <>
+                <h3 className="bill-h">Patient experience — HCAHPS linear-mean scores (0–100)</h3>
+                <dl className="bill-kv ccrmc-kv">
+                  {data.hcahpsLinear.map((m) => (
+                    <Fragment key={m.measure}>
+                      <dt>{m.measure}</dt>
+                      <dd>{m.value}</dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </>
+            )}
+
             <p className="muted" style={{ fontSize: '.78em', marginTop: 10 }}>
-              Detailed measure-level data (HCAHPS, readmission rates, infection rates, etc.) lives on CMS Care Compare.
+              Even more detail — readmission rates by condition, mortality rates, HAI infection rates,
+              timely care measures — lives on the full CMS Care Compare profile.
             </p>
             <p style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <a className="event-modal-btn primary" href="https://www.medicare.gov/care-compare/details/hospital/050276" target="_blank" rel="noopener">

@@ -262,6 +262,12 @@ export interface CcrmcQuality {
   effectivenessComparison?: string;
   timelinessComparison?: string;
   imagingComparison?: string;
+  // HCAHPS patient survey — per-measure star ratings (only present when
+  // the upstream dataset returns rows). Empty array when unavailable.
+  hcahpsStars: Array<{ measure: string; stars: string; footnote?: string }>;
+  // Top-line linear-score percentages (e.g. "% who reported nurses
+  // communicated well"). Useful supplement to the star rating.
+  hcahpsLinear: Array<{ measure: string; value: string }>;
   fetchedAt: string;
 }
 
@@ -305,6 +311,58 @@ function bucket(row: CmsRow, better?: string, same?: string, worse?: string): st
   return `${b} above national avg, ${s} same, ${w} below`;
 }
 
+// HCAHPS measure IDs → friendly labels. CMS uses cryptic codes (H_COMP_1
+// etc.); we map only the ones with a "STAR_RATING" / "LINEAR_SCORE"
+// variant since the raw "always/usually/sometimes" answer breakdowns
+// would balloon the popup.
+const HCAHPS_STAR_LABELS: Record<string, string> = {
+  'H_COMP_1_STAR_RATING':     'Nurse communication',
+  'H_COMP_2_STAR_RATING':     'Doctor communication',
+  'H_COMP_3_STAR_RATING':     'Staff responsiveness',
+  'H_COMP_5_STAR_RATING':     'Communication about medicines',
+  'H_COMP_6_STAR_RATING':     'Discharge information',
+  'H_COMP_7_STAR_RATING':     'Care transition',
+  'H_CLEAN_HSP_STAR_RATING':  'Cleanliness',
+  'H_QUIET_HSP_STAR_RATING':  'Quietness',
+  'H_HSP_RATING_STAR_RATING': 'Overall hospital rating (patients)',
+  'H_RECMND_STAR_RATING':     'Would recommend',
+  'H_STAR_RATING':            'HCAHPS summary star',
+};
+const HCAHPS_LINEAR_LABELS: Record<string, string> = {
+  'H_COMP_1_LINEAR_SCORE':     'Nurse communication',
+  'H_COMP_2_LINEAR_SCORE':     'Doctor communication',
+  'H_COMP_3_LINEAR_SCORE':     'Staff responsiveness',
+  'H_COMP_5_LINEAR_SCORE':     'Communication about medicines',
+  'H_COMP_6_LINEAR_SCORE':     'Discharge information',
+  'H_COMP_7_LINEAR_SCORE':     'Care transition',
+  'H_CLEAN_HSP_LINEAR_SCORE':  'Cleanliness',
+  'H_QUIET_HSP_LINEAR_SCORE':  'Quietness',
+  'H_HSP_RATING_LINEAR_SCORE': 'Overall hospital rating',
+  'H_RECMND_LINEAR_SCORE':     'Would recommend',
+};
+
+interface HcahpsRow {
+  facility_id?: string;
+  hcahps_measure_id?: string;
+  hcahps_question?: string;
+  hcahps_answer_description?: string;
+  hcahps_answer_percent?: string;
+  patient_survey_star_rating?: string;
+  patient_survey_star_rating_footnote?: string;
+  hcahps_linear_mean_value?: string;
+}
+
+async function fetchHcahps(ccn: string): Promise<HcahpsRow[]> {
+  // Patient Survey (HCAHPS) — Hospital. dgck-syfz is the canonical
+  // dataset id under CMS Provider Data DKAN.
+  const url =
+    `https://data.cms.gov/provider-data/api/1/datastore/query/dgck-syfz/0` +
+    `?conditions[0][resource]=t&conditions[0][property]=facility_id&conditions[0][operator]==&conditions[0][value]=${ccn}` +
+    `&limit=200`;
+  const j = await safeJson<{ results?: HcahpsRow[] }>(url, undefined, 'cms-hcahps');
+  return j?.results ?? [];
+}
+
 async function fetchCmsQuality(): Promise<CcrmcQuality | null> {
   // CMS DKAN datastore endpoint. Try by CCN first; if the CCN doesn't
   // resolve we fall back to a name search so a wrong CCN constant
@@ -321,6 +379,30 @@ async function fetchCmsQuality(): Promise<CcrmcQuality | null> {
     row = (await safeJson<{ results?: CmsRow[] }>(byName, undefined, 'cms-hospitals-name'))?.results?.[0];
   }
   if (!row) return null;
+
+  // Use the resolved facility_id from the general-info row (may differ
+  // from FACTS.ccn if the name fallback matched a different CCN).
+  const resolvedCcn = row.facility_id ?? FACTS.ccn;
+  const hcahpsRows = await fetchHcahps(resolvedCcn);
+  const hcahpsStars: CcrmcQuality['hcahpsStars'] = [];
+  const hcahpsLinear: CcrmcQuality['hcahpsLinear'] = [];
+  for (const r of hcahpsRows) {
+    const id = r.hcahps_measure_id ?? '';
+    if (HCAHPS_STAR_LABELS[id] && r.patient_survey_star_rating) {
+      hcahpsStars.push({
+        measure: HCAHPS_STAR_LABELS[id],
+        stars: r.patient_survey_star_rating,
+        footnote: r.patient_survey_star_rating_footnote,
+      });
+    }
+    if (HCAHPS_LINEAR_LABELS[id] && r.hcahps_linear_mean_value) {
+      hcahpsLinear.push({
+        measure: HCAHPS_LINEAR_LABELS[id],
+        value: r.hcahps_linear_mean_value,
+      });
+    }
+  }
+
   return {
     hospitalName:        row.facility_name,
     ownership:           row.hospital_ownership,
@@ -331,10 +413,12 @@ async function fetchCmsQuality(): Promise<CcrmcQuality | null> {
     mortalityComparison:    bucket(row, row.count_of_mort_measures_better,    row.count_of_mort_measures_no_different,    row.count_of_mort_measures_worse),
     safetyComparison:       bucket(row, row.count_of_safety_measures_better,  row.count_of_safety_measures_no_different,  row.count_of_safety_measures_worse),
     readmissionComparison:  bucket(row, row.count_of_readm_measures_better,   row.count_of_readm_measures_no_different,   row.count_of_readm_measures_worse),
-    experienceComparison:   row.pt_exp_group_footnote ? '—' : '(see Care Compare)',
+    experienceComparison:   hcahpsStars.length > 0 ? `${hcahpsStars.length} HCAHPS star ratings (see below)` : '(see Care Compare)',
     effectivenessComparison:row.te_group_footnote ? '—' : '(see Care Compare)',
     timelinessComparison:   '(see Care Compare)',
     imagingComparison:      '(see Care Compare)',
+    hcahpsStars,
+    hcahpsLinear,
     fetchedAt: new Date().toISOString(),
   };
 }
