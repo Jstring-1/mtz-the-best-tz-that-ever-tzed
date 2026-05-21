@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import Modal from './Modal';
 import GrantDetailModal from './GrantDetailModal';
+import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 
 export interface GrantRow {
   amount: number;
@@ -62,11 +63,29 @@ export default function GrantsDetail({
   sources?: FundingSourceMeta[];
   data?: Record<string, GrantRow[]>;
 }) {
-  const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<GrantRow | null>(null);
-  const [pdfOpen, setPdfOpen] = useState(false);
-  const [sort, setSort] = useState<SortKey>('action-desc');
-  const [sourceKey, setSourceKey] = useState<string>(sources[0]?.key ?? 'grants');
+  const [open, setOpen] = useUrlBool('funding');
+  const [grantId, setGrantId] = useUrlString('grant');
+  const [pdfOpen, setPdfOpen] = useUrlBool('fpdf');
+  const defaultSort: SortKey = 'action-desc';
+  const [sortRaw, setSortRaw] = useUrlString('fsort');
+  const sort = (SORTS.map((s) => s.key) as string[]).includes(sortRaw ?? '')
+    ? (sortRaw as SortKey)
+    : defaultSort;
+  const setSort = (s: SortKey) => setSortRaw(s === defaultSort ? null : s);
+  const defaultSourceKey = sources[0]?.key ?? 'grants';
+  const [sourceKeyRaw, setSourceKeyRaw] = useUrlString('fsrc');
+  const sourceKey = sources.some((s) => s.key === sourceKeyRaw) ? (sourceKeyRaw as string) : defaultSourceKey;
+  const setSourceKey = (k: string) => setSourceKeyRaw(k === defaultSourceKey ? null : k);
+
+  // Lookup the active row by id (so a shared URL can deep-link a
+  // specific grant). Falls back to null when the id is in the URL but
+  // not in cache — the GrantDetailModal will still fetch by id.
+  const allRows = useMemo(() => Object.values(data).flat().concat(rows), [data, rows]);
+  const selected = useMemo<GrantRow | null>(() => {
+    if (!grantId) return null;
+    return allRows.find((r) => r.internalId === grantId) ?? { amount: 0, recipient: '', description: '', agency: '', actionDate: '', periodStart: '', internalId: grantId };
+  }, [grantId, allRows]);
+  const setSelected = (r: GrantRow | null) => setGrantId(r?.internalId ?? null);
 
   // If the multi-source registry is present, use it; otherwise fall back
   // to the legacy single-list rows prop.

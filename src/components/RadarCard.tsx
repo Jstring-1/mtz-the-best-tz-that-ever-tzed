@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo } from 'react';
 import Modal from './Modal';
+import { useUrlString } from '@/lib/useUrlState';
 
 export interface RadarImg {
   src: string;
@@ -9,7 +10,18 @@ export interface RadarImg {
 }
 
 export default function RadarCard({ imgs }: { imgs: RadarImg[] }) {
-  const [open, setOpen] = useState<RadarImg | null>(null);
+  // Encode by index — the radar img list is server-rendered in a stable
+  // order, and the captions/srcs would make for ugly URLs.
+  const [idxStr, setIdxStr] = useUrlString('radar');
+  const open = useMemo(() => {
+    const i = idxStr ? Number(idxStr) : NaN;
+    return Number.isInteger(i) && i >= 0 && i < imgs.length ? imgs[i] : null;
+  }, [idxStr, imgs]);
+  const setOpen = (img: RadarImg | null) => {
+    if (!img) return setIdxStr(null);
+    const i = imgs.indexOf(img);
+    setIdxStr(i >= 0 ? String(i) : null);
+  };
 
   return (
     <section className="card-section radar-card">

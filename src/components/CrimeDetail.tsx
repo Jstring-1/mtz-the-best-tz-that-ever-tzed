@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Modal from './Modal';
+import { useUrlBool } from '@/lib/useUrlState';
 
 interface CrimeData {
   agency: string;
@@ -14,23 +15,23 @@ interface CrimeData {
 }
 
 export default function CrimeDetail({ label, tooltip }: { label: string; tooltip?: string }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useUrlBool('crime');
   const [data, setData] = useState<CrimeData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function show() {
-    setOpen(true);
-    if (data || loading) return;
+  // Fetch lazily on first open (whether the open was triggered by a
+  // click or by a shared URL on initial load).
+  useEffect(() => {
+    if (!open || data || loading) return;
     setLoading(true); setError(null);
-    try {
-      const r = await fetch('/api/crime-detail', { cache: 'no-store' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setData(await r.json());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally { setLoading(false); }
-  }
+    fetch('/api/crime-detail', { cache: 'no-store' })
+      .then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((j) => setData(j))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  }, [open, data, loading]);
+  const show = () => setOpen(true);
 
   return (
     <>

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo } from 'react';
 import Modal from './Modal';
 import type { NoaaAlert } from '@/lib/types';
 import { relativeFromUnixSeconds } from '@/lib/time';
+import { useUrlString } from '@/lib/useUrlState';
 
 export interface QuakeLite {
   id?: string;
@@ -24,8 +25,22 @@ function fmtEpoch(sec?: number, tz = 'America/Los_Angeles'): string {
 export default function AlertsCard({
   alerts, quakes = [], tz,
 }: { alerts: NoaaAlert[]; quakes?: QuakeLite[]; tz: string }) {
-  const [open, setOpen] = useState<NoaaAlert | null>(null);
-  const [openQuake, setOpenQuake] = useState<QuakeLite | null>(null);
+  const [alertIdx, setAlertIdx] = useUrlString('alert');
+  const [quakeId, setQuakeId] = useUrlString('quake');
+  const open = useMemo(() => {
+    const i = alertIdx ? Number(alertIdx) : NaN;
+    return Number.isInteger(i) && i >= 0 && i < alerts.length ? alerts[i] : null;
+  }, [alertIdx, alerts]);
+  const openQuake = useMemo(
+    () => (quakeId ? quakes.find((q) => q.id === quakeId) ?? null : null),
+    [quakeId, quakes],
+  );
+  const setOpen = (a: NoaaAlert | null) => {
+    if (!a) return setAlertIdx(null);
+    const i = alerts.indexOf(a);
+    setAlertIdx(i >= 0 ? String(i) : null);
+  };
+  const setOpenQuake = (q: QuakeLite | null) => setQuakeId(q?.id ?? null);
   const total = alerts.length + quakes.length;
 
   // Hide the card entirely when there's nothing to show.

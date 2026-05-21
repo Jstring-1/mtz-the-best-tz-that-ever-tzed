@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo } from 'react';
 import Modal from './Modal';
+import { useUrlEnum, useUrlString } from '@/lib/useUrlState';
 
 export interface Pet {
   id: string;
@@ -38,9 +39,16 @@ function interleaveBySpecies(pets: Pet[]): Pet[] {
   return out;
 }
 
+const PET_TABS = ['all', 'dog', 'cat'] as const;
+
 export default function PetsCard({ pets }: { pets: Pet[] }) {
-  const [open, setOpen] = useState<Pet | null>(null);
-  const [tab, setTab] = useState<Tab>('all');
+  const [tab, setTab] = useUrlEnum<Tab>('ptab', PET_TABS, 'all');
+  const [petId, setPetId] = useUrlString('pet');
+  const open = useMemo(
+    () => (petId ? pets.find((p) => p.id === petId) ?? null : null),
+    [petId, pets],
+  );
+  const setOpen = (p: Pet | null) => setPetId(p?.id ?? null);
 
   const visible = tab === 'all'
     ? interleaveBySpecies(pets)

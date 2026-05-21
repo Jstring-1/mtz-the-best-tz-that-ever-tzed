@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal';
 import BillDetail from './BillDetail';
+import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 
 interface Bill {
   number: string;
@@ -74,26 +75,33 @@ function billOrderDate(b: Bill): string {
 const VOTED_RE = /\b(passed|agreed\s+to|failed|became\s+(?:public\s+)?law|enacted|signed)\b/i;
 
 export default function RepDetail({ label, tooltip }: { label: string; tooltip?: string }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useUrlBool('rep');
   const [data, setData] = useState<Rep | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [billRef, setBillRef] = useState<{ congress: number; type: string; number: string } | null>(null);
+  // Encode the nested bill modal as "congress.type.number" — e.g.
+  // "119.hr.1234". Recipient gets the bill detail opened on load.
+  const [billRefStr, setBillRefStr] = useUrlString('bill');
+  const billRef = useMemo(() => {
+    if (!billRefStr) return null;
+    const m = /^(\d+)\.([a-z]+)\.(\d+)$/i.exec(billRefStr);
+    if (!m) return null;
+    return { congress: Number(m[1]), type: m[2].toUpperCase(), number: m[3] };
+  }, [billRefStr]);
+  const setBillRef = (r: { congress: number; type: string; number: string } | null) =>
+    setBillRefStr(r ? `${r.congress}.${r.type.toLowerCase()}.${r.number}` : null);
 
-  async function show() {
-    setOpen(true);
-    if (data || loading) return;
+  // Lazy-fetch on open (covers shared-URL opens too).
+  useEffect(() => {
+    if (!open || data || loading) return;
     setLoading(true); setError(null);
-    try {
-      const r = await fetch('/api/rep-detail', { cache: 'no-store' });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setData(await r.json());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
+    fetch('/api/rep-detail', { cache: 'no-store' })
+      .then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((j) => setData(j))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  }, [open, data, loading]);
+  const show = () => setOpen(true);
 
   return (
     <>

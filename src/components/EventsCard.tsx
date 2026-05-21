@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo } from 'react';
 import Modal from './Modal';
 import MiniMap from './MiniMap';
+import { useUrlEnum, useUrlString } from '@/lib/useUrlState';
 
 // Unified event row used inside the card. We convert both Ticketmaster
 // events and locally-scraped venue events into this shape in page.tsx.
@@ -41,10 +42,18 @@ function segGroup(seg?: string, genre?: string): Exclude<RegFilter, 'all'> | 'ot
   return 'other';
 }
 
+const EVENT_TABS = ['local', 'regional', 'municipal'] as const;
+const EVENT_FILTERS = ['all', 'music', 'stage', 'comedy', 'sports'] as const;
+
 export default function EventsCard({ events, tz }: { events: UEvent[]; tz: string }) {
-  const [open, setOpen] = useState<UEvent | null>(null);
-  const [tab, setTab] = useState<Tab>('local');
-  const [regFilter, setRegFilter] = useState<RegFilter>('all');
+  const [tab, setTab] = useUrlEnum<Tab>('etab', EVENT_TABS, 'local');
+  const [regFilter, setRegFilter] = useUrlEnum<RegFilter>('efilter', EVENT_FILTERS, 'all');
+  const [eventId, setEventId] = useUrlString('event');
+  const open = useMemo(
+    () => (eventId ? events.find((e) => e.id === eventId) ?? null : null),
+    [eventId, events],
+  );
+  const setOpen = (e: UEvent | null) => setEventId(e?.id ?? null);
 
   const local     = events.filter((e) => e.source === 'local');
   const municipal = events.filter((e) => e.source === 'municipal');
@@ -89,7 +98,7 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
       </h2>
       {tab === 'regional' && (
         <span className="event-tabs reg-filter" role="tablist" aria-label="Regional category">
-          {(['all', 'music', 'stage', 'comedy', 'sports'] as RegFilter[]).map((f) => (
+          {EVENT_FILTERS.map((f) => (
             <button
               key={f}
               type="button"

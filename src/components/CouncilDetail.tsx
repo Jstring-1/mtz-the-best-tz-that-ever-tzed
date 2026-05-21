@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal';
+import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 
 interface Meeting {
   clipId: string;
@@ -32,11 +33,27 @@ function proxiedUrl(directUrl: string): string {
 }
 
 export default function CouncilDetail({ label, tooltip }: { label: string; tooltip?: string }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useUrlBool('council');
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pdf, setPdf] = useState<PdfRef | null>(null);
+  // Encode the nested PDF viewer as "<clipId>.<kind>" where kind is
+  // "agenda" or "minutes".
+  const [pdfStr, setPdfStr] = useUrlString('cpdf');
+  const pdf = useMemo<PdfRef | null>(() => {
+    if (!pdfStr || !data) return null;
+    const dot = pdfStr.lastIndexOf('.');
+    if (dot < 0) return null;
+    const clipId = pdfStr.slice(0, dot);
+    const kindRaw = pdfStr.slice(dot + 1).toLowerCase();
+    const m = data.meetings.find((x) => x.clipId === clipId);
+    if (!m) return null;
+    if (kindRaw === 'agenda'  && m.agendaUrl)  return { kind: 'Agenda',  url: m.agendaUrl,  meeting: m };
+    if (kindRaw === 'minutes' && m.minutesUrl) return { kind: 'Minutes', url: m.minutesUrl, meeting: m };
+    return null;
+  }, [pdfStr, data]);
+  const setPdf = (p: PdfRef | null) =>
+    setPdfStr(p ? `${p.meeting.clipId}.${p.kind.toLowerCase()}` : null);
 
   useEffect(() => {
     if (!open || data || loading) return;

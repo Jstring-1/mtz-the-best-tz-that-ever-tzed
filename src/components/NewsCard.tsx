@@ -1,12 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo } from 'react';
 import Modal from './Modal';
 import type { FeedRow } from '@/lib/types';
 import { relativeFromUnixSeconds } from '@/lib/time';
+import { useUrlString } from '@/lib/useUrlState';
 
 export default function NewsCard({ items }: { items: FeedRow[] }) {
-  const [open, setOpen] = useState<FeedRow | null>(null);
+  const [newsTs, setNewsTs] = useUrlString('news');
+  const open = useMemo(
+    () => (newsTs ? items.find((f) => String(f.ts) === newsTs) ?? null : null),
+    [newsTs, items],
+  );
+  const setOpen = (f: FeedRow | null) => setNewsTs(f ? String(f.ts) : null);
 
   return (
     <section className="card-section news-card">
