@@ -23,6 +23,15 @@ export interface Pet {
 
 type Tab = 'all' | 'dog' | 'cat';
 
+// CCAS sometimes copies the shelter ID ("A1047669") into the Name
+// field when the pet hasn't been named yet. Treat those as anonymous
+// and fall back to "(no name)" in the UI.
+function petDisplayName(p: Pet): string {
+  const n = (p.name ?? '').trim();
+  if (!n || n === p.id || /^A\d{6,}$/i.test(n)) return '(no name)';
+  return n;
+}
+
 // Round-robin interleave so the "All" view alternates species instead
 // of showing every cat (or dog) stacked on top.
 function interleaveBySpecies(pets: Pet[]): Pet[] {
@@ -78,27 +87,30 @@ export default function PetsCard({ pets }: { pets: Pet[] }) {
       ) : (
         <>
           <div className="pets-grid">
-            {visible.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className="pet-tile clickable"
-                onClick={() => setOpen(p)}
-                title={p.name}
-              >
-                {p.photo_url
-                  ? <img src={p.photo_url} alt={p.name} loading="lazy" />
-                  : <div className="pet-no-photo">no photo</div>}
-                <span className="pet-name">{p.name}</span>
-                {p.breed && <span className="pet-sub">{p.breed}</span>}
-                {p.age && <span className="pet-age">{p.age}</span>}
-              </button>
-            ))}
+            {visible.map((p) => {
+              const displayName = petDisplayName(p);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="pet-tile clickable"
+                  onClick={() => setOpen(p)}
+                  title={displayName}
+                >
+                  {p.photo_url
+                    ? <img src={p.photo_url} alt={displayName} loading="lazy" />
+                    : <div className="pet-no-photo">no photo</div>}
+                  <span className={`pet-name ${p.name ? '' : 'muted'}`}>{displayName}</span>
+                  {p.breed && <span className="pet-sub">{p.breed}</span>}
+                  {p.age && <span className="pet-age">{p.age}</span>}
+                </button>
+              );
+            })}
           </div>
         </>
       )}
 
-      <Modal open={!!open} onClose={() => setOpen(null)} title={open?.name ?? 'Pet'} size="lg">
+      <Modal open={!!open} onClose={() => setOpen(null)} title={open ? petDisplayName(open) : 'Pet'} size="lg">
         {open && (
           <>
             {open.photo_url && (

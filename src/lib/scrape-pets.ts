@@ -90,8 +90,12 @@ function parsePetsFromHtml(html: string, species: string, listingUrl: string): S
     const id = idM ? idM[1].trim() : (pickField(block, 'IDNumber') ?? '');
     if (!id) continue;
 
-    const name = pickField(block, 'Name');
+    let name = pickField(block, 'Name');
     if (!name) continue;
+    // When CCAS hasn't named the pet yet, the shelter site copies the
+    // ID ("A1047669") into the Name field. Detect that pattern and
+    // store an empty name so the UI can fall back to "(no name)".
+    if (name === id || /^A\d{6,}$/i.test(name)) name = '';
 
     // Photo: 24petconnect serves /image/<n>; tolerate lazy-load attrs.
     const photoMatch =

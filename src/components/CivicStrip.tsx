@@ -28,15 +28,13 @@ export default async function CivicStrip() {
   const funding = payload?.extras?.funding ?? {};
   const fundingSources = payload?.extras?.fundingSources ?? [];
 
-  // Council slot — value-only label ("Council" + count chip).
+  // Council slot — value-only label. Count + date moved to the tooltip
+  // to keep the strip uncluttered.
   const councilCount = council?.meetings?.length ?? 0;
   const councilDate = council?.meetings?.[0]?.date ?? '';
-  const councilLabelHtml =
-    `<span class="civic-strip-val gold">Council` +
-    (councilCount > 0 ? ` <span class="civic-strip-sub">(${councilCount}${councilDate ? ` · ${councilDate}` : ''})</span>` : '') +
-    `</span>`;
+  const councilLabelHtml = `<span class="civic-strip-val gold">City Council</span>`;
   const councilTooltip = councilCount > 0
-    ? 'Martinez City Council meetings from Granicus — click to browse agendas & minutes (read in-page).'
+    ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
 
   return (

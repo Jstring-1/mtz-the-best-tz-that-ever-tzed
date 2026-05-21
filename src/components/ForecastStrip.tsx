@@ -24,8 +24,8 @@ export default async function ForecastStrip() {
       {periods.length === 0
         ? <span className="label">forecast —</span>
         : periods.map((d, i) => (
-          <span key={i} className="hf-cell" title={d.shortForecast ?? ''}>
-            <span className="label">{shortName(d.name)}</span>{' '}
+          <span key={i} className="hf-cell" title={[d.name, d.shortForecast].filter(Boolean).join(' — ')}>
+            <span className="label">{shortName(d.name, d.startTime, d.isDaytime)}</span>{' '}
             <span className="wx-temp">{d.temperature != null ? `${d.temperature}°` : '—'}</span>
           </span>
         ))}
@@ -33,7 +33,7 @@ export default async function ForecastStrip() {
   );
 }
 
-function shortName(s?: string): string {
+function shortName(s?: string, startTime?: string, isDaytime?: boolean): string {
   if (!s) return '';
   const map: Record<string, string> = {
     Sunday: 'Sun', Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed',
@@ -42,11 +42,21 @@ function shortName(s?: string): string {
     Today: 'Today', Tonight: 'Tonight',
   };
   if (map[s]) return map[s];
-  // "Monday Night" → "Mon Nt", "Sunday Night" → "Sun Nt"
+  // "Monday Night" → "Mon Nt"
   const nightMatch = s.match(/^(\w+) Night$/);
   if (nightMatch) {
     const day = nightMatch[1];
     return `${map[day] ?? day.slice(0, 3)} Nt`;
+  }
+  // NOAA replaces the weekday with the holiday name on federal holidays
+  // ("Memorial Day", "Independence Day", etc.) — derive the day-of-week
+  // from startTime instead so we never show a half-clipped holiday.
+  if (startTime) {
+    const d = new Date(startTime);
+    if (!Number.isNaN(d.getTime())) {
+      const dow = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Los_Angeles' });
+      return isDaytime === false ? `${dow} Nt` : dow;
+    }
   }
   return s.slice(0, 5);
 }
