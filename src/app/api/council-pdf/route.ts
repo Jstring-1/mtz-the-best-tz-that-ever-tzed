@@ -4,12 +4,19 @@ import type { NextRequest } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Allow-list — we only proxy Martinez Granicus URLs.
-const ALLOW_PREFIXES = ['https://martinez.granicus.com/'];
+// Allow-list — we only proxy from these hosts. Add new prefixes here
+// when we want to embed another vendor's PDF (Granicus council minutes,
+// ClearGov budget books from their S3 bucket, etc.).
+const ALLOW_PREFIXES = [
+  'https://martinez.granicus.com/',
+  'https://cg-prod-v2.s3.us-east-2.amazonaws.com/pdfs-cache/',
+];
 
-// Server-side proxy for Granicus minutes/agenda PDFs. Lets the browser
-// embed the document in a same-origin iframe (no CORS / X-Frame issue)
-// AND lets us add the Accept/Referer headers Granicus seems to want.
+// Server-side proxy for embeddable PDFs (council minutes, budget books).
+// Lets the browser embed the document in a same-origin iframe (no CORS
+// / X-Frame issue) AND lets us forge the Accept/Referer headers some
+// upstreams want. The endpoint is still called /api/council-pdf for
+// historical reasons.
 export async function GET(req: NextRequest) {
   const u = req.nextUrl.searchParams.get('u');
   if (!u) return new NextResponse('missing ?u=', { status: 400 });
@@ -17,12 +24,17 @@ export async function GET(req: NextRequest) {
     return new NextResponse('disallowed host', { status: 400 });
   }
   try {
+    // Granicus appears to require its own Referer; S3 doesn't care, so
+    // send a matching one when we recognize the host.
+    const referer = u.startsWith('https://martinez.granicus.com/')
+      ? 'https://martinez.granicus.com/'
+      : undefined;
     const r = await fetch(u, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'application/pdf,application/octet-stream;q=0.9,*/*;q=0.8',
-        'Referer': 'https://martinez.granicus.com/',
+        ...(referer ? { 'Referer': referer } : {}),
       },
       redirect: 'follow',
       cache: 'no-store',

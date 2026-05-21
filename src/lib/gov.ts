@@ -180,7 +180,7 @@ const CONTRACT_FIELDS = [
 const CCC_LOC      = [{ country: 'USA', state: 'CA', county: '013' }];
 const MARTINEZ_LOC = [{ country: 'USA', state: 'CA', city: 'MARTINEZ' }];
 
-export type FundingSourceKind = 'usaspending' | 'subaward' | 'fac' | 'link';
+export type FundingSourceKind = 'usaspending' | 'subaward' | 'fac' | 'link' | 'pdf';
 
 export interface FundingSourceMeta {
   key: string;
@@ -189,6 +189,7 @@ export interface FundingSourceMeta {
   kind: FundingSourceKind;
   linkUrl?: string;             // present for kind='link' (and as a hint for other kinds)
   linkLabel?: string;           // optional button text for link sources
+  pdfUrl?: string;              // present for kind='pdf' — proxied through /api/council-pdf
 }
 interface SourceFilter {
   categories: AwardCategory[];          // one API call per category, merged
@@ -205,7 +206,8 @@ type SourceConfig =
   | (FundingSourceMeta & { kind: 'usaspending'; filter: SourceFilter })
   | (FundingSourceMeta & { kind: 'subaward';    filter: SourceFilter })
   | (FundingSourceMeta & { kind: 'fac';         fac: FacQuery })
-  | (FundingSourceMeta & { kind: 'link' });
+  | (FundingSourceMeta & { kind: 'link' })
+  | (FundingSourceMeta & { kind: 'pdf';         pdfUrl: string });
 
 // Contra Costa County incorporated cities for the FAC auditee-city filter.
 // (Excludes unincorporated CDPs; auditees there file under county-level
@@ -291,10 +293,13 @@ const FUNDING_SOURCES: SourceConfig[] = [
     description: 'SBA FOIA dataset — small-business loan recipients nationwide. Filter by BorrCity=Martinez, BorrState=CA after CSV download.',
     linkUrl: 'https://data.sba.gov/en/dataset/7-a-504-foia',
     linkLabel: 'Open SBA 7(a) / 504 dataset →' },
-  { kind: 'link',        key: 'link-martinez-budget', label: 'City of Martinez budget book',
-    description: "Martinez's annual operating budget on ClearGov. HTML/JS budget book — no public data API.",
+  { kind: 'pdf',         key: 'pdf-martinez-budget',  label: 'City of Martinez — FY2026 budget book',
+    description: "Martinez's adopted FY2026 operating budget (full ClearGov PDF). Opens in-page.",
+    // Filename includes a ClearGov cache-buster — update annually when
+    // the new fiscal year's book is published.
+    pdfUrl: 'https://cg-prod-v2.s3.us-east-2.amazonaws.com/pdfs-cache/dbb/253/2026_dbb_city_of_martinez_1773017650466.pdf',
     linkUrl: 'https://city-martinez-ca-budget-book.cleargov.com/',
-    linkLabel: 'Open Martinez budget book →' },
+    linkLabel: 'Open the interactive book on ClearGov →' },
   { kind: 'link',        key: 'link-ccc-budget', label: 'Contra Costa County budget book',
     description: "Contra Costa County's annual budget on ClearGov. HTML/JS budget book — no public data API.",
     linkUrl: 'https://county-contra-costa-ca-budget-book.cleargov.com/',
@@ -468,6 +473,7 @@ async function fetchOneSource(cfg: SourceConfig, days: number): Promise<GrantRow
     case 'subaward':    return fetchSubawardSource(cfg.key, cfg.filter, days);
     case 'fac':         return fetchFacSource(cfg.key, cfg.fac);
     case 'link':        return [];   // link-out sources have no rows
+    case 'pdf':         return [];   // pdf sources render an inline viewer, no rows
   }
 }
 
@@ -477,6 +483,7 @@ function metaFromConfig(cfg: SourceConfig): FundingSourceMeta {
   return {
     key: cfg.key, label: cfg.label, description: cfg.description, kind: cfg.kind,
     linkUrl: cfg.linkUrl, linkLabel: cfg.linkLabel,
+    pdfUrl: cfg.kind === 'pdf' ? cfg.pdfUrl : undefined,
   };
 }
 

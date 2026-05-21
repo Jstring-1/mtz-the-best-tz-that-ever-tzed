@@ -18,9 +18,10 @@ export interface FundingSourceMeta {
   key: string;
   label: string;
   description: string;
-  kind?: 'usaspending' | 'subaward' | 'fac' | 'link';
+  kind?: 'usaspending' | 'subaward' | 'fac' | 'link' | 'pdf';
   linkUrl?: string;
   linkLabel?: string;
+  pdfUrl?: string;
 }
 
 type SortKey = 'action-desc' | 'action-asc' | 'amount-desc' | 'amount-asc' | 'period-desc' | 'period-asc';
@@ -63,6 +64,7 @@ export default function GrantsDetail({
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<GrantRow | null>(null);
+  const [pdfOpen, setPdfOpen] = useState(false);
   const [sort, setSort] = useState<SortKey>('action-desc');
   const [sourceKey, setSourceKey] = useState<string>(sources[0]?.key ?? 'grants');
 
@@ -125,7 +127,24 @@ export default function GrantsDetail({
                 >{activeMeta.linkLabel ?? 'Open dataset →'}</a>
               </p>
             )}
-            {activeMeta?.kind !== 'link' && activeRows.length === 0 && (
+            {activeMeta?.kind === 'pdf' && activeMeta.pdfUrl && (
+              <p style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="event-modal-btn primary"
+                  onClick={() => setPdfOpen(true)}
+                >Read the PDF in-page →</button>
+                {activeMeta.linkUrl && (
+                  <a
+                    className="event-modal-btn"
+                    href={activeMeta.linkUrl}
+                    target="_blank"
+                    rel="noopener"
+                  >{activeMeta.linkLabel ?? 'Open original →'}</a>
+                )}
+              </p>
+            )}
+            {activeMeta?.kind !== 'link' && activeMeta?.kind !== 'pdf' && activeRows.length === 0 && (
               <p className="muted" style={{ marginTop: 10 }}>
                 No rows for this source. Try another source above.
               </p>
@@ -181,6 +200,33 @@ export default function GrantsDetail({
           fallbackRecipient={selected.recipient}
           onClose={() => setSelected(null)}
         />
+      )}
+
+      {activeMeta?.kind === 'pdf' && activeMeta.pdfUrl && (
+        <Modal
+          open={pdfOpen}
+          onClose={() => setPdfOpen(false)}
+          title={activeMeta.label}
+          size="xl"
+        >
+          <div className="council-pdf-wrap">
+            <iframe
+              key={activeMeta.pdfUrl}
+              title={activeMeta.label}
+              src={`/api/council-pdf?u=${encodeURIComponent(activeMeta.pdfUrl)}#pagemode=none`}
+              className="council-pdf-frame"
+              loading="lazy"
+            />
+            <p style={{ marginTop: 10 }}>
+              <a
+                className="event-modal-btn primary"
+                href={activeMeta.pdfUrl}
+                target="_blank"
+                rel="noopener"
+              >Open PDF in new tab →</a>
+            </p>
+          </div>
+        </Modal>
       )}
     </>
   );
