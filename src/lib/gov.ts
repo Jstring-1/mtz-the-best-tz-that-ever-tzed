@@ -618,6 +618,14 @@ export interface GovLocalPayload {
 export async function fetchGovLocal(): Promise<GovLocalPayload> {
   // Reset per-run debug tracker so old failures don't linger.
   for (const k of Object.keys(lastFail)) delete lastFail[k];
+  // Load the previous cache so an upstream's transient failure (BLS
+  // quota miss, EIA hiccup, etc.) falls back to the last known value
+  // instead of clearing the strip. Lazy-import to keep ./cache out of
+  // any client bundling.
+  const { getJson } = await import('./cache');
+  const prev = await getJson<GovLocalPayload>('gov_local').catch(() => null);
+  const prevItem = (key: string): GovStripItem | undefined =>
+    prev?.items?.find((it) => it.key === key);
   const [unemp, gas, funding, rep, crime] = await Promise.allSettled([
     blsUnemployment(),
     eiaCaliforniaGas(),
@@ -702,6 +710,22 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
     },
   ];
 
+  // Stale-data fallback: when an upstream couldn't be reached this run,
+  // substitute the value from the previous cached payload so the strip
+  // doesn't flash "—" between fetches. Tooltip gets a "(cached)" tag
+  // so the staleness is visible on hover.
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].value !== '—') continue;
+    const old = prevItem(items[i].key);
+    if (old && old.value && old.value !== '—') {
+      items[i] = {
+        ...items[i],
+        value: old.value,
+        tooltip: `${old.tooltip} · cached — current fetch unavailable`,
+      };
+    }
+  }
+
   // Per-source result/error so we can debug "—" rows from /admin's
   // apis_json viewer without re-running the cron.
   const debug: Record<string, string> = {
@@ -723,14 +747,22 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
     }
   }
 
+  // Fall back the funding popup data too — if all 24 USAspending
+  // sources came back empty this run, keep showing the previous
+  // payload so the popup isn't a blank state.
+  const fundingEmpty = !f || Object.values(f.data).every((rows) => rows.length === 0);
+  const extras = fundingEmpty && prev?.extras
+    ? prev.extras
+    : {
+        grants: gr?.rows ?? [],
+        funding: f?.data ?? {},
+        fundingSources: f?.sources ?? [],
+      };
+
   return {
     scrapedAt: new Date().toISOString(),
     items,
-    extras: {
-      grants: gr?.rows ?? [],
-      funding: f?.data ?? {},
-      fundingSources: f?.sources ?? [],
-    },
+    extras,
     debug,
   };
 }

@@ -182,22 +182,18 @@ const ENTITY_ID = 7;          // CCC's gcc.sco.ca.gov entityid
 const ENTITY_TYPE = 'Counties';
 
 async function tryYear(year: number): Promise<{ csv: string; url: string } | null> {
-  // The browser "Download" button generates files like
-  // GccExport-YYYY-MM-DD.csv, so the export route is almost certainly
-  // /Reports/GccExport.aspx. Try a handful of likely shapes — the
-  // first that returns CSV with Position + TotalWages headers wins.
+  // Verified URL pattern from the browser's "Download CSV" link:
+  // /Reports/GetReport.aspx?reportName=ExpEmployees&fileType=csv
+  // &parameterList=Year:YYYY;EntityID:N;
+  // The parameterList uses ':' / ';' delimiters; we leave them
+  // un-encoded because that's the format the server expects.
+  const params = `parameterList=Year:${year};EntityID:${ENTITY_ID};`;
   const variants = [
-    `https://gcc.sco.ca.gov/Reports/GccExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
-    `https://gcc.sco.ca.gov/Reports/GccExport.aspx?entityid=${ENTITY_ID}&entitytype=${ENTITY_TYPE}&year=${year}`,
-    `https://gcc.sco.ca.gov/Reports/Counties/GccExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
-    `https://gcc.sco.ca.gov/api/GccExport?entityid=${ENTITY_ID}&year=${year}`,
-    `https://gcc.sco.ca.gov/Reports/Counties/CountyExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
-    `https://gcc.sco.ca.gov/Reports/RawExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
-    `https://gcc.sco.ca.gov/Reports/Counties/County.aspx?entityid=${ENTITY_ID}&year=${year}&action=Download`,
+    `https://gcc.sco.ca.gov/Reports/GetReport.aspx?reportName=ExpEmployees&fileType=csv&${params}`,
+    `https://gcc.sco.ca.gov/Reports/GetReport.aspx?reportName=ExpEmployees&fileType=CSV&${params}`,
   ];
   for (const url of variants) {
-    const csv = await safeText(url, `gcc-${year}-${new URL(url).pathname}`);
-    // Accept the response when it looks like a real GCC CSV header.
+    const csv = await safeText(url, `gcc-${year}`);
     if (csv && csv.length > 1000 && /position/i.test(csv) && /totalwages/i.test(csv.replace(/\s+/g, ''))) {
       return { csv, url };
     }
