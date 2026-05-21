@@ -25,14 +25,19 @@ export interface UEvent {
 }
 
 type Tab = 'local' | 'municipal' | 'regional';
-type RegFilter = 'all' | 'music' | 'stage' | 'sports';
+type RegFilter = 'all' | 'music' | 'stage' | 'comedy' | 'sports';
 
-// Bucket a Ticketmaster segment into the three regional filter groups.
-function segGroup(seg?: string): Exclude<RegFilter, 'all'> | 'other' {
+// Bucket a Ticketmaster classification into the regional filter groups.
+// Comedy is typically segment="Arts & Theatre" with genre="Comedy", so
+// we have to look at genre too — checking it first so comedy events
+// don't get swallowed into the broader 'stage' bucket.
+function segGroup(seg?: string, genre?: string): Exclude<RegFilter, 'all'> | 'other' {
   const s = (seg ?? '').toLowerCase();
+  const g = (genre ?? '').toLowerCase();
+  if (g.includes('comedy') || s.includes('comedy')) return 'comedy';
   if (s.includes('music')) return 'music';
   if (s.includes('sport')) return 'sports';
-  if (/art|theat|comedy|film|stage/.test(s)) return 'stage';
+  if (/art|theat|film|stage/.test(s)) return 'stage';
   return 'other';
 }
 
@@ -46,12 +51,12 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
   const regional  = events.filter((e) => e.source === 'ticketmaster');
   const regionalShown = regFilter === 'all'
     ? regional
-    : regional.filter((e) => segGroup(e.segment) === regFilter);
+    : regional.filter((e) => segGroup(e.segment, e.genre) === regFilter);
   const list = tab === 'local' ? local : tab === 'municipal' ? municipal : regionalShown;
   const visible = list;
 
   const regCount = (f: RegFilter) =>
-    f === 'all' ? regional.length : regional.filter((e) => segGroup(e.segment) === f).length;
+    f === 'all' ? regional.length : regional.filter((e) => segGroup(e.segment, e.genre) === f).length;
 
   const switchTab = (t: Tab) => setTab(t);
 
@@ -84,7 +89,7 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
       </h2>
       {tab === 'regional' && (
         <span className="event-tabs reg-filter" role="tablist" aria-label="Regional category">
-          {(['all', 'music', 'stage', 'sports'] as RegFilter[]).map((f) => (
+          {(['all', 'music', 'stage', 'comedy', 'sports'] as RegFilter[]).map((f) => (
             <button
               key={f}
               type="button"
