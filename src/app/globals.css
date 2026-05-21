@@ -351,23 +351,27 @@ main { padding-top: var(--top-stack-h); display: block; }
 .rep-detail .rep-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .rep-detail .rep-list li { padding: 4px 0; border-bottom: 1px dashed var(--border-soft); }
 .rep-detail .rep-list .num { font-family: var(--mono); font-size: .82em; color: var(--accent); }
-.rep-detail .rep-list .bill-title-text { line-height: 1.3; }
+.rep-detail .rep-list .bill-title-text { line-height: 1.3; min-width: 0; word-wrap: break-word; }
 .rep-detail .rep-list .meta { font-size: .8em; line-height: 1.4; margin-top: 2px; }
 
+/* Outer row: [trigger chip | title text]. The trigger chip itself is a
+   nested grid so kind+num align across rows. */
 .rep-detail .rep-list .bill-row {
-  display: grid; grid-template-columns: 32px 80px 1fr; gap: 8px; align-items: baseline;
+  display: grid; grid-template-columns: 124px 1fr; gap: 10px; align-items: baseline;
 }
 .rep-detail .bill-trigger {
   background: transparent; border: 0; padding: 0;
   text-align: left; cursor: pointer; color: var(--accent); font: inherit;
   text-decoration: none;
 }
-.rep-detail .bill-trigger:hover { text-decoration: underline; }
+.rep-detail .rep-list .bill-trigger {
+  display: grid; grid-template-columns: 28px 1fr; gap: 6px; align-items: baseline;
+}
 .rep-detail .bill-trigger:hover .num { text-decoration: underline; }
 .rep-detail .rep-list .kind {
   font-family: var(--mono); font-size: .72em; font-weight: 700;
   border: 1px solid var(--border); border-radius: 3px;
-  padding: 1px 5px; text-align: center; color: var(--text-muted);
+  padding: 1px 4px; text-align: center; color: var(--text-muted);
 }
 .rep-detail .rep-list .kind-sp { color: var(--accent);       border-color: var(--accent); }
 .rep-detail .rep-list .kind-co { color: var(--accent-cool);  border-color: var(--accent-cool); }
