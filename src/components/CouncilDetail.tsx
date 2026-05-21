@@ -25,7 +25,10 @@ interface Payload {
 interface PdfRef { kind: 'Agenda' | 'Minutes'; url: string; meeting: Meeting }
 
 function proxiedUrl(directUrl: string): string {
-  return `/api/council-pdf?u=${encodeURIComponent(directUrl)}`;
+  // #pagemode=none asks the embedded PDF viewer (Chrome PDFium / Firefox
+  // PDF.js) to open without the thumbnail sidebar so the page itself
+  // gets the full width.
+  return `/api/council-pdf?u=${encodeURIComponent(directUrl)}#pagemode=none`;
 }
 
 export default function CouncilDetail({ label, tooltip }: { label: string; tooltip?: string }) {
@@ -105,7 +108,7 @@ export default function CouncilDetail({ label, tooltip }: { label: string; toolt
         open={!!pdf}
         onClose={() => setPdf(null)}
         title={pdf ? `${pdf.kind} — ${pdf.meeting.title}` : ''}
-        size="lg"
+        size="xl"
       >
         {pdf && (
           <div className="council-pdf-wrap">
