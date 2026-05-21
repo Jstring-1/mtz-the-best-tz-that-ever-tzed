@@ -263,11 +263,10 @@ export interface CcrmcQuality {
   timelinessComparison?: string;
   imagingComparison?: string;
   // HCAHPS patient survey — per-measure star ratings (only present when
-  // the upstream dataset returns rows). Empty array when unavailable.
-  hcahpsStars: Array<{ measure: string; stars: string; footnote?: string }>;
-  // Top-line linear-score percentages (e.g. "% who reported nurses
-  // communicated well"). Useful supplement to the star rating.
-  hcahpsLinear: Array<{ measure: string; value: string }>;
+  // the upstream dataset returns rows). Optional so older cached
+  // payloads (pre-HCAHPS) deserialize without errors.
+  hcahpsStars?: Array<{ measure: string; stars: string; footnote?: string }>;
+  hcahpsLinear?: Array<{ measure: string; value: string }>;
   fetchedAt: string;
 }
 

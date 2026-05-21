@@ -61,11 +61,11 @@ export default function CcrmcQuality({ data }: { data: CcrmcQuality | null }) {
               <dt>Medical imaging</dt><dd>{data.imagingComparison}</dd>
             </dl>
 
-            {data.hcahpsStars.length > 0 && (
+            {(data.hcahpsStars ?? []).length > 0 && (
               <>
                 <h3 className="bill-h">Patient experience — HCAHPS survey (star ratings)</h3>
                 <dl className="bill-kv ccrmc-kv">
-                  {data.hcahpsStars.map((m) => (
+                  {(data.hcahpsStars ?? []).map((m) => (
                     <Fragment key={m.measure}>
                       <dt>{m.measure}</dt>
                       <dd>
@@ -78,11 +78,11 @@ export default function CcrmcQuality({ data }: { data: CcrmcQuality | null }) {
               </>
             )}
 
-            {data.hcahpsLinear.length > 0 && (
+            {(data.hcahpsLinear ?? []).length > 0 && (
               <>
                 <h3 className="bill-h">Patient experience — HCAHPS linear-mean scores (0–100)</h3>
                 <dl className="bill-kv ccrmc-kv">
-                  {data.hcahpsLinear.map((m) => (
+                  {(data.hcahpsLinear ?? []).map((m) => (
                     <Fragment key={m.measure}>
                       <dt>{m.measure}</dt>
                       <dd>{m.value}</dd>
