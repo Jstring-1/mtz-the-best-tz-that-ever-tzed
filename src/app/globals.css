@@ -385,21 +385,34 @@ main { padding-top: var(--top-stack-h); display: block; }
 .rep-detail .rep-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .rep-detail .rep-list li { padding: 4px 0; border-bottom: 1px dashed var(--border-soft); }
 .rep-detail .rep-list .num { font-family: var(--mono); font-size: .82em; color: var(--accent); }
-.rep-detail .rep-list .bill-title-text { line-height: 1.3; min-width: 0; word-wrap: break-word; }
+.rep-detail .rep-list .bill-title-text {
+  /* Force the title into block layout so it wraps the full width of
+     the flex remainder rather than refusing to break the line. */
+  display: block;
+  line-height: 1.3;
+  min-width: 0;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .rep-detail .rep-list .meta { font-size: .8em; line-height: 1.4; margin-top: 2px; }
 
-/* Outer row: [trigger chip | title text]. The trigger chip itself is a
-   nested grid so kind+num align across rows. */
+/* Outer row: [trigger chip | title text]. Flex with `min-width: 0`
+   on the title is the only reliable pattern to make long text wrap
+   alongside a fixed-width sibling. */
 .rep-detail .rep-list .bill-row {
-  display: grid; grid-template-columns: 124px minmax(0, 1fr); gap: 10px; align-items: baseline;
+  display: flex; gap: 10px; align-items: baseline;
 }
+.rep-detail .rep-list .bill-row > .bill-trigger { flex: 0 0 auto; }
+.rep-detail .rep-list .bill-row > .bill-title-text { flex: 1 1 0; min-width: 0; }
 .rep-detail .bill-trigger {
   background: transparent; border: 0; padding: 0;
   text-align: left; cursor: pointer; color: var(--accent); font: inherit;
   text-decoration: none;
 }
 .rep-detail .rep-list .bill-trigger {
-  display: grid; grid-template-columns: 28px 1fr; gap: 6px; align-items: baseline;
+  display: inline-grid; grid-template-columns: 28px max-content; gap: 6px; align-items: baseline;
 }
 .rep-detail .bill-trigger:hover .num { text-decoration: underline; }
 .rep-detail .rep-list .kind {
@@ -1652,11 +1665,14 @@ main { padding-top: var(--top-stack-h); display: block; }
 /* min-width: 0 on every descendant unblocks flex/grid shrinking so 1fr
    tracks can actually shrink below content size. The wrap props are
    inherited but we re-state for spans/links etc. that weren't getting
-   them. */
+   them. !important here because some descendant rules (e.g. .bill-kv
+   dt's white-space, third-party HTML in bill summaries) would otherwise
+   override the wrap settings. */
 .detail-modal-content * {
   min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  white-space: normal !important;
 }
 /* Cap block-ish children at parent width as a belt-and-suspenders. */
 .detail-modal-content p,
@@ -1669,6 +1685,9 @@ main { padding-top: var(--top-stack-h); display: block; }
 .detail-modal-content div {
   max-width: 100%;
 }
+/* The map-link is the one exception — short token like "↗ map" that
+   we explicitly do NOT want to break across two lines. */
+.detail-modal-content .map-link { white-space: nowrap !important; }
 .detail-modal-close {
   position: absolute; top: 6px; right: 10px;
   background: transparent; border: 0; color: var(--text-muted);
