@@ -1693,6 +1693,47 @@ main { padding-top: var(--top-stack-h); display: block; }
 .ccrmc-kv dd { margin: 0; }
 .stars { color: var(--accent); font-size: 1.05em; letter-spacing: 1px; }
 
+/* Compensation table modal */
+.comp-toolbar {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline;
+  margin-bottom: 8px; font-size: .9em;
+}
+.comp-filter input,
+.comp-filter select {
+  background: var(--bg-elev); color: var(--text);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 3px 6px; font: inherit; font-size: .92em;
+}
+.comp-filter input { width: 180px; }
+.comp-filter select { max-width: 260px; }
+.comp-meta { font-size: .82em; }
+.comp-table-wrap {
+  max-height: 60vh; overflow: auto;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg-elev);
+}
+.comp-table { width: 100%; border-collapse: collapse; font-size: .85em; }
+.comp-table thead { position: sticky; top: 0; z-index: 1; background: var(--bg-elev-2); }
+.comp-table th { text-align: left; padding: 6px 8px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); }
+.comp-table th.num { text-align: right; font-family: var(--mono); }
+.comp-table td { padding: 5px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+.comp-table td.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.comp-table td.total { color: var(--accent-green); font-weight: 600; }
+.comp-table tr:hover td { background: var(--bg-elev-2); }
+.comp-table .dept { max-width: 200px; }
+.comp-table .pos  { max-width: 320px; }
+.comp-pager {
+  display: flex; gap: 12px; align-items: center; justify-content: center;
+  margin-top: 12px; font-size: .9em;
+}
+.comp-pager button {
+  background: var(--bg-elev); color: var(--text);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 4px 10px; cursor: pointer; font: inherit;
+}
+.comp-pager button:disabled { opacity: .4; cursor: not-allowed; }
+.comp-pager button:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+
 /* ---- Reusable detail modal ------------------------------------------ */
 
 .detail-modal {

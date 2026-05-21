@@ -412,6 +412,12 @@ async function ccrmcData(json: Record<string, unknown>) {
   json['ccrmc_data'] = await fetchCcrmcData();
 }
 
+async function cccCompensation(json: Record<string, unknown>) {
+  const { fetchCccCompensation } = await import('./comp');
+  const payload = await fetchCccCompensation();
+  if (payload) json['ccc_comp'] = payload;
+}
+
 async function repVotes(json: Record<string, unknown>) {
   const { fetchRepVotes } = await import('./gov');
   json['gov_rep_votes'] = await fetchRepVotes(20);
@@ -1039,6 +1045,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('local_parks',        () => localParks(json),         ok, errors);
     await safe('gov_local',          () => govLocal(json),            ok, errors);
     await safe('ccrmc_data',         () => ccrmcData(json),           ok, errors);
+    await safe('ccc_comp',           () => cccCompensation(json),     ok, errors);
     await safe('purge_stores',       () => purgeStores(),             ok, errors);
   }
 

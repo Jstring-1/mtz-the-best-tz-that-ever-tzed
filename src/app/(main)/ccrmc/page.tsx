@@ -1,8 +1,10 @@
 import { getJson, getAllJsonTimestamps } from '@/lib/cache';
 import { relativeFromIso } from '@/lib/time';
 import type { CcrmcPayload } from '@/lib/ccrmc';
+import type { CompPayload } from '@/lib/comp';
 import GrantsDetail from '@/components/GrantsDetail';
 import CcrmcQuality from '@/components/CcrmcQuality';
+import CcrmcCompensation from '@/components/CcrmcCompensation';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -86,10 +88,18 @@ function LinkTile({ label, url, note }: { label: string; url: string; note: stri
 }
 
 export default async function CcrmcPage() {
-  const [payload, ts] = await Promise.all([
+  const [payload, comp, ts] = await Promise.all([
     getJson<CcrmcPayload>('ccrmc_data').catch(() => null),
+    getJson<CompPayload>('ccc_comp').catch(() => null),
     getAllJsonTimestamps(),
   ]);
+  // Lightweight summary stats for the trigger card — full dataset is
+  // lazy-fetched via /api/ccc-comp when the user opens the modal.
+  const compHint = comp ? {
+    year: comp.year,
+    employees: comp.totals.employees,
+    grandTotal: comp.totals.grandTotal,
+  } : undefined;
   const facts = payload?.facts;
   const funding = payload?.funding ?? { sources: [], data: {} };
   const totalFunding = Object.values(funding.data).flat().reduce((acc, r) => acc + r.amount, 0);
@@ -139,6 +149,8 @@ export default async function CcrmcPage() {
         />
 
         <CcrmcQuality data={payload?.quality ?? null} />
+
+        <CcrmcCompensation totalsHint={compHint} />
 
         <div className="ccrmc-section-card">
           <div className="head">Recent news (Google News)</div>
