@@ -109,23 +109,30 @@ function headerIndex(headers: string[], ...needles: string[]): number {
   return -1;
 }
 
-function parseCompCsv(csv: string): CompRow[] {
+export function parseCompCsv(csv: string): CompRow[] {
   const lines = csv.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length < 2) return [];
   const header = parseCsvLine(lines[0]);
   const idx = {
-    dept:     headerIndex(header, 'departmentsubdivision', 'department'),
-    pos:      headerIndex(header, 'position'),
-    other:    headerIndex(header, 'otherpositions'),
-    reg:      headerIndex(header, 'regularpay', 'basepay'),
-    ot:       headerIndex(header, 'overtimepay', 'overtime'),
-    lump:     headerIndex(header, 'lumpsumpay', 'lumpsum'),
-    otherPay: headerIndex(header, 'otherpay'),
-    wages:    headerIndex(header, 'totalwages'),
-    pension:  headerIndex(header, 'definedbenefitpensioncontribution', 'pensioncontribution', 'employerpension'),
-    health:   headerIndex(header, 'healthdentalvision', 'healthdentalvisioncontribution', 'health'),
-    eid:      headerIndex(header, 'employeeidentifier', 'employeeid'),
-    notes:    headerIndex(header, 'notes'),
+    // Modern GCC export header naming (no separators in column names).
+    dept:          headerIndex(header, 'departmentorsubdivision', 'departmentsubdivision', 'department'),
+    pos:           headerIndex(header, 'position'),
+    other:         headerIndex(header, 'otherpositions'),
+    reg:           headerIndex(header, 'regularpay'),
+    ot:            headerIndex(header, 'overtimepay'),
+    lump:          headerIndex(header, 'lumpsumpay'),
+    otherPay:      headerIndex(header, 'otherpay'),
+    wages:         headerIndex(header, 'totalwages'),
+    // Employer-paid defined-benefit pension contribution (main pension).
+    pension:       headerIndex(header, 'definedbenefitplancontribution', 'definedbenefitpensioncontribution'),
+    // Health + dental + vision benefits.
+    health:        headerIndex(header, 'healthdentalvision'),
+    // Authoritative "all retirement + health" sum from CMS — preferred
+    // when present because it also includes EmployeesRetirementCostCovered
+    // + DeferredCompensationPlan that we don't surface separately.
+    totalBenefits: headerIndex(header, 'totalretirementandhealthcontribution', 'totalretirementandhealth'),
+    eid:           headerIndex(header, 'employeeidentifier', 'employeeid'),
+    notes:         headerIndex(header, 'notes'),
   };
   const out: CompRow[] = [];
   for (let i = 1; i < lines.length; i++) {
@@ -133,6 +140,7 @@ function parseCompCsv(csv: string): CompRow[] {
     const totalWages = toNum(cols[idx.wages]);
     const pension    = toNum(cols[idx.pension]);
     const health     = toNum(cols[idx.health]);
+    const benefits   = idx.totalBenefits >= 0 ? toNum(cols[idx.totalBenefits]) : (pension + health);
     out.push({
       department:    (cols[idx.dept] ?? '').trim(),
       position:      (cols[idx.pos] ?? '').trim(),
@@ -144,9 +152,9 @@ function parseCompCsv(csv: string): CompRow[] {
       totalWages,
       pension,
       health,
-      totalCompensation: totalWages + pension + health,
-      employeeId:    (cols[idx.eid] ?? '').trim(),
-      notes:         (cols[idx.notes] ?? '').trim(),
+      totalCompensation: totalWages + benefits,
+      employeeId:    idx.eid >= 0 ? (cols[idx.eid] ?? '').trim() : '',
+      notes:         idx.notes >= 0 ? (cols[idx.notes] ?? '').trim() : '',
     });
   }
   return out;
@@ -174,20 +182,23 @@ const ENTITY_ID = 7;          // CCC's gcc.sco.ca.gov entityid
 const ENTITY_TYPE = 'Counties';
 
 async function tryYear(year: number): Promise<{ csv: string; url: string } | null> {
-  // Try a few likely raw-export endpoints. The HTML report itself
-  // is at /Reports/Counties/County.aspx?entityid=N&year=YYYY; the
-  // CSV download is typically exposed via one of these companion
-  // routes. We accept the first one that returns a real CSV.
+  // The browser "Download" button generates files like
+  // GccExport-YYYY-MM-DD.csv, so the export route is almost certainly
+  // /Reports/GccExport.aspx. Try a handful of likely shapes — the
+  // first that returns CSV with Position + TotalWages headers wins.
   const variants = [
+    `https://gcc.sco.ca.gov/Reports/GccExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
+    `https://gcc.sco.ca.gov/Reports/GccExport.aspx?entityid=${ENTITY_ID}&entitytype=${ENTITY_TYPE}&year=${year}`,
+    `https://gcc.sco.ca.gov/Reports/Counties/GccExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
+    `https://gcc.sco.ca.gov/api/GccExport?entityid=${ENTITY_ID}&year=${year}`,
+    `https://gcc.sco.ca.gov/Reports/Counties/CountyExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
     `https://gcc.sco.ca.gov/Reports/RawExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
-    `https://gcc.sco.ca.gov/Reports/RawExport.aspx?entityid=${ENTITY_ID}&entitytype=${ENTITY_TYPE}&year=${year}`,
-    `https://gcc.sco.ca.gov/Reports/RawExportFile.aspx?entityid=${ENTITY_ID}&year=${year}`,
-    `https://gcc.sco.ca.gov/Reports/CSVExport.aspx?entityid=${ENTITY_ID}&year=${year}`,
     `https://gcc.sco.ca.gov/Reports/Counties/County.aspx?entityid=${ENTITY_ID}&year=${year}&action=Download`,
   ];
   for (const url of variants) {
     const csv = await safeText(url, `gcc-${year}-${new URL(url).pathname}`);
-    if (csv && csv.length > 1000 && /position/i.test(csv) && /total\s*wages/i.test(csv)) {
+    // Accept the response when it looks like a real GCC CSV header.
+    if (csv && csv.length > 1000 && /position/i.test(csv) && /totalwages/i.test(csv.replace(/\s+/g, ''))) {
       return { csv, url };
     }
   }
