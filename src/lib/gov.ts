@@ -210,12 +210,6 @@ const FUNDING_SOURCES: SourceConfig[] = [
   { key: 'direct',         label: 'Direct payments — Contra Costa Co.',
     description: 'Federal direct payments in CCC, last 90 days',
     filter: { categories: ['direct'], place: 'ccc-county' } },
-  { key: 'grants-recip',   label: 'Grants — recipients in CCC',
-    description: 'Grants to organizations headquartered in CCC',
-    filter: { categories: ['grants'], recipientPlace: 'ccc-county' } },
-  { key: 'contracts-recip',label: 'Contracts — recipients in CCC',
-    description: 'Contracts to organizations headquartered in CCC',
-    filter: { categories: ['contracts'], recipientPlace: 'ccc-county' } },
   { key: 'martinez-all',   label: 'All federal $ — City of Martinez',
     description: 'All award types, place-of-performance = Martinez',
     filter: { categories: ['grants', 'contracts', 'loans', 'direct'], place: 'martinez-city' } },
@@ -426,11 +420,27 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
   const v = <T>(p: PromiseSettledResult<T>): T | null =>
     p.status === 'fulfilled' ? (p.value as T) : null;
   const u = v(unemp), g = v(gas), f = v(funding), r = v(rep), cr = v(crime);
-  // Default-source figures for the civic strip row.
+  // Default-source rows (used as the legacy `extras.grants` payload).
   const grantsRows = f?.data?.['grants'] ?? [];
-  const grantsTotal = grantsRows.reduce((acc, row) => acc + row.amount, 0);
-  const gr = grantsRows.length > 0
-    ? { total: fmtMoney(grantsTotal), count: grantsRows.length, days: 90, rows: grantsRows }
+  // Total across ALL sources, deduped by internalId so awards that
+  // appear in multiple sources (e.g. an HHS grant also showing up under
+  // the Head Start CFDA source) aren't double-counted.
+  let totalAmount = 0;
+  let totalCount = 0;
+  if (f) {
+    const seen = new Set<string>();
+    for (const rows of Object.values(f.data)) {
+      for (const row of rows) {
+        const k = row.internalId || `${row.recipient}|${row.amount}|${row.actionDate}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        totalAmount += row.amount;
+        totalCount += 1;
+      }
+    }
+  }
+  const gr = totalCount > 0
+    ? { total: fmtMoney(totalAmount), count: totalCount, days: 90, rows: grantsRows }
     : null;
 
   const items: GovStripItem[] = [
@@ -456,11 +466,11 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
     },
     {
       key: 'grants',
-      label: 'Grants',
+      label: 'Funding',
       value: gr ? `${gr.total}` : '—',
       tooltip: gr
-        ? `Federal grants to Contra Costa Co. last ${gr.days}d (${gr.count} awards) — USAspending.gov`
-        : 'Federal grants to Contra Costa Co. (USAspending) — data unavailable',
+        ? `Federal funding to Martinez / Contra Costa Co. last ${gr.days}d — ${gr.count} unique awards across ${FUNDING_SOURCES.length} sources (USAspending.gov)`
+        : 'Federal funding to Martinez / Contra Costa Co. (USAspending) — data unavailable',
       color: 'green',
     },
     {
