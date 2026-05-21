@@ -163,14 +163,22 @@ function computeTotals(rows: CompRow[]): CompPayload['totals'] {
 const ENTITY = 'Contra Costa County';
 
 async function tryYear(year: number): Promise<{ csv: string; url: string } | null> {
-  // Try a couple of URL shapes — State Controller has moved the CSV
-  // export endpoint a few times.
+  // State Controller has migrated this endpoint a few times. Try each
+  // known URL shape in turn and accept whichever returns a populated
+  // CSV (≥ ~1KB plus the right column headers).
+  const enc = encodeURIComponent(ENTITY);
   const variants = [
-    `https://publicpay.ca.gov/Reports/RawExport.aspx?entityname=${encodeURIComponent(ENTITY)}&year=${year}`,
-    `https://publicpay.ca.gov/Reports/RawExportFile.aspx?entityname=${encodeURIComponent(ENTITY)}&year=${year}`,
+    // Legacy publicpay.ca.gov endpoint
+    `https://publicpay.ca.gov/Reports/RawExport.aspx?entityname=${enc}&year=${year}`,
+    `https://publicpay.ca.gov/Reports/RawExport.aspx?entityname=${enc}&entitytype=Counties&year=${year}`,
+    `https://publicpay.ca.gov/Reports/RawExportFile.aspx?entityname=${enc}&year=${year}`,
+    // Newer bythenumbers.sco.ca.gov mirror
+    `https://bythenumbers.sco.ca.gov/Reports/RawExport.aspx?entityname=${enc}&year=${year}`,
+    `https://bythenumbers.sco.ca.gov/Reports/RawExportFile.aspx?entityname=${enc}&year=${year}`,
+    `https://bythenumbers.sco.ca.gov/api/views/?entityname=${enc}&year=${year}`,
   ];
   for (const url of variants) {
-    const csv = await safeText(url, `publicpay-${year}`);
+    const csv = await safeText(url, `publicpay-${year}-${new URL(url).hostname}`);
     if (csv && csv.length > 1000 && /position/i.test(csv) && /total\s*wages/i.test(csv)) {
       return { csv, url };
     }

@@ -40,15 +40,22 @@ export default function CcrmcCompensation({ totalsHint }: { totalsHint?: { year?
 
   const [data, setData] = useState<CompPayload | null>(null);
   const [loading, setLoading] = useState(false);
+  const [empty, setEmpty] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Lazy-fetch on first open (works for shared URLs too).
   useEffect(() => {
     if (!open || data || loading) return;
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setEmpty(null);
     fetch('/api/ccc-comp', { cache: 'no-store' })
-      .then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then((j: CompPayload) => setData(j))
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((j: CompPayload & { empty?: boolean; reason?: string }) => {
+        if (j.empty) setEmpty(j.reason ?? 'No compensation data cached yet.');
+        else setData(j);
+      })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, [open, data, loading]);
@@ -108,6 +115,16 @@ export default function CcrmcCompensation({ totalsHint }: { totalsHint?: { year?
         size="xl"
       >
         {loading && <p className="muted">Loading {totalsHint?.employees ? `${totalsHint.employees.toLocaleString()} rows` : '~10k rows'}…</p>}
+        {empty && (
+          <div>
+            <p className="muted">{empty}</p>
+            <p className="muted" style={{ fontSize: '.82em', marginTop: 8 }}>
+              The cron pulls the full CSV from <a href="https://publicpay.ca.gov" target="_blank" rel="noopener">publicpay.ca.gov</a>{' '}
+              (or its mirror at <code>bythenumbers.sco.ca.gov</code>). First fetch typically takes 30–60s. If subsequent runs still
+              come up empty, the source URL pattern may have changed — open the Railway logs and look for <code>[comp] publicpay-YYYY</code> warnings.
+            </p>
+          </div>
+        )}
         {error && <p className="muted">Couldn’t load: {error}</p>}
 
         {data && (

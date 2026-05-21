@@ -12,9 +12,14 @@ export const revalidate = 0;
 export async function GET() {
   const payload = await getJson<CompPayload>('ccc_comp').catch(() => null);
   if (!payload) {
-    return NextResponse.json({ error: 'No compensation data cached yet. Run /admin → 12h.' }, { status: 404 });
+    // 200 with a sentinel `empty: true` so the client doesn't treat
+    // an un-populated cache as a hard error (which used to flash
+    // "HTTP 404" in the modal).
+    return NextResponse.json(
+      { empty: true, reason: 'Cache not populated yet. Run /admin → 12h after Railway redeploys.' },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   }
-  // gzip is automatic via Next/Node — we just need to return JSON.
   return NextResponse.json(payload, {
     headers: {
       // Cache hint for the client; the cron refreshes every 12h.
