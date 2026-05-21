@@ -1655,6 +1655,10 @@ main { padding-top: var(--top-stack-h); display: block; }
   padding: 14px 16px;
 }
 .ccrmc-section-card .head { font-weight: 600; font-size: 1.02em; margin-bottom: 8px; }
+/* News card spans the full grid width so it sits below the three
+   summary cards on its own row instead of leaving empty space to
+   the right. */
+.ccrmc-cards .ccrmc-news-card { grid-column: 1 / -1; }
 .page.ccrmc .ccrmc-cards {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-top: 16px;
 }

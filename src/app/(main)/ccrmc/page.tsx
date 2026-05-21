@@ -152,7 +152,7 @@ export default async function CcrmcPage() {
 
         <CcrmcCompensation totalsHint={compHint} />
 
-        <div className="ccrmc-section-card">
+        <div className="ccrmc-section-card ccrmc-news-card">
           <div className="head">Recent news (Google News)</div>
           {payload?.news.length ? (
             <ul className="ccrmc-news">
