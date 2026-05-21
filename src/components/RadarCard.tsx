@@ -13,7 +13,6 @@ export default function RadarCard({ imgs }: { imgs: RadarImg[] }) {
 
   return (
     <section className="card-section radar-card">
-      <h2>Radar &amp; imagery</h2>
       <div className="radar-grid">
         {imgs.map((img) => (
           <button

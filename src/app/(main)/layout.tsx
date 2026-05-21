@@ -2,13 +2,14 @@ import { getLocation } from '@/lib/location';
 import WeatherStrip from '@/components/WeatherStrip';
 import HourlyStrip from '@/components/HourlyStrip';
 import ForecastStrip from '@/components/ForecastStrip';
+import CivicStrip from '@/components/CivicStrip';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Main-site layout: the three fixed top strips, a padded <main>, and
-// the small footer. Used for every page except /gov (which lives at
-// the root and renders without this chrome).
+// Main-site layout: three fixed top strips (weather, hourly+forecast,
+// civic indicators), a padded <main>, and the small footer. Used for
+// every page except /gov (which renders bare without this chrome).
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const loc = getLocation();
   return (
@@ -19,6 +20,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <span className="wx-sep" aria-hidden />
         <ForecastStrip />
       </section>
+      <CivicStrip />
       <main>{children}</main>
       <footer className="site-ftr">
         {loc.siteName} · {loc.name}

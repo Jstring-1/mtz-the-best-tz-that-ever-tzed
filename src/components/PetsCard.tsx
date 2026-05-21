@@ -53,7 +53,6 @@ export default function PetsCard({ pets }: { pets: Pet[] }) {
   return (
     <section className="card-section pets-card">
       <h2>
-        Adoptable pets
         <span className="event-tabs" role="tablist">
           <button type="button" className={`event-tab ${tab === 'all' ? 'on' : ''}`} onClick={() => switchTab('all')}>
             All <span className="count">{pets.length}</span>

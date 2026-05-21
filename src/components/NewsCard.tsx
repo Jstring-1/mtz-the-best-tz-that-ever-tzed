@@ -10,7 +10,6 @@ export default function NewsCard({ items }: { items: FeedRow[] }) {
 
   return (
     <section className="card-section news-card">
-      <h2>News <span className="count">{items.length}</span></h2>
       {items.length === 0 ? (
         <p className="empty">No items cached yet.</p>
       ) : (

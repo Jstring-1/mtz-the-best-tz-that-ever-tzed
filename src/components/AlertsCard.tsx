@@ -33,7 +33,6 @@ export default function AlertsCard({
 
   return (
     <section className="card-section alerts-card">
-      <h2>Active alerts <span className="count">{total}</span></h2>
       {total === 0 ? (
         <p className="empty">No active local alerts.</p>
       ) : (

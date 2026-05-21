@@ -6,7 +6,6 @@ import {
 } from '@/lib/store';
 import type { NoaaAlert } from '@/lib/types';
 import AlertsCard, { type QuakeLite } from '@/components/AlertsCard';
-import LocalCivicCard from '@/components/LocalCivicCard';
 import NewsCard from '@/components/NewsCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
 import PetsCard from '@/components/PetsCard';
@@ -97,7 +96,6 @@ export default async function MainPage() {
       <NewsCard   items={feeds} />
       <PetsCard   pets={storedPets} />
       <div className="col-stack">
-        <LocalCivicCard />
         <AlertsCard alerts={localAlerts} quakes={quakeAlerts} tz={loc.timezone} />
         <RadarCard  imgs={radarImgs} />
       </div>

@@ -58,7 +58,6 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
   return (
     <section className="card-section events-card">
       <h2>
-        Events
         <span className="event-tabs" role="tablist" aria-label="Event scope">
           <button
             type="button"
