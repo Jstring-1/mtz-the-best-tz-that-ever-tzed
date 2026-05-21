@@ -14,6 +14,12 @@ export interface GrantRow {
   internalId?: string;
 }
 
+export interface FundingSourceMeta {
+  key: string;
+  label: string;
+  description: string;
+}
+
 type SortKey = 'action-desc' | 'action-asc' | 'amount-desc' | 'amount-asc' | 'period-desc' | 'period-asc';
 
 const SORTS: Array<{ key: SortKey; label: string }> = [
@@ -44,29 +50,56 @@ function sortRows(rows: GrantRow[], key: SortKey): GrantRow[] {
   }
 }
 
-export default function GrantsDetail({ label, tooltip, rows }: {
-  label: string; tooltip?: string; rows: GrantRow[];
+export default function GrantsDetail({
+  label, tooltip, rows, sources = [], data = {},
+}: {
+  label: string; tooltip?: string;
+  rows: GrantRow[];                                   // legacy default rows (kept as fallback)
+  sources?: FundingSourceMeta[];
+  data?: Record<string, GrantRow[]>;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<GrantRow | null>(null);
   const [sort, setSort] = useState<SortKey>('action-desc');
+  const [sourceKey, setSourceKey] = useState<string>(sources[0]?.key ?? 'grants');
 
-  const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
+  // If the multi-source registry is present, use it; otherwise fall back
+  // to the legacy single-list rows prop.
+  const hasRegistry = sources.length > 0;
+  const activeRows = hasRegistry ? (data[sourceKey] ?? []) : rows;
+  const activeMeta = hasRegistry ? sources.find((s) => s.key === sourceKey) : null;
+
+  const sorted = useMemo(() => sortRows(activeRows, sort), [activeRows, sort]);
+
+  // Show empty-cache message only when nothing at all is available
+  // anywhere — otherwise the user can pick a different source.
+  const haveAnything = hasRegistry
+    ? Object.values(data).some((r) => r.length > 0)
+    : rows.length > 0;
 
   return (
     <>
       <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Federal grants — Contra Costa County" size="lg">
-        {rows.length === 0 ? (
-          <p className="muted">No recent grants in cache. Re-run /admin → 12h.</p>
+      <Modal open={open} onClose={() => setOpen(false)} title="Federal funding — Contra Costa / Martinez" size="lg">
+        {!haveAnything ? (
+          <p className="muted">No funding rows in cache. Re-run /admin → 12h.</p>
         ) : (
           <>
             <div className="grants-toolbar">
-              <span className="muted">
-                Top {rows.length} awards · USAspending.gov · action date in the last 90 days
-              </span>
+              {hasRegistry && (
+                <label className="grants-source">
+                  Source:{' '}
+                  <select value={sourceKey} onChange={(e) => setSourceKey(e.target.value)}>
+                    {sources.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label}{(data[s.key]?.length ?? 0) > 0 ? ` (${data[s.key]?.length})` : ' (0)'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="grants-sort">
                 Sort:{' '}
                 <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
@@ -74,6 +107,16 @@ export default function GrantsDetail({ label, tooltip, rows }: {
                 </select>
               </label>
             </div>
+            <div className="grants-meta muted">
+              {activeMeta
+                ? `${activeMeta.description} · ${activeRows.length} award${activeRows.length === 1 ? '' : 's'}`
+                : `Top ${activeRows.length} awards · last 90 days`}
+            </div>
+            {activeRows.length === 0 && (
+              <p className="muted" style={{ marginTop: 10 }}>
+                No awards for this source in the last 90 days. Try another source above.
+              </p>
+            )}
             <ul className="grants-list">
               {sorted.map((r, i) => {
                 const samePeriod = r.periodStart && r.periodStart === r.actionDate;

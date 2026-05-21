@@ -131,7 +131,7 @@ async function eiaCaliforniaGas(): Promise<{ value: string; period: string } | n
   return { value: `$${row.value.toFixed(2)}`, period: row.period ?? '' };
 }
 
-// ---- 3. USAspending — federal grants to Contra Costa County ---------
+// ---- 3. USAspending — federal funding to Contra Costa County / Martinez
 
 export interface GrantRow {
   amount: number;
@@ -146,6 +146,7 @@ interface SpendingResp { results?: Array<{
   'Award Amount'?: number;
   'Recipient Name'?: string;
   'Award Description'?: string;
+  'Description'?: string;
   'Awarding Agency'?: string;
   'Awarding Sub Agency'?: string;
   'Start Date'?: string;
@@ -154,40 +155,187 @@ interface SpendingResp { results?: Array<{
   generated_internal_id?: string;
 }> }
 
-async function ccGrants(days = 90): Promise<{ total: string; count: number; days: number; rows: GrantRow[] } | null> {
+// USAspending's spending_by_award endpoint validates that award_type_codes
+// stay within ONE award category per call (grants vs contracts vs loans
+// vs direct). So we split a source's "grants + contracts" filter into
+// two API calls and merge the results.
+type AwardCategory = 'grants' | 'contracts' | 'loans' | 'direct';
+const CATEGORY_TYPES: Record<AwardCategory, string[]> = {
+  grants:    ['02', '03', '04', '05'],
+  contracts: ['A', 'B', 'C', 'D'],
+  loans:     ['07', '08'],
+  direct:    ['06', '10'],
+};
+const ASSIST_FIELDS = [
+  'Award Amount', 'Recipient Name', 'Award Description',
+  'Awarding Agency', 'Awarding Sub Agency',
+  'Start Date', 'Action Date',
+];
+const CONTRACT_FIELDS = [
+  'Award Amount', 'Recipient Name', 'Description',
+  'Awarding Agency', 'Awarding Sub Agency',
+  'Period of Performance Start Date', 'Action Date',
+];
+
+const CCC_LOC      = [{ country: 'USA', state: 'CA', county: '013' }];
+const MARTINEZ_LOC = [{ country: 'USA', state: 'CA', city: 'MARTINEZ' }];
+
+export interface FundingSourceMeta {
+  key: string;
+  label: string;
+  description: string;
+}
+interface SourceFilter {
+  categories: AwardCategory[];          // one API call per category, merged
+  place?: 'ccc-county' | 'martinez-city';
+  recipientPlace?: 'ccc-county';
+  programNumbers?: string[];            // CFDA program numbers
+  agency?: string;                      // toptier agency name
+}
+interface SourceConfig extends FundingSourceMeta { filter: SourceFilter; }
+
+// 20 sources — all scoped to Martinez or Contra Costa County in some
+// way. Order matters: the first one (`grants`) is the default shown and
+// also feeds the civic-strip Grants summary.
+const FUNDING_SOURCES: SourceConfig[] = [
+  { key: 'grants',         label: 'All grants — Contra Costa Co.',
+    description: 'All federal grants in CCC, last 90 days',
+    filter: { categories: ['grants'], place: 'ccc-county' } },
+  { key: 'contracts',      label: 'Contracts — Contra Costa Co.',
+    description: 'Federal contracts in CCC, last 90 days',
+    filter: { categories: ['contracts'], place: 'ccc-county' } },
+  { key: 'loans',          label: 'Loans — Contra Costa Co.',
+    description: 'Federal loans in CCC, last 90 days',
+    filter: { categories: ['loans'], place: 'ccc-county' } },
+  { key: 'direct',         label: 'Direct payments — Contra Costa Co.',
+    description: 'Federal direct payments in CCC, last 90 days',
+    filter: { categories: ['direct'], place: 'ccc-county' } },
+  { key: 'grants-recip',   label: 'Grants — recipients in CCC',
+    description: 'Grants to organizations headquartered in CCC',
+    filter: { categories: ['grants'], recipientPlace: 'ccc-county' } },
+  { key: 'contracts-recip',label: 'Contracts — recipients in CCC',
+    description: 'Contracts to organizations headquartered in CCC',
+    filter: { categories: ['contracts'], recipientPlace: 'ccc-county' } },
+  { key: 'martinez-all',   label: 'All federal $ — City of Martinez',
+    description: 'All award types, place-of-performance = Martinez',
+    filter: { categories: ['grants', 'contracts', 'loans', 'direct'], place: 'martinez-city' } },
+  // Agency-scoped, in CCC.
+  { key: 'agency-va',      label: 'Veterans Affairs — CCC',
+    description: 'VA awards (grants + contracts) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Veterans Affairs' } },
+  { key: 'agency-dod',     label: 'Defense (DoD) — CCC',
+    description: 'DoD awards (grants + contracts) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Defense' } },
+  { key: 'agency-doe',     label: 'Energy (DOE) — CCC',
+    description: 'DOE awards (grants + contracts) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Energy' } },
+  { key: 'agency-epa',     label: 'EPA — CCC',
+    description: 'EPA awards (grants + contracts) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Environmental Protection Agency' } },
+  { key: 'agency-dot',     label: 'Transportation (DOT) — CCC',
+    description: 'DOT awards (highway/transit) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Transportation' } },
+  { key: 'agency-usda',    label: 'Agriculture (USDA) — CCC',
+    description: 'USDA awards (grants + contracts + direct) in CCC',
+    filter: { categories: ['grants', 'contracts', 'direct'], place: 'ccc-county', agency: 'Department of Agriculture' } },
+  { key: 'agency-hhs',     label: 'Health & Human Services — CCC',
+    description: 'HHS awards (Medicare/Medicaid/CDC/etc.) in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Health and Human Services' } },
+  { key: 'agency-sba',     label: 'Small Business (SBA) — CCC',
+    description: 'SBA awards + loans in CCC',
+    filter: { categories: ['grants', 'loans'], place: 'ccc-county', agency: 'Small Business Administration' } },
+  { key: 'agency-ed',      label: 'Education — CCC',
+    description: 'Dept of Education awards in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Education' } },
+  { key: 'agency-hud',     label: 'Housing (HUD) — CCC',
+    description: 'HUD awards in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Housing and Urban Development' } },
+  { key: 'agency-dhs',     label: 'Homeland Security — CCC',
+    description: 'DHS awards in CCC',
+    filter: { categories: ['grants', 'contracts'], place: 'ccc-county', agency: 'Department of Homeland Security' } },
+  { key: 'cfda-head-start', label: 'Head Start (CFDA 93.600) — CCC',
+    description: 'Head Start/Early Head Start grants, place-of-performance CCC',
+    filter: { categories: ['grants'], place: 'ccc-county', programNumbers: ['93.600'] } },
+  { key: 'cfda-childcare', label: 'Childcare CCDF — CCC',
+    description: 'CCDF block grants (CFDA 93.575 / 93.596) in CCC',
+    filter: { categories: ['grants'], place: 'ccc-county', programNumbers: ['93.575', '93.596'] } },
+];
+
+function buildFilters(cfg: SourceConfig, types: string[], iso: { start: string; end: string }): Record<string, unknown> {
+  const f: Record<string, unknown> = {
+    time_period: [{ start_date: iso.start, end_date: iso.end }],
+    award_type_codes: types,
+  };
+  if (cfg.filter.place === 'ccc-county') f.place_of_performance_locations = CCC_LOC;
+  if (cfg.filter.place === 'martinez-city') f.place_of_performance_locations = MARTINEZ_LOC;
+  if (cfg.filter.recipientPlace === 'ccc-county') f.recipient_locations = CCC_LOC;
+  if (cfg.filter.programNumbers) f.program_numbers = cfg.filter.programNumbers;
+  if (cfg.filter.agency) f.agencies = [{ type: 'awarding', tier: 'toptier', name: cfg.filter.agency }];
+  return f;
+}
+
+async function fetchSourceCategory(
+  cfg: SourceConfig, category: AwardCategory, iso: { start: string; end: string },
+): Promise<GrantRow[]> {
+  const fields = category === 'contracts' ? CONTRACT_FIELDS : ASSIST_FIELDS;
+  const body = {
+    filters: buildFilters(cfg, CATEGORY_TYPES[category], iso),
+    fields,
+    page: 1, limit: 25, sort: 'Award Amount', order: 'desc',
+  };
+  const j = await safeJson<SpendingResp>(
+    'https://api.usaspending.gov/api/v2/search/spending_by_award/',
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    `usa:${cfg.key}:${category}`,
+  );
+  if (!j?.results) return [];
+  return j.results.map((r) => ({
+    amount:      r['Award Amount'] ?? 0,
+    recipient:   r['Recipient Name'] ?? '',
+    description: (r['Award Description'] ?? r['Description'] ?? ''),
+    agency:      r['Awarding Sub Agency'] || r['Awarding Agency'] || '',
+    actionDate:  (r['Action Date'] ?? '').slice(0, 10),
+    periodStart: (r['Start Date'] ?? r['Period of Performance Start Date'] ?? '').slice(0, 10),
+    internalId:  r.generated_internal_id,
+  }));
+}
+
+async function fetchOneSource(cfg: SourceConfig, days: number): Promise<GrantRow[]> {
   const end = new Date();
   const start = new Date(end.getTime() - days * 24 * 3600 * 1000);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const body = {
-    filters: {
-      time_period: [{ start_date: iso(start), end_date: iso(end) }],
-      award_type_codes: ['02', '03', '04', '05'], // grants
-      place_of_performance_locations: [{ country: 'USA', state: 'CA', county: '013' }],
-    },
-    fields: [
-      'Award Amount', 'Recipient Name', 'Award Description',
-      'Awarding Agency', 'Awarding Sub Agency',
-      'Start Date', 'Action Date',
-    ],
-    page: 1, limit: 100, sort: 'Award Amount', order: 'desc',
-  };
-  const j = await safeJson<SpendingResp>('https://api.usaspending.gov/api/v2/search/spending_by_award/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+  const iso = { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  const results = await Promise.allSettled(
+    cfg.filter.categories.map((cat) => fetchSourceCategory(cfg, cat, iso)),
+  );
+  const merged: GrantRow[] = [];
+  for (const r of results) if (r.status === 'fulfilled') merged.push(...r.value);
+  merged.sort((a, b) => b.amount - a.amount);
+  // De-dupe by internalId (or by recipient+amount+date when missing).
+  const seen = new Set<string>();
+  const out: GrantRow[] = [];
+  for (const row of merged) {
+    const k = row.internalId || `${row.recipient}|${row.amount}|${row.actionDate}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(row);
+  }
+  return out.slice(0, 30);
+}
+
+async function fetchFundingAll(days = 90): Promise<{
+  sources: FundingSourceMeta[];
+  data: Record<string, GrantRow[]>;
+}> {
+  const results = await Promise.allSettled(
+    FUNDING_SOURCES.map((cfg) => fetchOneSource(cfg, days)),
+  );
+  const data: Record<string, GrantRow[]> = {};
+  FUNDING_SOURCES.forEach((cfg, i) => {
+    const r = results[i];
+    data[cfg.key] = r.status === 'fulfilled' ? r.value : [];
   });
-  if (!j?.results) return null;
-  const sum = j.results.reduce((acc, r) => acc + (r['Award Amount'] ?? 0), 0);
-  const rows: GrantRow[] = j.results.slice(0, 30).map((r) => ({
-    amount: r['Award Amount'] ?? 0,
-    recipient: r['Recipient Name'] ?? '',
-    description: r['Award Description'] ?? '',
-    agency: r['Awarding Sub Agency'] || r['Awarding Agency'] || '',
-    actionDate: (r['Action Date'] ?? '').slice(0, 10),
-    periodStart: (r['Start Date'] ?? r['Period of Performance Start Date'] ?? '').slice(0, 10),
-    internalId: r.generated_internal_id,
-  }));
-  return { total: fmtMoney(sum), count: j.results.length, days, rows };
+  const sources: FundingSourceMeta[] = FUNDING_SOURCES.map(({ key, label, description }) => ({ key, label, description }));
+  return { sources, data };
 }
 
 function fmtMoney(n: number): string {
@@ -257,23 +405,33 @@ export interface GovStripItem {
 export interface GovLocalPayload {
   scrapedAt: string;
   items: GovStripItem[];
-  extras?: { grants?: GrantRow[] };
+  extras?: {
+    grants?: GrantRow[];                          // legacy: alias for funding['grants']
+    funding?: Record<string, GrantRow[]>;         // 20-source funding registry
+    fundingSources?: FundingSourceMeta[];         // dropdown metadata
+  };
   debug?: Record<string, string>;   // per-source success/failure for /admin troubleshooting
 }
 
 export async function fetchGovLocal(): Promise<GovLocalPayload> {
   // Reset per-run debug tracker so old failures don't linger.
   for (const k of Object.keys(lastFail)) delete lastFail[k];
-  const [unemp, gas, grants, rep, crime] = await Promise.allSettled([
+  const [unemp, gas, funding, rep, crime] = await Promise.allSettled([
     blsUnemployment(),
     eiaCaliforniaGas(),
-    ccGrants(90),
+    fetchFundingAll(90),
     repSponsored(),
     martinezCrime(),
   ]);
   const v = <T>(p: PromiseSettledResult<T>): T | null =>
     p.status === 'fulfilled' ? (p.value as T) : null;
-  const u = v(unemp), g = v(gas), gr = v(grants), r = v(rep), cr = v(crime);
+  const u = v(unemp), g = v(gas), f = v(funding), r = v(rep), cr = v(crime);
+  // Default-source figures for the civic strip row.
+  const grantsRows = f?.data?.['grants'] ?? [];
+  const grantsTotal = grantsRows.reduce((acc, row) => acc + row.amount, 0);
+  const gr = grantsRows.length > 0
+    ? { total: fmtMoney(grantsTotal), count: grantsRows.length, days: 90, rows: grantsRows }
+    : null;
 
   const items: GovStripItem[] = [
     {
@@ -333,15 +491,28 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
       ? `ok (cc=${u.county ?? '?'} ca=${u.state ?? '?'} us=${u.nation ?? '?'})`
       : (lastFail['bls'] ?? 'no data'),
     eia: g ? 'ok' : (lastFail['eia'] ?? 'no data'),
-    usaspending: gr ? `ok (${gr.rows.length})` : (lastFail['api.usaspending.gov'] ?? 'no data'),
+    usaspending: f
+      ? `ok (${Object.values(f.data).reduce((a, rows) => a + rows.length, 0)} rows across ${f.sources.length} sources)`
+      : (lastFail['api.usaspending.gov'] ?? 'no data'),
     congress: r ? `ok (${r.count} bills)` : (lastFail['api.congress.gov'] ?? 'no data'),
     fbi: cr ? `ok (${cr.year})` : (lastFail['api.usa.gov'] ?? 'no data'),
   };
+  // Per-source row counts for the debug payload — easy way to see which
+  // funding feeds returned nothing.
+  if (f) {
+    for (const src of f.sources) {
+      debug[`usa:${src.key}`] = `${f.data[src.key]?.length ?? 0} rows`;
+    }
+  }
 
   return {
     scrapedAt: new Date().toISOString(),
     items,
-    extras: { grants: gr?.rows ?? [] },
+    extras: {
+      grants: gr?.rows ?? [],
+      funding: f?.data ?? {},
+      fundingSources: f?.sources ?? [],
+    },
     debug,
   };
 }

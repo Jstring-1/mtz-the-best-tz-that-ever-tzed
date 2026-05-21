@@ -44,18 +44,22 @@ function BillButton({ b, onOpen, kind }: {
   kind?: 'Sp' | 'Co';
 }) {
   const ref = parseBillRef(b, b.url);
-  const head = (
-    <>
+  const trigger = !ref ? (
+    <a className="bill-trigger" href={b.url} target="_blank" rel="noopener">
       {kind && <span className={`kind kind-${kind.toLowerCase()}`}>{kind}</span>}
       <span className="num">{b.number}</span>
-      <span className="title">{b.title}</span>
-    </>
+    </a>
+  ) : (
+    <button type="button" className="bill-trigger" onClick={() => onOpen(ref)}>
+      {kind && <span className={`kind kind-${kind.toLowerCase()}`}>{kind}</span>}
+      <span className="num">{b.number}</span>
+    </button>
   );
-  if (!ref) {
-    return <a href={b.url} target="_blank" rel="noopener">{head}</a>;
-  }
   return (
-    <button type="button" className="bill-trigger" onClick={() => onOpen(ref)}>{head}</button>
+    <div className="bill-row">
+      {trigger}
+      <span className="bill-title-text">{b.title}</span>
+    </div>
   );
 }
 
@@ -135,10 +139,12 @@ export default function RepDetail({ label, tooltip }: { label: string; tooltip?:
                       </div>
                       <div className="question">{v.question}</div>
                       {billRefV && (
-                        <button type="button" className="bill-trigger small" onClick={() => setBillRef(billRefV)}>
-                          <span className="num">{v.billType?.toUpperCase()} {v.billNumber}</span>
-                          {v.billTitle && <span className="title"> — {v.billTitle}</span>}
-                        </button>
+                        <div className="bill-row">
+                          <button type="button" className="bill-trigger small" onClick={() => setBillRef(billRefV)}>
+                            <span className="num">{v.billType?.toUpperCase()} {v.billNumber}</span>
+                          </button>
+                          {v.billTitle && <span className="bill-title-text">{v.billTitle}</span>}
+                        </div>
                       )}
                     </li>
                   );

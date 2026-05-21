@@ -23,6 +23,8 @@ export default async function LocalCivicCard() {
   const items: GovStripItem[] = payload?.items ?? [];
   if (!items.length && !council) return null;
   const grants = payload?.extras?.grants ?? [];
+  const funding = payload?.extras?.funding ?? {};
+  const fundingSources = payload?.extras?.fundingSources ?? [];
 
   // Council row summary (always shown when we have any cache).
   const councilCount = council?.meetings?.length ?? 0;
@@ -50,7 +52,17 @@ export default async function LocalCivicCard() {
             return <li key={it.key}><RepDetail tooltip={it.tooltip} label={labelHtml} /></li>;
           }
           if (it.key === 'grants') {
-            return <li key={it.key}><GrantsDetail tooltip={it.tooltip} label={labelHtml} rows={grants} /></li>;
+            return (
+              <li key={it.key}>
+                <GrantsDetail
+                  tooltip={it.tooltip}
+                  label={labelHtml}
+                  rows={grants}
+                  sources={fundingSources}
+                  data={funding}
+                />
+              </li>
+            );
           }
           if (it.key === 'crime') {
             return <li key={it.key}><CrimeDetail tooltip={it.tooltip} label={labelHtml} /></li>;
