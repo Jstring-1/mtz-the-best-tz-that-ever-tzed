@@ -140,12 +140,19 @@ interface CongressMemberDetailResp {
 
 async function federalReps(diag: Record<string, string>): Promise<Rep[]> {
   if (!CONGRESS_KEY) { diag.federal = 'GOV_API_TOKEN missing'; return []; }
+  // /v3/member?stateCode=CA was IGNORED upstream (returned ~100 senators
+  // from every state). The correct endpoint shape uses the state code
+  // as a PATH segment: /v3/member/CA. As an extra belt-and-suspenders
+  // we also filter in code to m.state === 'California'.
   const listUrl =
-    `https://api.congress.gov/v3/member?api_key=${CONGRESS_KEY}&format=json&currentMember=True&stateCode=CA&limit=100`;
+    `https://api.congress.gov/v3/member/CA?api_key=${CONGRESS_KEY}&format=json&currentMember=True&limit=100`;
   const list = await safeJson<CongressMembersResp>(listUrl);
-  const members = list?.members ?? [];
-  diag.federalRaw = `${members.length} CA members returned`;
-  if (members.length === 0) { diag.federal = 'empty member list'; return []; }
+  const allMembers = list?.members ?? [];
+  diag.federalRaw = `${allMembers.length} returned from /v3/member/CA`;
+  // Defensive state filter: drop anything that isn't actually California.
+  const members = allMembers.filter((m) => /^california$/i.test(m.state ?? ''));
+  diag.federalCa = `${members.length} after California-state filter`;
+  if (members.length === 0) { diag.federal = 'no CA members after filter'; return []; }
 
   // Identify each member's CURRENT chamber (last term in the list).
   // This correctly handles senators who previously served in the House
@@ -161,7 +168,7 @@ async function federalReps(diag: Record<string, string>): Promise<Rep[]> {
     if (isHouseNow && district === US_HOUSE_DISTRICT) return true;
     return false;
   });
-  diag.federalFiltered = `${targets.length} after district filter (want CA-${US_HOUSE_DISTRICT} + 2 sens)`;
+  diag.federalFiltered = `${targets.length} after chamber+district filter (want CA-${US_HOUSE_DISTRICT} + 2 sens)`;
 
   const enriched = await Promise.all(targets.map(async (m): Promise<Rep | null> => {
     if (!m.bioguideId) return null;
@@ -172,9 +179,15 @@ async function federalReps(diag: Record<string, string>): Promise<Rep[]> {
     const party = mem?.partyHistory?.[mem.partyHistory.length - 1]?.partyAbbreviation
               ?? mem?.partyHistory?.[0]?.partyAbbreviation
               ?? (m.partyName?.[0] ?? '');
-    const isSenate = m.terms?.item?.some((t) => /senate/i.test(t.chamber ?? ''));
-    const office = isSenate ? 'U.S. Senator' : 'U.S. Representative';
-    const district = isSenate ? 'CA' : `CA-${m.district ?? '?'}`;
+    // Use the CURRENT chamber (last term), not "any historical term".
+    const terms = m.terms?.item ?? [];
+    const lastChamber = (terms[terms.length - 1]?.chamber ?? '').toLowerCase();
+    const isSenateNow = lastChamber.includes('senate');
+    const office = isSenateNow ? 'U.S. Senator' : 'U.S. Representative';
+    // Display the actual state — every senator was showing as 'CA'
+    // because this was hardcoded. Now reads m.state from the API.
+    const stateAbbr = (mem?.state ?? m.state ?? 'CA').slice(0, 2).toUpperCase();
+    const district = isSenateNow ? stateAbbr : `${stateAbbr}-${String(m.district ?? '?').padStart(2, '0')}`;
     return {
       level: 'federal',
       office,
@@ -273,7 +286,11 @@ interface StateOfficeCfg {
 const STATE_OFFICES: StateOfficeCfg[] = [
   { office: 'Governor',
     url: 'https://www.gov.ca.gov/',
-    nameRe: /Governor\s+([A-Z][\w.'\- ]{2,40})(?:\b|<|,|\.)/ },
+    // Capture only Title Case word tokens. Stops at any non-name char
+    // (was previously including `.` in the class, which let captures
+    // run past a period into the next sentence — e.g. "Gavin Newsom.
+    // Read how the Governor").
+    nameRe: /Governor\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/ },
 ];
 
 function decodeEntities(s: string): string {
@@ -307,10 +324,37 @@ async function statewideOfficers(diag: Record<string, string>): Promise<Rep[]> {
 // supervisors with name + district. The site uses the CivicPlus CMS;
 // the index page is at /Board-of-Supervisors (path slug may vary).
 
+// Pull a Title-Case person name from the FIRST internal-wiki anchor
+// `<a href="/Page_Name" ...>Anchor Text</a>` that appears within a
+// window of HTML after a label match. Ballotpedia (and Wikipedia)
+// link every officeholder to their own page, so anchor text is a
+// reliable name source. Skips obvious non-name pages.
+function extractPersonAfterLabel(html: string, labelRe: RegExp, windowSize = 2000): string {
+  const m = labelRe.exec(html);
+  if (!m) return '';
+  const start = m.index;
+  const slice = html.slice(start, start + windowSize);
+  // Internal-wiki anchors: href="/Some_Name" (not absolute, no colon
+  // for namespaces like Category: / File:).
+  const anchorRe = /<a\s[^>]*href=["']\/([A-Z][A-Za-z0-9._-]*(?:_[A-Z][A-Za-z0-9._-]*){1,4})["'][^>]*>([^<]+)<\/a>/g;
+  let aMatch: RegExpExecArray | null;
+  while ((aMatch = anchorRe.exec(slice)) !== null) {
+    const slug = aMatch[1];
+    const txt = decodeEntities(aMatch[2]).trim();
+    // Reject obvious non-names: places, parties, generic pages.
+    if (/^(California|United_States|Republican|Democratic|City_Council|Mayor|Board_of_Supervisors|Contra_Costa|District_\d|Council|Government|Elected|Ballotpedia)/i.test(slug)) continue;
+    if (/^(Click here|See also|Read more|External links?|Elections?|November|January)/i.test(txt)) continue;
+    // Must look like a person name: 2-4 capitalized words.
+    if (!/^[A-Z][a-z]+(?:\s+[A-Z][A-Za-z'\-.]+){1,3}$/.test(txt)) continue;
+    return txt;
+  }
+  return '';
+}
+
 async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
-  // Race the official CCC pages + Ballotpedia in parallel. Whichever
-  // returns first with a parseable name wins. Ballotpedia is the most
-  // reliable since CivicPlus .gov sites often 403 cloud egress.
+  // Try official CCC pages + Ballotpedia in parallel — whichever returns
+  // a parseable name wins. Ballotpedia is the reliable fallback because
+  // CivicPlus .gov sites often 403 cloud-egress IPs.
   const ccPages = [
     'https://www.contracosta.ca.gov/Board-of-Supervisors',
     'https://www.contracosta.ca.gov/4818/Board-of-Supervisors',
@@ -323,37 +367,33 @@ async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
     safeText(ballotpediaUrl),
   ]);
   const ballotHtml = fetches[fetches.length - 1];
-  // Try official county pages first (district 1-5 mention is a sanity tag).
-  let html: string | null = null;
-  let usedUrl = ccPages[0];
-  for (let i = 0; i < ccPages.length; i++) {
-    const h = fetches[i];
-    if (h && /district\s*[1-5]/i.test(h)) { html = h; usedUrl = ccPages[i]; break; }
-  }
-  // Pull a name from the official page.
+
   let name = '';
-  if (html) {
-    const text = decodeEntities(stripTags(html));
-    const start = text.search(new RegExp(`District\\s+${COUNTY_BOS_DISTRICT}\\b`, 'i'));
-    if (start >= 0) {
-      const after = text.slice(start, start + 400);
-      const m = after.match(/District\s+\d\s+(Supervisor\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/);
-      if (m) name = m[2].trim();
+  let usedUrl = ballotpediaUrl;
+
+  // Ballotpedia anchor-based extraction is our most reliable source.
+  if (ballotHtml) {
+    name = extractPersonAfterLabel(
+      ballotHtml,
+      new RegExp(`District\\s+${COUNTY_BOS_DISTRICT}\\b`, 'i'),
+    );
+    if (name) diag.countySource = 'ballotpedia';
+  }
+
+  // Fall back to the official CCC site if Ballotpedia didn't work.
+  if (!name) {
+    for (let i = 0; i < ccPages.length; i++) {
+      const h = fetches[i];
+      if (!h) continue;
+      const found = extractPersonAfterLabel(
+        h,
+        new RegExp(`District\\s+${COUNTY_BOS_DISTRICT}\\b`, 'i'),
+      );
+      if (found) { name = found; usedUrl = ccPages[i]; diag.countySource = 'official'; break; }
     }
   }
-  // Fallback to Ballotpedia — they list supervisors in a standard format:
-  //   "District 5: <a href="/Federal_Glover">Federal Glover</a>"
-  // or a table row with the district number followed by the name.
-  if (!name && ballotHtml) {
-    const text = decodeEntities(stripTags(ballotHtml));
-    const m = text.match(new RegExp(`District\\s+${COUNTY_BOS_DISTRICT}\\b[^A-Za-z]{0,40}([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){1,3})`));
-    if (m) {
-      name = m[1].trim();
-      usedUrl = ballotpediaUrl;
-      diag.countySource = 'ballotpedia';
-    }
-  }
-  if (!name) diag.county = 'no source resolved District 5 name';
+
+  if (!name) diag.county = 'Ballotpedia + official both failed for D5';
   return [{
     level: 'county',
     office: `Supervisor, District ${COUNTY_BOS_DISTRICT} (Martinez)`,
@@ -368,7 +408,7 @@ async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
 // =====================================================================
 
 async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
-  // Same fallback strategy as countyReps: race official + Ballotpedia.
+  // Anchor-based extraction from Ballotpedia (preferred) + official site.
   const ofMartinez = [
     'https://www.cityofmartinez.org/government/mayor-city-council',
     'https://www.cityofmartinez.org/government/mayor-and-city-council',
@@ -380,49 +420,51 @@ async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
     safeText(ballotpediaUrl),
   ]);
   const ballotHtml = fetches[fetches.length - 1];
-  let html: string | null = null;
-  let usedUrl = ofMartinez[0];
-  for (let i = 0; i < ofMartinez.length; i++) {
-    const h = fetches[i];
-    if (h && /city\s*council/i.test(h)) { html = h; usedUrl = ofMartinez[i]; break; }
-  }
-  // If official site failed, prefer Ballotpedia as the primary text source.
-  if (!html && ballotHtml) {
-    html = ballotHtml;
-    usedUrl = ballotpediaUrl;
-    diag.citySource = 'ballotpedia';
-  }
-  if (!html) {
-    diag.city = 'no council page resolved';
-    return [{ level: 'city', office: 'Mayor + Council', name: '',
-      url: 'https://www.cityofmartinez.org/government' }];
-  }
-  const text = decodeEntities(stripTags(html));
-  // Mayor: "Mayor <First Last>". Council members: "Council Member ... <Name>"
-  // or "District N <Name>" or "<Name>, Vice Mayor".
+
   const reps: Rep[] = [];
-  const mayorM = text.match(/Mayor\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/);
-  if (mayorM) {
-    reps.push({ level: 'city', office: 'Mayor', name: mayorM[1].trim(), url: usedUrl });
-  }
-  // Council districts 1..4. Some seats may be at-large; we just look for
-  // each district label.
-  for (let d = 1; d <= 4; d++) {
-    const m = text.match(new RegExp(`District\\s+${d}\\b[^A-Z]{0,40}([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){1,3})`));
-    if (m) {
+  const sources: string[] = [];
+
+  // Build a list of (label, office) anchors to extract from Ballotpedia.
+  // The page typically has a "Government" or "Elected officials" table
+  // that mentions each seat in order.
+  const seats: Array<{ labelRe: RegExp; office: string; district?: string }> = [
+    { labelRe: /\bMayor\b/i,        office: 'Mayor' },
+    { labelRe: /District\s+1\b/i,   office: 'Council Member, District 1', district: 'District 1' },
+    { labelRe: /District\s+2\b/i,   office: 'Council Member, District 2', district: 'District 2' },
+    { labelRe: /District\s+3\b/i,   office: 'Council Member, District 3', district: 'District 3' },
+    { labelRe: /District\s+4\b/i,   office: 'Council Member, District 4', district: 'District 4' },
+  ];
+
+  const useBallot = ballotHtml ?? '';
+  const useOfficial = fetches.slice(0, ofMartinez.length).find((h) => !!h) ?? '';
+
+  for (const seat of seats) {
+    let name = '';
+    // Try Ballotpedia first.
+    if (useBallot) {
+      name = extractPersonAfterLabel(useBallot, seat.labelRe);
+    }
+    // Then official site as a fallback.
+    if (!name && useOfficial) {
+      name = extractPersonAfterLabel(useOfficial, seat.labelRe);
+    }
+    if (name) {
       reps.push({
         level: 'city',
-        office: `Council Member, District ${d}`,
-        name: m[1].trim(),
-        district: `District ${d}`,
-        url: usedUrl,
+        office: seat.office,
+        name,
+        district: seat.district,
+        url: useBallot ? ballotpediaUrl : ofMartinez[0],
       });
+      sources.push(seat.office);
     }
   }
+
   if (reps.length === 0) {
-    diag.city = 'page fetched but no roster parsed';
-    return [{ level: 'city', office: 'Mayor + Council', name: '', url: usedUrl }];
+    diag.city = 'no anchor-linked names found on Ballotpedia or official site';
+    return [{ level: 'city', office: 'Mayor + Council', name: '', url: 'https://www.cityofmartinez.org/government' }];
   }
+  diag.citySource = `extracted ${sources.length} from ${useBallot ? 'ballotpedia' : 'official'}`;
   return reps;
 }
 
