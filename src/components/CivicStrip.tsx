@@ -5,6 +5,7 @@ import BillsDetail from './BillsDetail';
 import GrantsDetail from './GrantsDetail';
 import CrimeDetail from './CrimeDetail';
 import CouncilDetail from './CouncilDetail';
+import RepsDetail from './RepsDetail';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -33,6 +34,8 @@ export default async function CivicStrip() {
   const councilCount = council?.meetings?.length ?? 0;
   const councilDate = council?.meetings?.[0]?.date ?? '';
   const councilLabelHtml = `<span class="civic-strip-val gold">City Council</span>`;
+  const repsLabelHtml = `<span class="civic-strip-val dodger">Reps</span>`;
+  const repsTooltip = 'Your elected representatives — Martinez Council & Mayor → CCC Board of Supervisors → CA Assembly/Senate → Statewide officers → U.S. Congress → White House.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -63,6 +66,7 @@ export default async function CivicStrip() {
         );
       })}
       <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
+      <RepsDetail tooltip={repsTooltip} label={repsLabelHtml} />
     </section>
   );
 }

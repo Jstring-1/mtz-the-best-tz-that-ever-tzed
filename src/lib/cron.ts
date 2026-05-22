@@ -516,6 +516,17 @@ async function newsFeeds() {
 // Legislation affecting Martinez / Contra Costa / California — pulls
 // from Congress.gov (4 CA federal reps) + OpenStates (CA-state bills
 // mentioning "Contra Costa"). Stored as a single `affecting_bills` blob.
+// Elected reps roster for Martinez (all levels). Refreshed in the 12h
+// bucket since rosters don't change daily. The fetcher is resilient —
+// every section returns at least a link-only row, never empties.
+async function repsData(json: Record<string, unknown>) {
+  const { fetchReps } = await import('./reps');
+  const payload = await fetchReps();
+  // Always persist — even partial data is useful, and the fetcher
+  // always returns at least canonical-link fallback rows.
+  json['reps_data'] = payload;
+}
+
 async function affectingBills(json: Record<string, unknown>) {
   const { fetchAffectingBills } = await import('./bills');
   const payload = await fetchAffectingBills();
@@ -1075,6 +1086,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('gov_local',          () => govLocal(json),            ok, errors);
     await safe('ccrmc_data',         () => ccrmcData(json),           ok, errors);
     await safe('ccc_comp',           () => cccCompensation(json),     ok, errors);
+    await safe('reps_data',          () => repsData(json),            ok, errors);
     await safe('purge_stores',       () => purgeStores(),             ok, errors);
   }
 
