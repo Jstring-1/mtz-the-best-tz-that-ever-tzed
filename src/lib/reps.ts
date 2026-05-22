@@ -1,14 +1,22 @@
-// Elected representatives for Martinez, all levels.
+// Elected representatives for Martinez — narrow scope, only the
+// offices that actually represent us:
+//   - City of Martinez Council & Mayor
+//   - Contra Costa BOS, District 5
+//   - CA State Senate, District 9
+//   - CA State Assembly, District 15
+//   - CA Governor
+//   - U.S. House, CA-08
+//   - U.S. Senate (both CA senators)
 //
 // Each tier has its own fetcher; the top-level builder calls them in
 // parallel and emits a single typed payload. The /api/reps route serves
 // the cached blob and the RepsDetail modal renders it.
 //
-// Sources (no static-name hardcoding except for stable URLs):
+// Data sources (no static-name hardcoding except for stable .gov URLs):
 //   - Federal House + Senate    → Congress.gov (GOV_API_TOKEN)
-//   - CA legislature            → OpenStates v3 geo-lookup at Martinez lat/lng
-//   - Statewide CA constitutional officers → per-office .gov scrape
-//   - CCC Board of Supervisors  → contracosta.ca.gov scrape
+//   - CA legislature            → OpenStates v3 by org_classification + district
+//   - Governor                  → gov.ca.gov scrape
+//   - CCC Board of Supervisors  → contracosta.ca.gov scrape (D5 only)
 //   - Martinez Mayor + Council  → cityofmartinez.org scrape
 //
 // All scrapes are resilient: a section that fails parsing emits a single
@@ -18,9 +26,15 @@
 const CONGRESS_KEY = process.env.GOV_API_TOKEN ?? '';
 const OPENSTATES_KEY = process.env.OPENSTATES_API_KEY ?? '';
 
-// Martinez approximate center — used for the OpenStates geo lookup.
-const MARTINEZ_LAT = 38.0194;
-const MARTINEZ_LNG = -122.1341;
+// Districts that include / represent Martinez (as specified):
+//   US House:           CA-08
+//   CA State Senate:    SD-9
+//   CA State Assembly:  AD-15
+//   CCC Board of Sup:   District 5
+const US_HOUSE_DISTRICT = 8;
+const CA_SENATE_DISTRICT = '9';
+const CA_ASSEMBLY_DISTRICT = '15';
+const COUNTY_BOS_DISTRICT = 5;
 
 const COMMON_HEADERS = {
   // Use a realistic Chrome UA — many .gov sites cloak on UA detection.
@@ -132,11 +146,12 @@ async function federalReps(diag: Record<string, string>): Promise<Rep[]> {
   const members = list?.members ?? [];
   if (members.length === 0) { diag.federal = 'empty member list'; return []; }
 
-  // House CA-10 = Martinez. Senators have district === undefined.
+  // House CA-08 covers Martinez (per current district map). Senators
+  // have district === undefined. Filter to just these.
   const targets = members.filter((m) => {
     const isHouse = m.terms?.item?.some((t) => /house/i.test(t.chamber ?? ''));
     const isSenate = m.terms?.item?.some((t) => /senate/i.test(t.chamber ?? ''));
-    return (isHouse && m.district === 10) || isSenate;
+    return (isHouse && m.district === US_HOUSE_DISTRICT) || isSenate;
   });
 
   const enriched = await Promise.all(targets.map(async (m): Promise<Rep | null> => {
@@ -163,33 +178,12 @@ async function federalReps(diag: Record<string, string>): Promise<Rep[]> {
     };
   }));
   const out = enriched.filter((r): r is Rep => r !== null);
-  // President & VP — anchored on the stable whitehouse.gov URL; name not
-  // exposed by Congress.gov so we scrape just the title line.
-  out.push(...await whiteHouse(diag));
-  // Sort: President + VP first, then Senators, then House.
+  // Sort: Senators first, then House.
   out.sort((a, b) => {
-    const rank = (r: Rep) => /president/i.test(r.office) ? 0
-                          : /vice/i.test(r.office) ? 1
-                          : /senator/i.test(r.office) ? 2 : 3;
+    const rank = (r: Rep) => /senator/i.test(r.office) ? 0 : 1;
     return rank(a) - rank(b);
   });
   return out;
-}
-
-async function whiteHouse(diag: Record<string, string>): Promise<Rep[]> {
-  const html = await safeText('https://www.whitehouse.gov/administration/');
-  if (!html) { diag.whiteHouse = 'fetch failed'; return [
-    { level: 'federal', office: 'President', name: '', url: 'https://www.whitehouse.gov/administration/' },
-    { level: 'federal', office: 'Vice President', name: '', url: 'https://www.whitehouse.gov/administration/' },
-  ]; }
-  // Headings on whitehouse.gov/administration: "President <Name>",
-  // "Vice President <Name>", etc. Use a loose pattern.
-  const presM = html.match(/President\s+([A-Z][\w.'\- ]{2,40})(?:<|,|\.)/);
-  const vpM = html.match(/Vice\s+President\s+([A-Z][\w.'\- ]{2,40})(?:<|,|\.)/);
-  return [
-    { level: 'federal', office: 'President', name: presM?.[1]?.trim() ?? '', url: 'https://www.whitehouse.gov/administration/' },
-    { level: 'federal', office: 'Vice President', name: vpM?.[1]?.trim() ?? '', url: 'https://www.whitehouse.gov/administration/' },
-  ];
 }
 
 // =====================================================================
@@ -212,13 +206,21 @@ interface OsPerson {
   links?: Array<{ url?: string; note?: string }>;
   offices?: Array<{ classification?: string; voice?: string; address?: string }>;
 }
-interface OsGeoResp { results?: OsPerson[] }
+interface OsListResp { results?: OsPerson[] }
 
 async function stateLegislature(diag: Record<string, string>): Promise<Rep[]> {
   if (!OPENSTATES_KEY) { diag.stateLeg = 'OPENSTATES_API_KEY missing'; return []; }
-  const url = `https://v3.openstates.org/people.geo?lat=${MARTINEZ_LAT}&lng=${MARTINEZ_LNG}`;
-  const j = await safeJson<OsGeoResp>(url, { headers: { 'X-API-Key': OPENSTATES_KEY } });
-  const people = (j?.results ?? []).filter((p) => /California/i.test(p.jurisdiction?.name ?? ''));
+  // Query the two specific chambers by district. `org_classification`
+  // values are 'upper' (Senate) / 'lower' (Assembly).
+  const headers = { 'X-API-Key': OPENSTATES_KEY };
+  const senateUrl   = `https://v3.openstates.org/people?jurisdiction=ca&org_classification=upper&district=${CA_SENATE_DISTRICT}&per_page=5`;
+  const assemblyUrl = `https://v3.openstates.org/people?jurisdiction=ca&org_classification=lower&district=${CA_ASSEMBLY_DISTRICT}&per_page=5`;
+  const [senJ, asmJ] = await Promise.all([
+    safeJson<OsListResp>(senateUrl,   { headers }),
+    safeJson<OsListResp>(assemblyUrl, { headers }),
+  ]);
+  const people = [...(senJ?.results ?? []), ...(asmJ?.results ?? [])];
+  if (!people.length) diag.stateLeg = 'no legislators returned for SD-9 / AD-15';
   return people.map<Rep>((p): Rep => {
     const cls = p.current_role?.org_classification;
     const district = p.current_role?.district ?? '';
@@ -256,31 +258,13 @@ interface StateOfficeCfg {
   // First capture group must be the officeholder name.
   nameRe: RegExp;
 }
+// Only the Governor — other statewide constitutional officers are
+// out of scope per the requested rep list. Add back here later if
+// scope expands.
 const STATE_OFFICES: StateOfficeCfg[] = [
   { office: 'Governor',
     url: 'https://www.gov.ca.gov/',
     nameRe: /Governor\s+([A-Z][\w.'\- ]{2,40})(?:\b|<|,|\.)/ },
-  { office: 'Lieutenant Governor',
-    url: 'https://ltg.ca.gov/',
-    nameRe: /Lieutenant\s+Governor\s+([A-Z][\w.'\- ]{2,40})(?:\b|<|,|\.)/ },
-  { office: 'Attorney General',
-    url: 'https://oag.ca.gov/',
-    nameRe: /Attorney\s+General\s+([A-Z][\w.'\- ]{2,40})(?:\b|<|,|\.)/ },
-  { office: 'Secretary of State',
-    url: 'https://www.sos.ca.gov/',
-    nameRe: /Secretary\s+of\s+State\s+([A-Z][\w.'\- ]{2,40})(?:\b|<|,|\.)/ },
-  { office: 'State Controller',
-    url: 'https://www.sco.ca.gov/',
-    nameRe: /Controller\s+([A-Z][\w.'\- ]{2,40})(?:\b|<|,|\.)/ },
-  { office: 'State Treasurer',
-    url: 'https://www.treasurer.ca.gov/',
-    nameRe: /Treasurer\s+([A-Z][\w.'\- ]{2,40})(?:\b|<|,|\.)/ },
-  { office: 'Supt. of Public Instruction',
-    url: 'https://www.cde.ca.gov/',
-    nameRe: /Superintendent[^A-Z]{0,30}([A-Z][\w.'\- ]{2,40})(?:\b|<|,|\.)/ },
-  { office: 'Insurance Commissioner',
-    url: 'https://www.insurance.ca.gov/',
-    nameRe: /Insurance\s+Commissioner\s+([A-Z][\w.'\- ]{2,40})(?:\b|<|,|\.)/ },
 ];
 
 function decodeEntities(s: string): string {
@@ -337,30 +321,24 @@ async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
   // Each supervisor block looks roughly like:
   //   <h3>District N</h3> <... >Name</...>
   // CivicPlus markup varies; extract via a loose regex over plaintext.
+  // Only District 5 (Martinez). Pull the substring starting at the
+  // "District 5" label and grab the first capitalized name token after.
   const text = decodeEntities(stripTags(html));
-  const reps: Rep[] = [];
-  for (let dist = 1; dist <= 5; dist++) {
-    // Pull the substring between "District N" and the next "District" or end.
-    const start = text.search(new RegExp(`District\\s+${dist}\\b`, 'i'));
-    if (start < 0) continue;
+  const start = text.search(new RegExp(`District\\s+${COUNTY_BOS_DISTRICT}\\b`, 'i'));
+  let name = '';
+  if (start >= 0) {
     const after = text.slice(start, start + 400);
-    // First name-like token after the district label.
     const m = after.match(/District\s+\d\s+(Supervisor\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/);
-    if (m) {
-      reps.push({
-        level: 'county',
-        office: dist === 5 ? 'Supervisor, District 5 (Martinez)' : `Supervisor, District ${dist}`,
-        name: m[2].trim(),
-        district: `BOS Dist ${dist}`,
-        url: usedUrl,
-      });
-    }
+    if (m) name = m[2].trim();
   }
-  if (!reps.length) {
-    diag.county = 'page fetched but no supervisors parsed';
-    return [{ level: 'county', office: 'Supervisor, District 5 (Martinez)', name: '', url: usedUrl }];
-  }
-  return reps;
+  if (!name) diag.county = 'page fetched but District 5 supervisor not parsed';
+  return [{
+    level: 'county',
+    office: `Supervisor, District ${COUNTY_BOS_DISTRICT} (Martinez)`,
+    name,
+    district: `BOS Dist ${COUNTY_BOS_DISTRICT}`,
+    url: usedUrl,
+  }];
 }
 
 // =====================================================================

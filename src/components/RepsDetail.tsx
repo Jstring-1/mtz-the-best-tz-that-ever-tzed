@@ -84,30 +84,30 @@ export default function RepsDetail({ label, tooltip }: Props) {
       <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Your elected reps — Martinez to D.C." size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title="Your elected reps — Martinez" size="lg">
         {loading && <p className="muted">Loading…</p>}
         {empty && <p className="muted">{empty}</p>}
         {error && <p className="muted">Couldn’t load: {error}</p>}
         {data && (
           <>
             <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              Auto-resolved from official .gov sources (Congress.gov, OpenStates, statewide office homepages, county BOS, City of Martinez).
+              Auto-resolved from official .gov sources (Congress.gov, OpenStates, gov.ca.gov, county BOS, City of Martinez).
               Names without a parsed value link out to the official page.
             </p>
 
-            <Section title="City — Martinez" reps={data.city}
+            <Section title="City — Martinez Council & Mayor" reps={data.city}
               emptyHint="Couldn't read the city site this cycle — try the official link." />
 
-            <Section title="County — Contra Costa BOS" reps={data.county}
+            <Section title="County — Supervisor, District 5" reps={data.county}
               emptyHint="Couldn't read the county BOS page this cycle." />
 
-            <Section title="State Legislature — your CA reps" reps={data.stateLegislature}
+            <Section title="State Legislature — Senate Dist 9 + Assembly Dist 15" reps={data.stateLegislature}
               emptyHint="OpenStates lookup empty (key missing or rate-limited)." />
 
-            <Section title="California — statewide officers" reps={data.state}
-              emptyHint="Statewide officer pages didn't parse this cycle." />
+            <Section title="California — Governor" reps={data.state}
+              emptyHint="Governor page didn't parse this cycle." />
 
-            <Section title="Federal — Congress + White House" reps={data.federal}
+            <Section title="Federal — CA Senators + House CA-08" reps={data.federal}
               emptyHint="Congress.gov lookup empty (GOV_API_TOKEN missing or rate-limited)." />
 
             <p className="muted" style={{ fontSize: '.72em', marginTop: 12 }}>
