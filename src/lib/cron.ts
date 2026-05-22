@@ -513,6 +513,18 @@ async function newsFeeds() {
   if (sorted.length) await upsertFeeds(sorted);
 }
 
+// Aggregated State / US / World feeds (apolitical wire-service mix).
+// One scope per apis_json key so the UI can lazy-load if it ever needs to.
+async function aggregatedNews(json: Record<string, unknown>) {
+  const { fetchNewsScope } = await import('./news-aggregator');
+  const scopes = ['state', 'us', 'world'] as const;
+  const results = await Promise.all(scopes.map((s) => fetchNewsScope(s).catch(() => null)));
+  for (let i = 0; i < scopes.length; i++) {
+    const r = results[i];
+    if (r && r.items.length) json[`news_${scopes[i]}`] = r;
+  }
+}
+
 function extractTag(xml: string, tag: string): string {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
   const m = xml.match(re);
@@ -1030,6 +1042,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
 
   if (bucket === '4h' || all) {
     await safe('news_feeds',     () => newsFeeds(),                ok, errors);
+    await safe('news_aggregated', () => aggregatedNews(json),       ok, errors);
     await safe('noaa_water_rss', () => noaaWaterRss(xmlBag),       ok, errors);
     await safe('weather_story',  () => weatherStory(miscBag),      ok, errors);
     await safe('local_events',   () => localEvents(json),          ok, errors);

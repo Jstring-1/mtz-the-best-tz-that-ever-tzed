@@ -1,5 +1,6 @@
 import { getLocation } from '@/lib/location';
-import { getFeeds, getMisc } from '@/lib/cache';
+import { getFeeds, getMisc, getJson } from '@/lib/cache';
+import type { NewsScopePayload } from '@/lib/news-aggregator';
 import {
   listUpcomingEvents, listActiveAlerts,
   listAvailablePets, listRecentQuakes,
@@ -20,6 +21,7 @@ export default async function MainPage() {
   const [
     storedEvents, storedAlerts,
     storedPets, storedQuakes, feeds, misc,
+    newsState, newsUs, newsWorld,
   ] = await Promise.all([
     listUpcomingEvents(),
     listActiveAlerts(),
@@ -27,6 +29,9 @@ export default async function MainPage() {
     listRecentQuakes(10),
     getFeeds(120),
     getMisc(),
+    getJson<NewsScopePayload>('news_state').catch(() => null),
+    getJson<NewsScopePayload>('news_us').catch(() => null),
+    getJson<NewsScopePayload>('news_world').catch(() => null),
   ]);
 
   // Quakes only from the last 7 days; AlertsCard hides itself when empty.
@@ -93,7 +98,12 @@ export default async function MainPage() {
   return (
     <div className="dashboard">
       <EventsCard events={events} tz={loc.timezone} />
-      <NewsCard   items={feeds} />
+      <NewsCard
+        local={feeds}
+        state={newsState?.items ?? []}
+        us={newsUs?.items ?? []}
+        world={newsWorld?.items ?? []}
+      />
       <PetsCard   pets={storedPets} />
       <div className="col-stack">
         <AlertsCard alerts={localAlerts} quakes={quakeAlerts} tz={loc.timezone} />
