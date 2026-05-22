@@ -1,7 +1,7 @@
 import { getJson } from '@/lib/cache';
 import type { GovLocalPayload, GovStripItem } from '@/lib/gov';
 import type { CouncilScrapeResult } from '@/lib/scrape-council';
-import RepDetail from './RepDetail';
+import BillsDetail from './BillsDetail';
 import GrantsDetail from './GrantsDetail';
 import CrimeDetail from './CrimeDetail';
 import CouncilDetail from './CouncilDetail';
@@ -41,7 +41,7 @@ export default async function CivicStrip() {
     <section className="civic-strip" aria-label="Civic indicators">
       {items.map((it) => {
         const valHtml = `<span class="civic-strip-val ${it.color ?? ''}">${it.value}</span>`;
-        if (it.key === 'rep')    return <RepDetail key={it.key} tooltip={it.tooltip} label={valHtml} />;
+        if (it.key === 'rep')    return <BillsDetail key={it.key} tooltip={it.tooltip} label={valHtml} />;
         if (it.key === 'grants') return (
           <GrantsDetail
             key={it.key}

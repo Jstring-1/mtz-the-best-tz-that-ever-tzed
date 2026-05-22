@@ -513,6 +513,21 @@ async function newsFeeds() {
   if (sorted.length) await upsertFeeds(sorted);
 }
 
+// Legislation affecting Martinez / Contra Costa / California — pulls
+// from Congress.gov (4 CA federal reps) + OpenStates (CA-state bills
+// mentioning "Contra Costa"). Stored as a single `affecting_bills` blob.
+async function affectingBills(json: Record<string, unknown>) {
+  const { fetchAffectingBills } = await import('./bills');
+  const payload = await fetchAffectingBills();
+  // Only write if we got at least one section populated — avoid
+  // overwriting a healthy cache with an empty one during transient
+  // network failures.
+  const fed = payload.federalMembers.reduce((n, m) => n + m.sponsored.length + m.cosponsored.length, 0);
+  if (fed > 0 || payload.stateBills.length > 0) {
+    json['affecting_bills'] = payload;
+  }
+}
+
 // Aggregated State / US / World feeds (apolitical wire-service mix).
 // One scope per apis_json key so the UI can lazy-load if it ever needs to.
 async function aggregatedNews(json: Record<string, unknown>) {
@@ -1043,6 +1058,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
   if (bucket === '4h' || all) {
     await safe('news_feeds',     () => newsFeeds(),                ok, errors);
     await safe('news_aggregated', () => aggregatedNews(json),       ok, errors);
+    await safe('affecting_bills',() => affectingBills(json),       ok, errors);
     await safe('noaa_water_rss', () => noaaWaterRss(xmlBag),       ok, errors);
     await safe('weather_story',  () => weatherStory(miscBag),      ok, errors);
     await safe('local_events',   () => localEvents(json),          ok, errors);
