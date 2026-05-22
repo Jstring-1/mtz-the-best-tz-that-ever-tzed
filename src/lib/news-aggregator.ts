@@ -156,7 +156,10 @@ export async function fetchNewsScope(scope: NewsScope): Promise<NewsScopePayload
     const prev = byKey.get(k);
     if (!prev || it.ts > prev.ts) byKey.set(k, it);
   }
-  const items = [...byKey.values()].sort((a, b) => b.ts - a.ts).slice(0, 40);
+  // Upstream RSS feeds rarely return more than ~100 items each, so the
+  // realistic ceiling here is ~200/scope even with two feeds combined.
+  // The cap is just a safety bound.
+  const items = [...byKey.values()].sort((a, b) => b.ts - a.ts).slice(0, 300);
   return {
     scope,
     scrapedAt: new Date().toISOString(),

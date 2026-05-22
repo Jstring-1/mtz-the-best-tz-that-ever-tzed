@@ -96,7 +96,7 @@ export default function NewsCard(props: Props) {
   }, [allRows]);
 
   const rows = useMemo(() => {
-    if (tab === 'all') return allRows.slice(0, 80);
+    if (tab === 'all') return allRows.slice(0, 1000);
     return allRows.filter((r) => r.scope === tab);
   }, [tab, allRows]);
 

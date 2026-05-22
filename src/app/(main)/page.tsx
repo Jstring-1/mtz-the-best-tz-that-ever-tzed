@@ -27,7 +27,7 @@ export default async function MainPage() {
     listActiveAlerts(),
     listAvailablePets(),
     listRecentQuakes(10),
-    getFeeds(120),
+    getFeeds(1000),
     getMisc(),
     getJson<NewsScopePayload>('news_state').catch(() => null),
     getJson<NewsScopePayload>('news_us').catch(() => null),
