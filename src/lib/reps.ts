@@ -470,94 +470,103 @@ function extractNameNearLabelText(text: string, labelRe: RegExp, windowSize = 30
   return '';
 }
 
+// cityofmartinez.org is hard-blocked by an Akamai WAF (UA spoofing
+// isn't enough — they fingerprint TLS/headers). Instead we fetch the
+// most recent Wayback Machine snapshot, which is never blocked.
+//
+// Wayback flow:
+//   1. archive.org/wayback/available?url=X&timestamp=YYYYMMDD
+//      → returns the closest snapshot URL.
+//   2. web.archive.org/web/<ts>id_/<original-url>
+//      → returns the snapshot HTML WITHOUT Wayback's viewer chrome.
+//
+// Council page HTML (verified):
+//   <h2>Brianne Zorn, Mayor</h2>
+//   <h2>Jay Howard, Vice Mayor<img ...></h2>
+//   <strong>District 1<br></strong>   ← district label following each h2
+const COUNCIL_PAGE_URL =
+  'https://www.cityofmartinez.org/government/mayor-and-city-council';
+
+interface WaybackAvailableResp {
+  archived_snapshots?: { closest?: { url?: string; timestamp?: string; available?: boolean } };
+}
+
+async function fetchViaWayback(originalUrl: string, diag: Record<string, string>, key: string): Promise<{ html: string; ts: string } | null> {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const lookupUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(originalUrl)}&timestamp=${today}`;
+  const meta = await safeJson<WaybackAvailableResp>(lookupUrl);
+  const closest = meta?.archived_snapshots?.closest;
+  if (!closest?.available || !closest.timestamp) {
+    diag[key] = 'no wayback snapshot available';
+    return null;
+  }
+  // Use `id_` to fetch the raw page without Wayback's framing.
+  const snapUrl = `https://web.archive.org/web/${closest.timestamp}id_/${originalUrl}`;
+  const html = await safeText(snapUrl);
+  if (!html) { diag[key] = `wayback snapshot fetch failed (ts=${closest.timestamp})`; return null; }
+  return { html, ts: closest.timestamp };
+}
+
 async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
-  // Primary: cityofmartinez.org. Secondary: Ballotpedia (anchor links
-  // + plain-text near each labeled seat). cityofmartinez.org may use a
-  // variety of CMS layouts (CivicPlus, custom), so we try multiple
-  // extraction strategies on the official HTML.
-  const ofMartinez = [
-    'https://www.cityofmartinez.org/government/mayor-and-city-council',
-    'https://www.cityofmartinez.org/government/mayor-city-council',
-    'https://www.cityofmartinez.org/government',
-  ];
-  const ballotpediaUrl = 'https://ballotpedia.org/Martinez,_California';
-  const fetches = await Promise.all([
-    ...ofMartinez.map((u) => safeText(u)),
-    safeText(ballotpediaUrl),
-  ]);
-  const ballotHtml = fetches[fetches.length - 1];
-  const officialHtml = fetches.slice(0, ofMartinez.length).find((h) => !!h) ?? '';
-  const officialUsedUrl = ofMartinez[fetches.slice(0, ofMartinez.length).findIndex((h) => !!h)] ?? ofMartinez[0];
+  const wb = await fetchViaWayback(COUNCIL_PAGE_URL, diag, 'cityWayback');
+  if (!wb) {
+    return [{ level: 'city', office: 'Mayor + Council', name: '', url: COUNCIL_PAGE_URL }];
+  }
+  diag.citySource = `wayback ${wb.ts}`;
 
-  const seats: Array<{ labelRe: RegExp; office: string; district?: string }> = [
-    { labelRe: /\bMayor\b/i,        office: 'Mayor' },
-    { labelRe: /District\s+1\b/i,   office: 'Council Member, District 1', district: 'District 1' },
-    { labelRe: /District\s+2\b/i,   office: 'Council Member, District 2', district: 'District 2' },
-    { labelRe: /District\s+3\b/i,   office: 'Council Member, District 3', district: 'District 3' },
-    { labelRe: /District\s+4\b/i,   office: 'Council Member, District 4', district: 'District 4' },
-  ];
-
+  const html = wb.html;
   const reps: Rep[] = [];
-  const officialText = officialHtml ? decodeEntities(stripTags(officialHtml)) : '';
 
-  // Reverse strategy for the official cityofmartinez.org page: each
-  // member is usually shown as "<Name>, <Office>" or
-  // "<Office> <Name>" near a photo. We try BOTH orderings.
-  const officialNameFinders: Array<(label: RegExp) => string> = [
-    // "Council Member John Doe, District 2" — name AFTER label.
-    (label) => officialText ? extractNameNearLabelText(officialText, label) : '',
-    // "John Doe, Council Member, District 2" — try a few well-known
-    // Martinez-style patterns by capturing names within 300 chars before
-    // the label.
-    (label) => {
-      if (!officialText) return '';
-      const m = label.exec(officialText);
-      if (!m) return '';
-      const before = officialText.slice(Math.max(0, m.index - 300), m.index);
-      const namesBefore = [...before.matchAll(/\b([A-Z][a-z]+(?:\s+[A-Z][A-Za-z'\-.]+){1,3})\b/g)]
-        .map((mm) => mm[1])
-        .filter((n) => !/^(Mayor|District|Council|Member|City|County|California|Contra|Costa|Term|Phone|Email|Read|Click)\b/i.test(n));
-      return namesBefore[namesBefore.length - 1] ?? '';
-    },
-  ];
+  // Pull every <h2>...</h2> block, strip inner tags / &nbsp;, then parse
+  // "Name, Office" using the comma as the natural separator. The trailing
+  // <img> inside the h2 is stripped by stripTags.
+  const h2Re = /<h2\b[^>]*>([\s\S]*?)<\/h2>/g;
+  const blocks: Array<{ name: string; office: string; idx: number }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = h2Re.exec(html)) !== null) {
+    const text = decodeEntities(stripTags(m[1])).replace(/ /g, ' ').trim().replace(/,?\s*$/, '');
+    const parsed = text.match(/^([A-Z][A-Za-z.\-' ]+?),\s*(Mayor|Vice Mayor|Councilmember|Council Member)\b/);
+    if (!parsed) continue;
+    blocks.push({ name: parsed[1].trim(), office: parsed[2].trim(), idx: m.index });
+  }
+  diag.cityBlocks = `${blocks.length} h2 blocks parsed`;
 
-  for (const seat of seats) {
-    let name = '';
-    let source: string | null = null;
+  // For each member, look ahead in the HTML for "District N" within ~1500
+  // chars to attach a district number. The Mayor is at-large (no district).
+  for (const b of blocks) {
+    let district = '';
+    const after = html.slice(b.idx, b.idx + 1500);
+    const dm = after.match(/District\s+(\d)/i);
+    if (dm) district = dm[1];
 
-    // 1. Official site, both orderings.
-    for (const fn of officialNameFinders) {
-      const v = fn(seat.labelRe);
-      if (v) { name = v; source = 'official'; break; }
+    if (b.office === 'Mayor') {
+      reps.push({ level: 'city', office: 'Mayor', name: b.name, url: COUNCIL_PAGE_URL });
+      continue;
     }
-
-    // 2. Ballotpedia anchor-based.
-    if (!name && ballotHtml) {
-      const sectionStart = ballotHtml.search(/<h2[^>]*>\s*(?:<span[^>]*>)?\s*(?:Mayor|City\s+Council|Elected\s+officials|Government)/i);
-      const sectionEnd = sectionStart >= 0 ? ballotHtml.indexOf('<h2', sectionStart + 10) : -1;
-      const section = sectionStart >= 0
-        ? ballotHtml.slice(sectionStart, sectionEnd > sectionStart ? sectionEnd : sectionStart + 12000)
-        : ballotHtml;
-      const found = extractPersonAfterLabel(section, seat.labelRe);
-      if (found) { name = found; source = 'ballotpedia'; }
-    }
-
-    if (name) {
+    if (b.office === 'Vice Mayor') {
       reps.push({
         level: 'city',
-        office: seat.office,
-        name,
-        district: seat.district,
-        url: source === 'ballotpedia' ? ballotpediaUrl : officialUsedUrl,
+        office: district ? `Vice Mayor (District ${district})` : 'Vice Mayor',
+        name: b.name,
+        district: district ? `District ${district}` : undefined,
+        url: COUNCIL_PAGE_URL,
       });
+      continue;
     }
+    // Councilmember / Council Member
+    reps.push({
+      level: 'city',
+      office: district ? `Council Member, District ${district}` : 'Council Member',
+      name: b.name,
+      district: district ? `District ${district}` : undefined,
+      url: COUNCIL_PAGE_URL,
+    });
   }
 
   if (reps.length === 0) {
-    diag.city = `no names found (official html ${officialHtml ? 'fetched' : 'failed'}, ballot ${ballotHtml ? 'fetched' : 'failed'})`;
-    return [{ level: 'city', office: 'Mayor + Council', name: '', url: officialUsedUrl }];
+    diag.city = 'wayback snapshot fetched but no h2 name-office pairs matched';
+    return [{ level: 'city', office: 'Mayor + Council', name: '', url: COUNCIL_PAGE_URL }];
   }
-  diag.citySource = `parsed ${reps.length}/5 seats`;
   return reps;
 }
 
