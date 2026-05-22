@@ -34,7 +34,9 @@ const JSON_HEADERS = {
   Accept: 'application/json',
 };
 
-async function safeFetch(url: string, init?: RequestInit, timeoutMs = 10000): Promise<Response | null> {
+// Tight per-request timeout — the 12h bucket has ~8 other jobs, and
+// Railway's HTTP proxy kills the connection at ~90s. Keep this small.
+async function safeFetch(url: string, init?: RequestInit, timeoutMs = 5000): Promise<Response | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -47,12 +49,12 @@ async function safeFetch(url: string, init?: RequestInit, timeoutMs = 10000): Pr
   } finally { clearTimeout(timer); }
 }
 
-async function safeJson<T = unknown>(url: string, init?: RequestInit, timeoutMs = 10000): Promise<T | null> {
+async function safeJson<T = unknown>(url: string, init?: RequestInit, timeoutMs = 5000): Promise<T | null> {
   const r = await safeFetch(url, { ...init, headers: { ...JSON_HEADERS, ...(init?.headers ?? {}) } }, timeoutMs);
   if (!r) return null;
   try { return await r.json() as T; } catch { return null; }
 }
-async function safeText(url: string, init?: RequestInit, timeoutMs = 10000): Promise<string | null> {
+async function safeText(url: string, init?: RequestInit, timeoutMs = 5000): Promise<string | null> {
   const r = await safeFetch(url, { ...init, headers: { ...COMMON_HEADERS, ...(init?.headers ?? {}) } }, timeoutMs);
   if (!r) return null;
   try { return await r.text(); } catch { return null; }
@@ -314,17 +316,19 @@ async function statewideOfficers(diag: Record<string, string>): Promise<Rep[]> {
 
 async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
   // Try a few known URL slugs — CCC has reorganized the site twice.
+  // Race them in parallel; pick the first one that looks valid.
   const candidates = [
     'https://www.contracosta.ca.gov/Board-of-Supervisors',
     'https://www.contracosta.ca.gov/4818/Board-of-Supervisors',
     'https://www.contracosta.ca.gov/3179/Board-of-Supervisors',
     'https://www.contracosta.ca.gov/418/Board-of-Supervisors',
   ];
+  const hits = await Promise.all(candidates.map((u) => safeText(u)));
   let html: string | null = null;
   let usedUrl = candidates[0];
-  for (const u of candidates) {
-    const h = await safeText(u);
-    if (h && /district\s*[1-5]/i.test(h)) { html = h; usedUrl = u; break; }
+  for (let i = 0; i < hits.length; i++) {
+    const h = hits[i];
+    if (h && /district\s*[1-5]/i.test(h)) { html = h; usedUrl = candidates[i]; break; }
   }
   if (!html) { diag.county = 'no BOS page resolved'; return [
     { level: 'county', office: 'Supervisor, District 5 (Martinez)', name: '',
@@ -369,11 +373,12 @@ async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
     'https://www.cityofmartinez.org/government/mayor-and-city-council',
     'https://www.cityofmartinez.org/government',
   ];
+  const hits = await Promise.all(candidates.map((u) => safeText(u)));
   let html: string | null = null;
   let usedUrl = candidates[0];
-  for (const u of candidates) {
-    const h = await safeText(u);
-    if (h && /city\s*council/i.test(h)) { html = h; usedUrl = u; break; }
+  for (let i = 0; i < hits.length; i++) {
+    const h = hits[i];
+    if (h && /city\s*council/i.test(h)) { html = h; usedUrl = candidates[i]; break; }
   }
   if (!html) {
     diag.city = 'no council page resolved';

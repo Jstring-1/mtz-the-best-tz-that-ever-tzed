@@ -1067,27 +1067,36 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
   }
 
   if (bucket === '4h' || all) {
-    await safe('news_feeds',     () => newsFeeds(),                ok, errors);
-    await safe('news_aggregated', () => aggregatedNews(json),       ok, errors);
-    await safe('affecting_bills',() => affectingBills(json),       ok, errors);
-    await safe('noaa_water_rss', () => noaaWaterRss(xmlBag),       ok, errors);
-    await safe('weather_story',  () => weatherStory(miscBag),      ok, errors);
-    await safe('local_events',   () => localEvents(json),          ok, errors);
-    await safe('shelter_pets',   () => shelterPets(json),          ok, errors);
-    await safe('gov_national',   () => govNational(json),          ok, errors);
-    await safe('rep_votes',      () => repVotes(json),             ok, errors);
-    await safe('council_votes',  () => councilVotes(json),         ok, errors);
+    // Parallelize: each job writes to its own apis_json key, so there's
+    // no contention. Total time = max(jobs), not sum — keeps us well
+    // under Railway's ~90s HTTP proxy timeout.
+    await Promise.all([
+      safe('news_feeds',      () => newsFeeds(),                ok, errors),
+      safe('news_aggregated', () => aggregatedNews(json),       ok, errors),
+      safe('affecting_bills', () => affectingBills(json),       ok, errors),
+      safe('noaa_water_rss',  () => noaaWaterRss(xmlBag),       ok, errors),
+      safe('weather_story',   () => weatherStory(miscBag),      ok, errors),
+      safe('local_events',    () => localEvents(json),          ok, errors),
+      safe('shelter_pets',    () => shelterPets(json),          ok, errors),
+      safe('gov_national',    () => govNational(json),          ok, errors),
+      safe('rep_votes',       () => repVotes(json),             ok, errors),
+      safe('council_votes',   () => councilVotes(json),         ok, errors),
+    ]);
   }
 
   if (bucket === '12h' || all) {
-    await safe('osm_places',         () => osmPlaces(json),          ok, errors);
-    await safe('ticketmaster_events',() => ticketmasterEvents(json), ok, errors);
-    await safe('local_parks',        () => localParks(json),         ok, errors);
-    await safe('gov_local',          () => govLocal(json),            ok, errors);
-    await safe('ccrmc_data',         () => ccrmcData(json),           ok, errors);
-    await safe('ccc_comp',           () => cccCompensation(json),     ok, errors);
-    await safe('reps_data',          () => repsData(json),            ok, errors);
-    await safe('purge_stores',       () => purgeStores(),             ok, errors);
+    // Parallelize for the same reason as 4h — distinct keys, no
+    // contention. Run purge_stores LAST since it's a delete pass.
+    await Promise.all([
+      safe('osm_places',          () => osmPlaces(json),          ok, errors),
+      safe('ticketmaster_events', () => ticketmasterEvents(json), ok, errors),
+      safe('local_parks',         () => localParks(json),         ok, errors),
+      safe('gov_local',           () => govLocal(json),           ok, errors),
+      safe('ccrmc_data',          () => ccrmcData(json),          ok, errors),
+      safe('ccc_comp',            () => cccCompensation(json),    ok, errors),
+      safe('reps_data',           () => repsData(json),           ok, errors),
+    ]);
+    await safe('purge_stores',    () => purgeStores(),            ok, errors);
   }
 
   if (Object.keys(json).length)    await upsertJsonMany(json);
