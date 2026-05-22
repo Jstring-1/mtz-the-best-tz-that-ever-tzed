@@ -120,7 +120,10 @@ function parsePetsFromHtml(html: string, species: string, listingUrl: string): S
       location:    pickField(block, 'Location'),
       photo_url,
       description: null,
-      url: `${listingUrl}#${encodeURIComponent(id)}`,
+      // Point to the pet's DETAIL page, not the listing (which shows all
+      // 30 pets and made it look like we were mislabeling). Verified
+      // working URL: 24petconnect.com/CCASDAvailablePets/Details/CCST/{ID}.
+      url: `https://24petconnect.com/CCASDAvailablePets/Details/CCST/${encodeURIComponent(id)}`,
       shelter: 'Contra Costa Animal Services',
     });
   }
