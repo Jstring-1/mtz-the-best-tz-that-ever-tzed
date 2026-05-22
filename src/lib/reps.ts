@@ -274,23 +274,24 @@ async function stateLegislature(diag: Record<string, string>): Promise<Rep[]> {
 // per-site regex, and fall back to a link-only row when extraction
 // fails. Update the OFFICES list when a constitutional office is added.
 
-interface StateOfficeCfg {
-  office: string;
-  url: string;
-  // First capture group must be the officeholder name.
-  nameRe: RegExp;
-}
-// Only the Governor — other statewide constitutional officers are
-// out of scope per the requested rep list. Add back here later if
-// scope expands.
-const STATE_OFFICES: StateOfficeCfg[] = [
-  { office: 'Governor',
-    url: 'https://www.gov.ca.gov/',
-    // Capture only Title Case word tokens. Stops at any non-name char
-    // (was previously including `.` in the class, which let captures
-    // run past a period into the next sentence — e.g. "Gavin Newsom.
-    // Read how the Governor").
-    nameRe: /Governor\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/ },
+// CA state constitutional officers — sourced from the Ballotpedia
+// "State officials" table on the Contra_Costa_County,_California page.
+// One fetch returns all 10 rows. The table format is stable: each row
+// has the office in column 1 and a wiki-linked name in column 2.
+const BALLOTPEDIA_CCC_URL = 'https://ballotpedia.org/Contra_Costa_County,_California';
+// Office labels as written in the Ballotpedia table. We use these to
+// build the friendly display label and to validate parsed names.
+const STATEWIDE_OFFICES: Array<{ ballotpediaLabel: string; display: string }> = [
+  { ballotpediaLabel: 'Governor of California',                       display: 'Governor' },
+  { ballotpediaLabel: 'Lieutenant Governor of California',            display: 'Lieutenant Governor' },
+  { ballotpediaLabel: 'Attorney General of California',               display: 'Attorney General' },
+  { ballotpediaLabel: 'California Secretary of State',                display: 'Secretary of State' },
+  { ballotpediaLabel: 'California Controller',                        display: 'Controller' },
+  { ballotpediaLabel: 'California Treasurer',                         display: 'Treasurer' },
+  { ballotpediaLabel: 'California Commissioner of Insurance',         display: 'Insurance Commissioner' },
+  { ballotpediaLabel: 'California Superintendent of Public Instruction', display: 'Supt. of Public Instruction' },
+  { ballotpediaLabel: 'California State Auditor',                     display: 'State Auditor' },
+  { ballotpediaLabel: 'California Secretary for Natural Resources',   display: 'Sec. for Natural Resources' },
 ];
 
 function decodeEntities(s: string): string {
@@ -300,20 +301,64 @@ function decodeEntities(s: string): string {
 function stripTags(s: string): string { return s.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' '); }
 
 async function statewideOfficers(diag: Record<string, string>): Promise<Rep[]> {
-  const out = await Promise.all(STATE_OFFICES.map(async (o): Promise<Rep> => {
-    const html = await safeText(o.url);
-    let name = '';
-    if (html) {
-      const text = decodeEntities(stripTags(html));
-      const m = text.match(o.nameRe);
-      if (m) name = m[1].trim();
-      else diag[`state:${o.office}`] = 'name not parsed';
-    } else {
-      diag[`state:${o.office}`] = 'fetch failed';
-    }
-    return { level: 'state', office: o.office, name, url: o.url };
-  }));
-  return out;
+  // One fetch, parse all 10 rows from the State officials table on
+  // ballotpedia.org/Contra_Costa_County,_California.
+  const html = await safeText(BALLOTPEDIA_CCC_URL);
+  if (!html) {
+    diag.statewide = 'Ballotpedia CCC page fetch failed';
+    return STATEWIDE_OFFICES.map((o) => ({
+      level: 'state' as const, office: o.display, name: '', url: BALLOTPEDIA_CCC_URL,
+    }));
+  }
+  // The "State officials" section sits under an <h2> with that label.
+  // Inside is a <table> whose rows have:
+  //   <td>Office of California</td>
+  //   <td><a href="/Name">Name</a></td>
+  //   <td>Party</td>
+  //   <td>Date</td>
+  // We find the section, then walk rows.
+  const sectionStart = html.search(/<h2[^>]*>\s*(?:<span[^>]*>)?\s*State\s+officials/i);
+  const sectionEnd = sectionStart >= 0 ? html.indexOf('<h2', sectionStart + 10) : -1;
+  const sectionHtml = sectionStart >= 0
+    ? html.slice(sectionStart, sectionEnd > sectionStart ? sectionEnd : sectionStart + 12000)
+    : '';
+  if (!sectionHtml) {
+    diag.statewide = "couldn't find 'State officials' h2 anchor";
+  }
+  // Map ballotpediaLabel -> Rep. Iterate each row and match label substring.
+  const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  const cellRe = /<td\b[^>]*>([\s\S]*?)<\/td>/gi;
+  const nameAnchorRe = /<a\s[^>]*href=["']\/([A-Z][A-Za-z0-9._-]*(?:_[A-Z][A-Za-z0-9._-]*){1,4})["'][^>]*>([^<]+)<\/a>/;
+  const partyTextRe = /(Democratic|Republican|Independent|Nonpartisan|Libertarian|Green)/i;
+  const found: Map<string, { name: string; party: string }> = new Map();
+  let rm: RegExpExecArray | null;
+  while ((rm = rowRe.exec(sectionHtml)) !== null) {
+    const row = rm[1];
+    const cells: string[] = [];
+    let cm: RegExpExecArray | null;
+    cellRe.lastIndex = 0;
+    while ((cm = cellRe.exec(row)) !== null) cells.push(cm[1]);
+    if (cells.length < 2) continue;
+    const officeText = decodeEntities(stripTags(cells[0])).trim();
+    const nameAnchor = cells[1].match(nameAnchorRe);
+    const nameText = nameAnchor
+      ? decodeEntities(nameAnchor[2]).trim()
+      : decodeEntities(stripTags(cells[1])).trim();
+    if (!nameText) continue;
+    const partyText = cells[2] ? (decodeEntities(stripTags(cells[2])).match(partyTextRe)?.[1] ?? '') : '';
+    found.set(officeText.toLowerCase(), { name: nameText, party: partyText });
+  }
+  diag.statewideRows = `${found.size} office rows parsed`;
+  return STATEWIDE_OFFICES.map((o) => {
+    const hit = found.get(o.ballotpediaLabel.toLowerCase());
+    return {
+      level: 'state' as const,
+      office: o.display,
+      name: hit?.name ?? '',
+      party: hit?.party ? hit.party[0] : undefined,
+      url: BALLOTPEDIA_CCC_URL,
+    };
+  });
 }
 
 // =====================================================================
@@ -352,48 +397,46 @@ function extractPersonAfterLabel(html: string, labelRe: RegExp, windowSize = 200
 }
 
 async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
-  // Try official CCC pages + Ballotpedia in parallel — whichever returns
-  // a parseable name wins. Ballotpedia is the reliable fallback because
-  // CivicPlus .gov sites often 403 cloud-egress IPs.
-  const ccPages = [
-    'https://www.contracosta.ca.gov/Board-of-Supervisors',
-    'https://www.contracosta.ca.gov/4818/Board-of-Supervisors',
-    'https://www.contracosta.ca.gov/3179/Board-of-Supervisors',
-    'https://www.contracosta.ca.gov/418/Board-of-Supervisors',
-  ];
-  const ballotpediaUrl = 'https://ballotpedia.org/Contra_Costa_County,_California';
-  const fetches = await Promise.all([
-    ...ccPages.map((u) => safeText(u)),
-    safeText(ballotpediaUrl),
+  // Primary: District 5's own CCC page. The H1 reads
+  //   "Supervisor <Name>, District 5"
+  // (confirmed). Fall back to Ballotpedia table if the .gov site 403s.
+  const d5Url = 'https://www.contracosta.ca.gov/781/';
+  const [d5Html, ballotHtml] = await Promise.all([
+    safeText(d5Url),
+    safeText(BALLOTPEDIA_CCC_URL),
   ]);
-  const ballotHtml = fetches[fetches.length - 1];
 
   let name = '';
-  let usedUrl = ballotpediaUrl;
+  let usedUrl = d5Url;
 
-  // Ballotpedia anchor-based extraction is our most reliable source.
-  if (ballotHtml) {
-    name = extractPersonAfterLabel(
-      ballotHtml,
-      new RegExp(`District\\s+${COUNTY_BOS_DISTRICT}\\b`, 'i'),
-    );
-    if (name) diag.countySource = 'ballotpedia';
-  }
-
-  // Fall back to the official CCC site if Ballotpedia didn't work.
-  if (!name) {
-    for (let i = 0; i < ccPages.length; i++) {
-      const h = fetches[i];
-      if (!h) continue;
-      const found = extractPersonAfterLabel(
-        h,
-        new RegExp(`District\\s+${COUNTY_BOS_DISTRICT}\\b`, 'i'),
-      );
-      if (found) { name = found; usedUrl = ccPages[i]; diag.countySource = 'official'; break; }
+  if (d5Html) {
+    // Extract from <h1>...</h1> first, then <title>...</title> as fallback.
+    const h1 = d5Html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+    const titleTag = d5Html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+    const cand = [h1?.[1], titleTag?.[1]].filter(Boolean) as string[];
+    for (const c of cand) {
+      const text = decodeEntities(stripTags(c));
+      const m = text.match(/Supervisor\s+([A-Z][A-Za-z'\-.]+(?:\s+[A-Z][A-Za-z'\-.]+){1,3})/);
+      if (m) { name = m[1].trim(); diag.countySource = 'contracosta.ca.gov/781'; break; }
     }
   }
 
-  if (!name) diag.county = 'Ballotpedia + official both failed for D5';
+  // Ballotpedia fallback — find "Board of Supervisors" section, locate
+  // the District 5 row, take the first person-link.
+  if (!name && ballotHtml) {
+    const sectionStart = ballotHtml.search(/<h2[^>]*>\s*(?:<span[^>]*>)?\s*Board\s+of\s+Supervisors/i);
+    const sectionEnd = sectionStart >= 0 ? ballotHtml.indexOf('<h2', sectionStart + 10) : -1;
+    const section = sectionStart >= 0
+      ? ballotHtml.slice(sectionStart, sectionEnd > sectionStart ? sectionEnd : sectionStart + 8000)
+      : ballotHtml;
+    name = extractPersonAfterLabel(
+      section,
+      new RegExp(`District\\s+${COUNTY_BOS_DISTRICT}\\b`, 'i'),
+    );
+    if (name) { usedUrl = BALLOTPEDIA_CCC_URL; diag.countySource = 'ballotpedia'; }
+  }
+
+  if (!name) diag.county = 'contracosta.ca.gov/781 + Ballotpedia both failed';
   return [{
     level: 'county',
     office: `Supervisor, District ${COUNTY_BOS_DISTRICT} (Martinez)`,
@@ -407,11 +450,34 @@ async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
 // CITY — Martinez Mayor + Council
 // =====================================================================
 
+// Pull a Title-Case 2-4-word name from a window of plain text after a
+// label. Stricter than the anchor variant — for sites that don't use
+// wiki anchors. Skips dates / generic phrases.
+function extractNameNearLabelText(text: string, labelRe: RegExp, windowSize = 300): string {
+  const m = labelRe.exec(text);
+  if (!m) return '';
+  const start = m.index + m[0].length;
+  const slice = text.slice(start, start + windowSize);
+  // Find Title-Case name patterns. Skip month names, common-word starts.
+  const re = /\b([A-Z][a-z]+(?:\s+[A-Z][A-Za-z'\-.]+){1,3})\b/g;
+  let hit: RegExpExecArray | null;
+  while ((hit = re.exec(slice)) !== null) {
+    const n = hit[1].trim();
+    // Reject obvious non-names: months, generic words.
+    if (/^(January|February|March|April|May|June|July|August|September|October|November|December|Elected|Appointed|Term|Office|District|Mayor|Council|Member|City|County|California|Contra|Costa|Read|Click|Last|First|Next|Previous|Vice|Pro Tem|Government|Phone|Email)\b/i.test(n)) continue;
+    return n;
+  }
+  return '';
+}
+
 async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
-  // Anchor-based extraction from Ballotpedia (preferred) + official site.
+  // Primary: cityofmartinez.org. Secondary: Ballotpedia (anchor links
+  // + plain-text near each labeled seat). cityofmartinez.org may use a
+  // variety of CMS layouts (CivicPlus, custom), so we try multiple
+  // extraction strategies on the official HTML.
   const ofMartinez = [
-    'https://www.cityofmartinez.org/government/mayor-city-council',
     'https://www.cityofmartinez.org/government/mayor-and-city-council',
+    'https://www.cityofmartinez.org/government/mayor-city-council',
     'https://www.cityofmartinez.org/government',
   ];
   const ballotpediaUrl = 'https://ballotpedia.org/Martinez,_California';
@@ -420,13 +486,9 @@ async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
     safeText(ballotpediaUrl),
   ]);
   const ballotHtml = fetches[fetches.length - 1];
+  const officialHtml = fetches.slice(0, ofMartinez.length).find((h) => !!h) ?? '';
+  const officialUsedUrl = ofMartinez[fetches.slice(0, ofMartinez.length).findIndex((h) => !!h)] ?? ofMartinez[0];
 
-  const reps: Rep[] = [];
-  const sources: string[] = [];
-
-  // Build a list of (label, office) anchors to extract from Ballotpedia.
-  // The page typically has a "Government" or "Elected officials" table
-  // that mentions each seat in order.
   const seats: Array<{ labelRe: RegExp; office: string; district?: string }> = [
     { labelRe: /\bMayor\b/i,        office: 'Mayor' },
     { labelRe: /District\s+1\b/i,   office: 'Council Member, District 1', district: 'District 1' },
@@ -435,36 +497,67 @@ async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
     { labelRe: /District\s+4\b/i,   office: 'Council Member, District 4', district: 'District 4' },
   ];
 
-  const useBallot = ballotHtml ?? '';
-  const useOfficial = fetches.slice(0, ofMartinez.length).find((h) => !!h) ?? '';
+  const reps: Rep[] = [];
+  const officialText = officialHtml ? decodeEntities(stripTags(officialHtml)) : '';
+
+  // Reverse strategy for the official cityofmartinez.org page: each
+  // member is usually shown as "<Name>, <Office>" or
+  // "<Office> <Name>" near a photo. We try BOTH orderings.
+  const officialNameFinders: Array<(label: RegExp) => string> = [
+    // "Council Member John Doe, District 2" — name AFTER label.
+    (label) => officialText ? extractNameNearLabelText(officialText, label) : '',
+    // "John Doe, Council Member, District 2" — try a few well-known
+    // Martinez-style patterns by capturing names within 300 chars before
+    // the label.
+    (label) => {
+      if (!officialText) return '';
+      const m = label.exec(officialText);
+      if (!m) return '';
+      const before = officialText.slice(Math.max(0, m.index - 300), m.index);
+      const namesBefore = [...before.matchAll(/\b([A-Z][a-z]+(?:\s+[A-Z][A-Za-z'\-.]+){1,3})\b/g)]
+        .map((mm) => mm[1])
+        .filter((n) => !/^(Mayor|District|Council|Member|City|County|California|Contra|Costa|Term|Phone|Email|Read|Click)\b/i.test(n));
+      return namesBefore[namesBefore.length - 1] ?? '';
+    },
+  ];
 
   for (const seat of seats) {
     let name = '';
-    // Try Ballotpedia first.
-    if (useBallot) {
-      name = extractPersonAfterLabel(useBallot, seat.labelRe);
+    let source: string | null = null;
+
+    // 1. Official site, both orderings.
+    for (const fn of officialNameFinders) {
+      const v = fn(seat.labelRe);
+      if (v) { name = v; source = 'official'; break; }
     }
-    // Then official site as a fallback.
-    if (!name && useOfficial) {
-      name = extractPersonAfterLabel(useOfficial, seat.labelRe);
+
+    // 2. Ballotpedia anchor-based.
+    if (!name && ballotHtml) {
+      const sectionStart = ballotHtml.search(/<h2[^>]*>\s*(?:<span[^>]*>)?\s*(?:Mayor|City\s+Council|Elected\s+officials|Government)/i);
+      const sectionEnd = sectionStart >= 0 ? ballotHtml.indexOf('<h2', sectionStart + 10) : -1;
+      const section = sectionStart >= 0
+        ? ballotHtml.slice(sectionStart, sectionEnd > sectionStart ? sectionEnd : sectionStart + 12000)
+        : ballotHtml;
+      const found = extractPersonAfterLabel(section, seat.labelRe);
+      if (found) { name = found; source = 'ballotpedia'; }
     }
+
     if (name) {
       reps.push({
         level: 'city',
         office: seat.office,
         name,
         district: seat.district,
-        url: useBallot ? ballotpediaUrl : ofMartinez[0],
+        url: source === 'ballotpedia' ? ballotpediaUrl : officialUsedUrl,
       });
-      sources.push(seat.office);
     }
   }
 
   if (reps.length === 0) {
-    diag.city = 'no anchor-linked names found on Ballotpedia or official site';
-    return [{ level: 'city', office: 'Mayor + Council', name: '', url: 'https://www.cityofmartinez.org/government' }];
+    diag.city = `no names found (official html ${officialHtml ? 'fetched' : 'failed'}, ballot ${ballotHtml ? 'fetched' : 'failed'})`;
+    return [{ level: 'city', office: 'Mayor + Council', name: '', url: officialUsedUrl }];
   }
-  diag.citySource = `extracted ${sources.length} from ${useBallot ? 'ballotpedia' : 'official'}`;
+  diag.citySource = `parsed ${reps.length}/5 seats`;
   return reps;
 }
 
