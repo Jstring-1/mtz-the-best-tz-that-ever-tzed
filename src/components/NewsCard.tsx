@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Modal from './Modal';
 import type { FeedRow } from '@/lib/types';
 import type { NewsItem } from '@/lib/news-aggregator';
@@ -29,6 +29,17 @@ interface Row {
   link: string;
   source?: string;
   scope: Exclude<Tab, 'all'>;
+}
+
+interface ExtractedArticle {
+  url: string;
+  title: string;
+  byline: string | null;
+  excerpt: string | null;
+  content: string;
+  textLength: number;
+  siteName: string | null;
+  source: string;
 }
 
 function mapLocal(rows: FeedRow[]): Row[] {
@@ -95,6 +106,51 @@ export default function NewsCard(props: Props) {
   );
   const setOpen = (r: Row | null) => setOpenKey(r ? r.key : null);
 
+  // Lazy article-extraction state. Keyed by row.key so reopening the
+  // same article hits the in-memory cache instead of the server.
+  const [article, setArticle] = useState<ExtractedArticle | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [extractFailed, setExtractFailed] = useState(false);
+  const cacheRef = useRef<Map<string, ExtractedArticle | null>>(new Map());
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setArticle(null); setExtractFailed(false); setLoading(false);
+      abortRef.current?.abort();
+      return;
+    }
+    // Hit local memo cache first.
+    if (cacheRef.current.has(open.key)) {
+      const hit = cacheRef.current.get(open.key) ?? null;
+      setArticle(hit); setExtractFailed(hit == null); setLoading(false);
+      return;
+    }
+    // Otherwise fetch from /api/article-extract.
+    setArticle(null); setExtractFailed(false); setLoading(true);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    fetch(`/api/article-extract?url=${encodeURIComponent(open.link)}`, { signal: ctrl.signal })
+      .then(async (r) => {
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || j.empty) {
+          cacheRef.current.set(open.key, null);
+          setExtractFailed(true);
+        } else {
+          cacheRef.current.set(open.key, j as ExtractedArticle);
+          setArticle(j as ExtractedArticle);
+        }
+      })
+      .catch((e) => {
+        if (e?.name !== 'AbortError') {
+          cacheRef.current.set(open.key, null);
+          setExtractFailed(true);
+        }
+      })
+      .finally(() => setLoading(false));
+    return () => ctrl.abort();
+  }, [open]);
+
   return (
     <section className="card-section news-card">
       <div className="news-tabs">
@@ -145,18 +201,50 @@ export default function NewsCard(props: Props) {
           <>
             <div className="meta" style={{ marginBottom: 10 }}>
               <span className={`news-scope-badge scope-${open.scope}`}>{SCOPE_LABEL[open.scope]}</span>
-              {open.source ? `${open.source} · ` : ''}{relativeFromUnixSeconds(String(open.ts))}
+              {(article?.siteName || open.source) ? `${article?.siteName ?? open.source} · ` : ''}
+              {article?.byline ? `${article.byline} · ` : ''}
+              {relativeFromUnixSeconds(String(open.ts))}
             </div>
-            {open.body && (
+
+            {loading && (
+              <p className="muted" style={{ fontSize: '.85em', fontStyle: 'italic' }}>
+                Extracting article…
+              </p>
+            )}
+
+            {!loading && article?.content && (
               <div
-                className="news-body"
+                className="news-body article-extracted"
                 style={{ lineHeight: 1.55, fontSize: '.95em' }}
-                // RSS bodies are HTML; render trusted feed sources verbatim.
-                dangerouslySetInnerHTML={{ __html: open.body }}
+                // Readability-sanitized HTML — safe to inline.
+                dangerouslySetInnerHTML={{ __html: article.content }}
               />
             )}
+
+            {!loading && !article?.content && open.body && (
+              <>
+                <div
+                  className="news-body"
+                  style={{ lineHeight: 1.55, fontSize: '.95em' }}
+                  // Fall back to the RSS summary when extraction failed.
+                  dangerouslySetInnerHTML={{ __html: open.body }}
+                />
+                {extractFailed && (
+                  <p className="muted" style={{ fontSize: '.78em', marginTop: 10 }}>
+                    Couldn&rsquo;t pull the full article (paywall or blocked) — showing the RSS summary.
+                  </p>
+                )}
+              </>
+            )}
+
+            {!loading && !article?.content && !open.body && extractFailed && (
+              <p className="muted" style={{ fontSize: '.85em' }}>
+                No preview available — click below to read on the publisher&rsquo;s site.
+              </p>
+            )}
+
             <p style={{ marginTop: 16 }}>
-              <a className="event-modal-btn primary" href={open.link} target="_blank" rel="noopener">Read full article →</a>
+              <a className="event-modal-btn primary" href={article?.url ?? open.link} target="_blank" rel="noopener">Read full article →</a>
             </p>
           </>
         )}

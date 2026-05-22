@@ -1634,6 +1634,45 @@ main { padding-top: var(--top-stack-h); display: block; }
 .news-scope-badge.scope-us    { color: #c96; border-color: #642; }
 .news-scope-badge.scope-world { color: #9c9; border-color: #363; }
 
+/* Extracted-article body (Readability output). Constrain images,
+   keep paragraph rhythm, hide ads/figure-credit junk. */
+.article-extracted img,
+.article-extracted figure {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 12px auto;
+  border-radius: 4px;
+}
+.article-extracted figure img { margin: 0 auto; }
+.article-extracted figcaption {
+  font-size: .8em;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 4px;
+}
+.article-extracted p { margin: 0 0 14px; }
+.article-extracted h2,
+.article-extracted h3,
+.article-extracted h4 { margin: 20px 0 8px; font-weight: 600; color: var(--text); }
+.article-extracted a { color: var(--accent); text-decoration: underline; }
+.article-extracted ul,
+.article-extracted ol { padding-left: 24px; margin: 0 0 14px; }
+.article-extracted blockquote {
+  border-left: 3px solid var(--border);
+  padding: 4px 0 4px 14px;
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.article-extracted pre,
+.article-extracted code {
+  background: var(--bg-elev-2);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: .85em;
+}
+
 /* Alerts card body */
 .alerts-card .card.alert.local.clickable {
   background: #1a0707;
