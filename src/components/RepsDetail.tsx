@@ -104,8 +104,8 @@ export default function RepsDetail({ label, tooltip }: Props) {
             <Section title="State Legislature — Senate Dist 9 + Assembly Dist 15" reps={data.stateLegislature}
               emptyHint="OpenStates lookup empty (key missing or rate-limited)." />
 
-            <Section title="California — Governor" reps={data.state}
-              emptyHint="Governor page didn't parse this cycle." />
+            <Section title="California — Statewide officers" reps={data.state}
+              emptyHint="Ballotpedia state-officials table didn't parse this cycle." />
 
             <Section title="Federal — CA Senators + House CA-08" reps={data.federal}
               emptyHint="Congress.gov lookup empty (GOV_API_TOKEN missing or rate-limited)." />
