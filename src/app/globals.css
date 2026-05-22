@@ -1604,6 +1604,35 @@ main { padding-top: var(--top-stack-h); display: block; }
   background: var(--bg-elev-2);
   font-weight: 600;
 }
+.news-tab-count {
+  margin-left: 6px;
+  font-size: .78em;
+  color: var(--text-muted);
+  background: var(--bg-elev-2);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+.news-tab.active .news-tab-count { background: rgba(0,0,0,.25); color: var(--text); }
+
+/* Per-row scope badge (shown only in the "All" merged view) */
+.news-scope-badge {
+  display: inline-block;
+  font-size: .7em;
+  font-weight: 600;
+  letter-spacing: .03em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: 1px;
+  text-transform: uppercase;
+  color: var(--text);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+}
+.news-scope-badge.scope-local { color: var(--accent); border-color: var(--accent); }
+.news-scope-badge.scope-state { color: #6cc; border-color: #366; }
+.news-scope-badge.scope-us    { color: #c96; border-color: #642; }
+.news-scope-badge.scope-world { color: #9c9; border-color: #363; }
 
 /* Alerts card body */
 .alerts-card .card.alert.local.clickable {
