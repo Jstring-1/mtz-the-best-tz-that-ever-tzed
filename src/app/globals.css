@@ -282,7 +282,7 @@ main { padding-top: var(--top-stack-h); display: block; }
   z-index: 1001;
   display: flex; flex-wrap: nowrap;
   align-items: center; justify-content: center;
-  gap: 22px; padding: 0 16px;
+  gap: 40px; padding: 0 16px;
   border-bottom: 1px solid var(--border);
   /* Match the weather strips' typography (sans family, .68em). */
   font-size: .68em;

@@ -683,29 +683,29 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
     {
       key: 'grants',
       label: 'Funding',
-      value: gr ? `${gr.total}` : '—',
+      // Strip is uncluttered: show just the word. Tooltip carries the $.
+      value: 'Funding',
       tooltip: gr
-        ? `Federal funding to Martinez / Contra Costa Co. last ${gr.days}d — ${gr.count} unique awards across ${FUNDING_SOURCES.length} sources (USAspending.gov)`
+        ? `Federal funding to Martinez / Contra Costa Co. last ${gr.days}d — ${gr.total} across ${gr.count} unique awards · ${FUNDING_SOURCES.length} sources (USAspending.gov)`
         : 'Federal funding to Martinez / Contra Costa Co. (USAspending) — data unavailable',
       color: 'green',
     },
     {
       key: 'rep',
-      label: 'DeSaulnier',
-      value: r ? `${r.count} bills` : '—',
+      label: 'Bills',
+      value: 'Bills',
       tooltip: r
-        ? `Bills sponsored by Rep. Mark DeSaulnier (CA-10) this Congress${r.latest ? ` — latest: ${r.latest}` : ''}`
-        : 'Rep. DeSaulnier sponsored bills (Congress.gov) — data unavailable',
+        ? `Bills affecting Contra Costa Co. — incl. Rep. DeSaulnier (CA-10) sponsored & cosponsored this Congress${r.latest ? ` (latest: ${r.latest})` : ''}`
+        : 'Bills affecting Contra Costa Co. (Congress.gov) — data unavailable',
       color: 'gold',
-      href: 'https://www.congress.gov/member/mark-desaulnier/D000623',
     },
     {
       key: 'crime',
       label: 'Crime',
-      value: cr ? `${cr.count}/yr` : '—',
+      value: 'Crime',
       tooltip: cr
-        ? `Martinez PD violent crime, ${cr.year} (FBI CDE)`
-        : 'Martinez PD violent crime (FBI CDE) — data unavailable',
+        ? `Martinez PD + CCC Sheriff violent crime, ${cr.year} (FBI CDE) — ${cr.count} reported`
+        : 'Crime — Martinez PD + CCC Sheriff (FBI CDE)',
       color: 'red',
     },
   ];
