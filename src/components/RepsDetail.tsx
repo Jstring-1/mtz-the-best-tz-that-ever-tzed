@@ -112,10 +112,19 @@ export default function RepsDetail({ label, tooltip }: Props) {
 
             <p className="muted" style={{ fontSize: '.72em', marginTop: 12 }}>
               Cached {new Date(data.scrapedAt).toLocaleString()}. Refreshes every 12h.
-              {Object.keys(data.diag).length > 0 && (
-                <> · {Object.keys(data.diag).length} source(s) had partial data</>
-              )}
             </p>
+            {Object.keys(data.diag).length > 0 && (
+              <details style={{ marginTop: 8 }}>
+                <summary className="muted" style={{ fontSize: '.72em', cursor: 'pointer' }}>
+                  Diagnostics ({Object.keys(data.diag).length} source notes)
+                </summary>
+                <ul className="muted" style={{ fontSize: '.7em', marginTop: 4 }}>
+                  {Object.entries(data.diag).map(([k, v]) => (
+                    <li key={k}><code>{k}</code>: {v}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </>
         )}
       </Modal>
