@@ -14,18 +14,39 @@ interface Props {
   data?: Park[];
 }
 
+// East Bay Regional Park District PDF maps — bundled in /public/img/
+// so they're served same-origin and can be embedded directly in an
+// <iframe> (no proxy needed). When a map is selected, the nested modal
+// opens with the PDF embedded for in-page reading.
+const EBRPD_MAPS: Array<{ slug: string; label: string; file: string; note: string }> = [
+  { slug: 'district',     label: 'EBRPD — District Map',         file: '/img/eastbayparksdistrictmap.pdf',
+    note: 'Overview map of all East Bay Regional Park District parks (21 pages).' },
+  { slug: 'parksbycity',  label: 'EBRPD — Parks by City',        file: '/img/eastbayparksdistrictparksbycity.pdf',
+    note: 'Per-city listing of every EBRPD park, with addresses and amenities (90 pages).' },
+  { slug: 'wardmap',      label: 'EBRPD — Ward Map',             file: '/img/eastbayparkswardmap.pdf',
+    note: 'EBRPD board-of-directors ward boundaries and member assignments (109 pages).' },
+];
+
 // Two-level civic-strip popup:
-//   Level 1: a list of all Martinez parks (cards with thumbnail + name).
+//   Level 1: a list of all Martinez parks (cards with thumbnail + name)
+//            plus quick-links to the three EBRPD district map PDFs.
 //   Level 2: click a card → nested modal with the park's address,
 //            description, amenities, image, and a Google Maps link.
+//   Level 2 (map): click an EBRPD map link → nested modal with the
+//            PDF embedded inline.
 export default function ParksDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('parks');
   const [parkId, setParkId] = useUrlString('park');
+  const [mapSlug, setMapSlug] = useUrlString('parkmap');
 
   const parks = data ?? MARTINEZ_PARKS;
   const focused = useMemo<Park | null>(
     () => (parkId ? parks.find((p) => p.id === parkId) ?? null : null),
     [parkId, parks],
+  );
+  const focusedMap = useMemo(
+    () => (mapSlug ? EBRPD_MAPS.find((m) => m.slug === mapSlug) ?? null : null),
+    [mapSlug],
   );
 
   return (
@@ -34,6 +55,21 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Martinez parks" size="lg">
+        {/* EBRPD district map shortcuts — embedded PDFs from /public/img/. */}
+        <div className="park-map-links">
+          {EBRPD_MAPS.map((m) => (
+            <button
+              key={m.slug}
+              type="button"
+              className="event-modal-btn"
+              onClick={() => setMapSlug(m.slug)}
+              title={m.note}
+            >
+              📄 {m.label}
+            </button>
+          ))}
+        </div>
+
         {parks.length === 0 ? (
           <p className="muted">No parks registered.</p>
         ) : (
@@ -72,6 +108,28 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
           </>
         )}
       </Modal>
+
+      {focusedMap && (
+        <Modal open={true} onClose={() => setMapSlug(null)} title={focusedMap.label} size="xl">
+          <div className="park-pdf-wrap">
+            <iframe
+              key={focusedMap.file}
+              src={`${focusedMap.file}#pagemode=none`}
+              title={focusedMap.label}
+              className="park-pdf-frame"
+              loading="lazy"
+            />
+            <p style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <a className="event-modal-btn primary" href={focusedMap.file} target="_blank" rel="noopener">
+                Open PDF in new tab →
+              </a>
+              <a className="event-modal-btn" href={focusedMap.file} download>
+                Download PDF →
+              </a>
+            </p>
+          </div>
+        </Modal>
+      )}
 
       {focused && (
         <Modal open={true} onClose={() => setParkId(null)} title={focused.name} size="md">

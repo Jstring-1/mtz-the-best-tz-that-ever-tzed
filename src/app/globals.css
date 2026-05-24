@@ -1785,6 +1785,25 @@ button.rep-card.clickable:focus-visible {
 .park-amen-list { padding-left: 20px; margin: 4px 0; font-size: .9em; line-height: 1.5; }
 .park-amen-list li { margin-bottom: 2px; }
 
+/* Quick-link strip for EBRPD district PDFs at the top of Parks popup */
+.park-map-links {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* Inline PDF viewer for EBRPD district maps */
+.park-pdf-wrap { display: flex; flex-direction: column; min-width: 0; }
+.park-pdf-frame {
+  width: 100%;
+  height: 75vh;
+  min-height: 480px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: var(--bg-elev);
+}
+
 /* Economy popup — index cards + key-value grid */
 .econ-index-grid {
   display: grid;
