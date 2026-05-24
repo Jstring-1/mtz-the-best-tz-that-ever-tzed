@@ -908,8 +908,27 @@ export async function fetchRepVotes(limit = 20): Promise<RepVotesPayload> {
 // =====================================================================
 
 export interface RecallRow { source: string; title: string; date: string; url?: string; reason?: string }
-export interface FemaRow   { state: string; type: string; declared: string; title: string }
-export interface EonetRow  { title: string; category: string; date: string; url?: string }
+export interface FemaRow   {
+  state: string;
+  type: string;
+  declared: string;
+  title: string;
+  disasterNumber?: number;       // canonical FEMA disaster #, builds /disaster/N URL
+  designatedArea?: string;       // county/parish/borough where it applies
+  declarationType?: string;      // 'DR' = Major Disaster, 'EM' = Emergency, 'FM' = Fire Mgmt
+  fyDeclared?: number;
+}
+export interface EonetRow  {
+  title: string;
+  category: string;
+  date: string;
+  url?: string;                  // first source URL (kept for back-compat)
+  id?: string;                   // EONET event id (e.g. EONET_12345)
+  description?: string;          // multi-line summary when EONET provides one
+  link?: string;                 // canonical EONET API event URL
+  latestCoords?: [number, number]; // [lng, lat] from the latest geometry point
+  sources?: Array<{ id: string; url: string }>; // all sources, not just first
+}
 
 export interface GovNationalPayload {
   scrapedAt: string;
@@ -1038,7 +1057,13 @@ async function cpscRecalls(): Promise<RecallRow[]> {
 
 // ---- FEMA + NASA EONET ------------------------------------------------
 
-interface FemaResp { DisasterDeclarationsSummaries?: Array<{ state?: string; incidentType?: string; declarationDate?: string; declarationTitle?: string; incidentEndDate?: string | null }> }
+interface FemaResp { DisasterDeclarationsSummaries?: Array<{
+  state?: string; incidentType?: string;
+  declarationDate?: string; declarationTitle?: string;
+  incidentEndDate?: string | null;
+  disasterNumber?: number; designatedArea?: string;
+  declarationType?: string; fyDeclared?: number;
+}> }
 async function femaActive(): Promise<FemaRow[]> {
   const url =
     'https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries' +
@@ -1049,19 +1074,43 @@ async function femaActive(): Promise<FemaRow[]> {
     type: d.incidentType ?? '',
     declared: (d.declarationDate ?? '').slice(0, 10),
     title: d.declarationTitle ?? '',
+    disasterNumber: d.disasterNumber,
+    designatedArea: d.designatedArea,
+    declarationType: d.declarationType,
+    fyDeclared: d.fyDeclared,
   }));
 }
 
-interface EonetResp { events?: Array<{ title?: string; categories?: Array<{ title?: string }>; geometry?: Array<{ date?: string }>; sources?: Array<{ url?: string }> }> }
+interface EonetEvent {
+  id?: string;
+  title?: string;
+  description?: string;
+  link?: string;
+  categories?: Array<{ id?: string; title?: string }>;
+  geometry?: Array<{ date?: string; coordinates?: [number, number] }>;
+  sources?: Array<{ id?: string; url?: string }>;
+}
+interface EonetResp { events?: EonetEvent[] }
 async function eonetActive(): Promise<EonetRow[]> {
   const url = 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=14';
   const j = await safeJson<EonetResp>(url);
-  return (j?.events ?? []).slice(0, 15).map((e) => ({
-    title: e.title ?? '',
-    category: e.categories?.[0]?.title ?? '',
-    date: (e.geometry?.[e.geometry.length - 1]?.date ?? '').slice(0, 10),
-    url: e.sources?.[0]?.url,
-  }));
+  return (j?.events ?? []).slice(0, 15).map((e) => {
+    const lastGeo = e.geometry?.[e.geometry.length - 1];
+    const sources = (e.sources ?? [])
+      .filter((s): s is { id?: string; url: string } => !!s.url)
+      .map((s) => ({ id: s.id ?? '', url: s.url }));
+    return {
+      title: e.title ?? '',
+      category: e.categories?.[0]?.title ?? '',
+      date: (lastGeo?.date ?? '').slice(0, 10),
+      url: sources[0]?.url,
+      id: e.id,
+      description: e.description,
+      link: e.link,
+      latestCoords: lastGeo?.coordinates,
+      sources,
+    };
+  });
 }
 
 // ---- top-level fetcher -----------------------------------------------

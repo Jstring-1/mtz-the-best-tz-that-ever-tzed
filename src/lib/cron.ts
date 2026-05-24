@@ -613,7 +613,12 @@ async function noaaWaterRss(xmlBag: Record<string, string>) {
 // behind a paid plan, and returns the last-close datapoint after hours
 // instead of going dark. Cache key stays "12D_stocks" so the UI is
 // unchanged. The TWELVEDATA_KEY env var is now unused; leave or remove.
-const STOCK_SYMBOLS = ['^GSPC', '^DJI', '^IXIC', 'GME', 'PSLV'];
+// Major US equity indexes (^GSPC=S&P500, ^DJI=Dow, ^IXIC=NASDAQ,
+// ^RUT=Russell 2000) + volatility (^VIX) + a couple miscellaneous
+// holdings (GME, PSLV). The civic-bar Economy popup picks out the
+// macro indexes; everything else is available for a future stocks
+// dashboard.
+const STOCK_SYMBOLS = ['^GSPC', '^DJI', '^IXIC', '^RUT', '^VIX', 'GME', 'PSLV'];
 
 interface YahooChartMeta {
   symbol?: string;

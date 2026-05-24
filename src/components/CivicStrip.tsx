@@ -25,12 +25,14 @@ export default async function CivicStrip() {
   let council: CouncilScrapeResult | null = null;
   let national: GovNationalPayload | null = null;
   let parks: Park[] | null = null;
+  let stocks: Record<string, unknown> | null = null;
   try {
-    [payload, council, national, parks] = await Promise.all([
+    [payload, council, national, parks, stocks] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
       getJson<Park[]>('local_parks').catch(() => null),
+      getJson<Record<string, unknown>>('12D_stocks').catch(() => null),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -131,7 +133,12 @@ export default async function CivicStrip() {
         data={recallsList}
         scrapedAt={national?.scrapedAt}
       />
-      <EconomyDetail tooltip={economyTooltip} label={economyLabelHtml} data={economyData} />
+      <EconomyDetail
+        tooltip={economyTooltip}
+        label={economyLabelHtml}
+        data={economyData}
+        stocks={stocks as Parameters<typeof EconomyDetail>[0]['stocks']}
+      />
       <FemaDetail    tooltip={femaTooltip}    label={femaLabelHtml}    data={femaList} />
       <EonetDetail   tooltip={eonetTooltip}   label={eonetLabelHtml}   data={eonetList} />
       <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml}   data={parksList} />

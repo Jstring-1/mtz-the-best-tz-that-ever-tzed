@@ -1774,6 +1774,51 @@ button.rep-card.clickable:focus-visible {
 .park-amen-list { padding-left: 20px; margin: 4px 0; font-size: .9em; line-height: 1.5; }
 .park-amen-list li { margin-bottom: 2px; }
 
+/* Economy popup — index cards + key-value grid */
+.econ-index-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+.econ-index {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 8px;
+  min-width: 0;
+}
+.econ-index-head { display: flex; justify-content: space-between; align-items: baseline; }
+.econ-index-name { font-size: .82em; font-weight: 600; color: var(--text); }
+.econ-index-sym  { font-size: .68em; color: var(--text-muted); font-family: ui-monospace, monospace; }
+.econ-index-price { font-size: 1.15em; font-weight: 700; color: var(--accent); margin-top: 4px; }
+.econ-index-change { font-size: .82em; margin-top: 2px; }
+.econ-index-change.dir-up   { color: var(--accent-green); }
+.econ-index-change.dir-down { color: var(--accent-warm); }
+.econ-index-change.dir-flat { color: var(--text-muted); }
+
+/* Macro key-value list — two-column grid with right-aligned values */
+.econ-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px;
+  row-gap: 4px;
+  margin: 8px 0 0;
+}
+.econ-kv dt { color: var(--text-muted); font-size: .9em; align-self: center; }
+.econ-kv dd { margin: 0; text-align: right; }
+.econ-kv dd.big { font-size: 1.1em; font-weight: 600; color: var(--accent); }
+
+/* FEMA expanded-row details */
+.fema-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 14px; row-gap: 3px;
+  font-size: .9em; margin: 0;
+}
+.fema-kv dt { color: var(--text-muted); }
+.fema-kv dd { margin: 0; }
+
 /* Council member strip at the top of the Council popup — small
    clickable thumbnails that open each member's bio modal. */
 .council-strip {

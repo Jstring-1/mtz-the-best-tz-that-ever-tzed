@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool } from '@/lib/useUrlState';
 import type { FemaRow } from '@/lib/gov';
@@ -10,12 +11,23 @@ interface Props {
   data: FemaRow[];
 }
 
-// Civic-strip popup for active FEMA disaster declarations nationwide,
-// sourced from the gov_national cron payload (4h refresh). Each row is
-// one declaration: state, incident type, declaration date, and the
-// official title.
+const DECLARATION_TYPE_NAMES: Record<string, string> = {
+  DR: 'Major Disaster Declaration',
+  EM: 'Emergency Declaration',
+  FM: 'Fire Management Assistance',
+};
+
+function femaUrl(d: FemaRow): string {
+  return d.disasterNumber
+    ? `https://www.fema.gov/disaster/${d.disasterNumber}`
+    : 'https://www.fema.gov/disaster/declarations';
+}
+
 export default function FemaDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('fema');
+  // Click a row to expand its details in-place.
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+
   return (
     <>
       <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
@@ -28,25 +40,75 @@ export default function FemaDetail({ label, tooltip, data }: Props) {
           <>
             <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
               {data.length} open declaration{data.length === 1 ? '' : 's'} (incidentEndDate is null).
-              Sorted newest first.
+              Click a row for details.
             </p>
             <ul className="recall-list">
-              {data.map((d, i) => (
-                <li key={`${d.state}-${d.declared}-${i}`} className="recall-item">
-                  <div className="recall-head" style={{ cursor: 'default' }}>
-                    <span className="recall-title">{d.title || d.type}</span>
-                    <span className="meta">
-                      <span className="recall-src">{d.state}</span>
-                      {d.type && <span> · {d.type}</span>}
-                      {d.declared && <span> · declared {d.declared}</span>}
-                    </span>
-                  </div>
-                </li>
-              ))}
+              {data.map((d, i) => {
+                const expanded = openIdx === i;
+                const typeLabel = d.declarationType
+                  ? (DECLARATION_TYPE_NAMES[d.declarationType] ?? d.declarationType)
+                  : d.type;
+                return (
+                  <li key={`${d.state}-${d.declared}-${i}`} className="recall-item">
+                    <button
+                      type="button"
+                      className="recall-head"
+                      onClick={() => setOpenIdx(expanded ? null : i)}
+                    >
+                      <span className="recall-title">{d.title || d.type}</span>
+                      <span className="meta">
+                        <span className="recall-src">{d.state}</span>
+                        {d.disasterNumber && <span> · DR-{d.disasterNumber}</span>}
+                        {d.type && <span> · {d.type}</span>}
+                        {d.declared && <span> · declared {d.declared}</span>}
+                      </span>
+                    </button>
+                    {expanded && (
+                      <div className="recall-reason">
+                        <dl className="fema-kv">
+                          {d.disasterNumber && <>
+                            <dt>Disaster #</dt>
+                            <dd>DR-{d.disasterNumber}</dd>
+                          </>}
+                          {d.declarationType && <>
+                            <dt>Type</dt>
+                            <dd>{typeLabel}</dd>
+                          </>}
+                          {d.designatedArea && <>
+                            <dt>Designated area</dt>
+                            <dd>{d.designatedArea}</dd>
+                          </>}
+                          {d.state && <>
+                            <dt>State</dt>
+                            <dd>{d.state}</dd>
+                          </>}
+                          {d.type && <>
+                            <dt>Incident</dt>
+                            <dd>{d.type}</dd>
+                          </>}
+                          {d.declared && <>
+                            <dt>Declared</dt>
+                            <dd>{d.declared}</dd>
+                          </>}
+                          {d.fyDeclared && <>
+                            <dt>Fiscal year</dt>
+                            <dd>FY{d.fyDeclared}</dd>
+                          </>}
+                        </dl>
+                        <p style={{ marginTop: 8 }}>
+                          <a className="event-modal-btn primary" href={femaUrl(d)} target="_blank" rel="noopener">
+                            View on FEMA.gov →
+                          </a>
+                        </p>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
             <p style={{ marginTop: 12 }}>
-              <a className="event-modal-btn primary" href="https://www.fema.gov/disaster/declarations" target="_blank" rel="noopener">
-                FEMA disaster declarations →
+              <a className="event-modal-btn" href="https://www.fema.gov/disaster/declarations" target="_blank" rel="noopener">
+                All FEMA declarations →
               </a>
             </p>
           </>
