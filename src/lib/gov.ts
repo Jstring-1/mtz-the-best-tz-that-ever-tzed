@@ -611,6 +611,11 @@ export interface GovLocalPayload {
     grants?: GrantRow[];                          // legacy: alias for funding['grants']
     funding?: Record<string, GrantRow[]>;         // 20-source funding registry
     fundingSources?: FundingSourceMeta[];         // dropdown metadata
+    // Raw breakdowns surfaced to detail-popup components in the civic
+    // strip. Kept here (not in items[]) so the strip stays compact and
+    // the popup has the full data.
+    unemp?: { county: string | null; state: string | null; nation: string | null; period: string } | null;
+    gas?:   { value: string; period: string } | null;
   };
   debug?: Record<string, string>;   // per-source success/failure for /admin troubleshooting
 }
@@ -663,11 +668,11 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
     {
       key: 'unemp',
       label: 'Unemployment',
-      value: u
-        ? `CC ${u.county ?? '—'}/CA ${u.state ?? '—'}/US ${u.nation ?? '—'}`
-        : '—',
+      // Compact: just the county rate. Full CC/CA/US breakdown lives
+      // in the UnempDetail popup (extras.unemp).
+      value: u?.county ? `${u.county}%` : '—',
       tooltip: u
-        ? `Unemployment rate (latest ${u.period}) — Contra Costa ${u.county ?? '—'} · California ${u.state ?? '—'} · United States ${u.nation ?? '—'}. Sources: BLS LAUS (county+state, NSA), BLS LNS (US, SA).`
+        ? `Contra Costa unemployment ${u.county ?? '—'}% (BLS LAUS, ${u.period}). Click for CA + US.`
         : 'Unemployment (BLS) — data unavailable',
       color: 'red',
     },
@@ -676,7 +681,7 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
       label: 'Gas',
       value: g ? g.value : '—',
       tooltip: g
-        ? `California regular gas weekly avg, EIA, week of ${g.period}`
+        ? `California regular gas weekly avg ${g.value} (EIA, week of ${g.period}). Click for more.`
         : 'California regular gas (EIA weekly) — data unavailable',
       color: 'peru',
     },
@@ -758,13 +763,21 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
   // sources came back empty this run, keep showing the previous
   // payload so the popup isn't a blank state.
   const fundingEmpty = !f || Object.values(f.data).every((rows) => rows.length === 0);
-  const extras = fundingEmpty && prev?.extras
-    ? prev.extras
+  const fundingExtras = fundingEmpty && prev?.extras
+    ? { grants: prev.extras.grants, funding: prev.extras.funding, fundingSources: prev.extras.fundingSources }
     : {
         grants: gr?.rows ?? [],
         funding: f?.data ?? {},
         fundingSources: f?.sources ?? [],
       };
+  // Same stale-data fallback for unemp / gas — these power the new
+  // detail popups. If this run's fetch failed, surface the last known
+  // values so the popup isn't blank.
+  const extras = {
+    ...fundingExtras,
+    unemp: u ?? prev?.extras?.unemp ?? null,
+    gas:   g ?? prev?.extras?.gas   ?? null,
+  };
 
   return {
     scrapedAt: new Date().toISOString(),

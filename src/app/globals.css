@@ -1710,6 +1710,18 @@ button.rep-card.clickable:focus-visible {
 .rep-bio-text p { line-height: 1.55; margin: 0 0 10px; font-size: .92em; }
 .rep-bio-links { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* Big-number metric grid used by UnempDetail / GasDetail popups. */
+.unemp-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 4px;
+  column-gap: 18px;
+  margin: 8px 0 0;
+}
+.unemp-grid dt { color: var(--text-muted); font-size: .9em; align-self: center; }
+.unemp-grid dd { margin: 0; text-align: right; }
+.unemp-grid dd.big { font-size: 1.4em; font-weight: 600; color: var(--accent); }
+
 /* Council member strip at the top of the Council popup — small
    clickable thumbnails that open each member's bio modal. */
 .council-strip {

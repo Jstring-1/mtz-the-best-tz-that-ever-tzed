@@ -6,6 +6,8 @@ import GrantsDetail from './GrantsDetail';
 import CrimeDetail from './CrimeDetail';
 import CouncilDetail from './CouncilDetail';
 import RepsDetail from './RepsDetail';
+import UnempDetail from './UnempDetail';
+import GasDetail from './GasDetail';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -28,6 +30,8 @@ export default async function CivicStrip() {
   const grants = payload?.extras?.grants ?? [];
   const funding = payload?.extras?.funding ?? {};
   const fundingSources = payload?.extras?.fundingSources ?? [];
+  const unempData = payload?.extras?.unemp ?? null;
+  const gasData = payload?.extras?.gas ?? null;
 
   // Council slot — value-only label. Count + date moved to the tooltip
   // to keep the strip uncluttered.
@@ -56,8 +60,9 @@ export default async function CivicStrip() {
           />
         );
         if (it.key === 'crime')  return <CrimeDetail key={it.key} tooltip={it.tooltip} label={valHtml} />;
-        // Static items (unemployment, gas) — non-interactive, just text
-        // with a tooltip; optionally wrapped in a link.
+        if (it.key === 'unemp')  return <UnempDetail key={it.key} tooltip={it.tooltip} label={valHtml} data={unempData} />;
+        if (it.key === 'gas')    return <GasDetail   key={it.key} tooltip={it.tooltip} label={valHtml} data={gasData}   />;
+        // Any other static items — non-interactive text with tooltip.
         const inner = <span className={`civic-strip-val ${it.color ?? ''}`}>{it.value}</span>;
         return (
           <span key={it.key} className="civic-strip-item" title={it.tooltip}>
