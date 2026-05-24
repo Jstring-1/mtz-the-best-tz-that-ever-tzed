@@ -83,6 +83,7 @@ export const REP_BIOS: Record<string, RepBio> = {
     district: 'District 5 (Martinez)',
     photoFile: 'preston.png',
     phone: '925-608-4200',
+    email: 'bos5@bos.cccounty.us',
     bio:
       'District 5 Supervisor on the Contra Costa County Board of Supervisors, representing Martinez and surrounding communities.\n\n' +
       'Pittsburg Office\n' +

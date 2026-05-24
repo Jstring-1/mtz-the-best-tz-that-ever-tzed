@@ -67,15 +67,21 @@ function RepCard({ r, onOpen }: { r: Rep; onOpen: (r: Rep) => void }) {
   );
 }
 
-function Section({ title, reps, onOpen, emptyHint }: {
+function Section({ title, reps, onOpen, emptyHint, headerExtra }: {
   title: string;
   reps: Rep[];
   onOpen: (r: Rep) => void;
   emptyHint?: string;
+  /** Optional inline content rendered after the section title — e.g.
+      a Map button next to the County header. */
+  headerExtra?: React.ReactNode;
 }) {
   return (
     <section className="reps-section">
-      <h3 className="rep-h">{title} <span className="muted" style={{ fontWeight: 400, fontSize: '.78em' }}>({reps.length})</span></h3>
+      <h3 className="rep-h">
+        {title} <span className="muted" style={{ fontWeight: 400, fontSize: '.78em' }}>({reps.length})</span>
+        {headerExtra && <span className="rep-h-extra" style={{ marginLeft: 8 }}>{headerExtra}</span>}
+      </h3>
       {reps.length === 0 ? (
         <p className="muted">{emptyHint ?? 'No data.'}</p>
       ) : (
@@ -90,6 +96,9 @@ function Section({ title, reps, onOpen, emptyHint }: {
 export default function RepsDetail({ label, tooltip }: Props) {
   const [open, setOpen] = useUrlBool('reps');
   const [bioSlug, setBioSlug] = useUrlString('rbio');
+  // Map viewer for the CCC District 5 boundary image (img/district5map.jpg).
+  // URL-state'd so a link to ?reps=1&d5map=1 opens straight into it.
+  const [d5MapOpen, setD5MapOpen] = useUrlBool('d5map');
   const [data, setData] = useState<RepsPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [empty, setEmpty] = useState<string | null>(null);
@@ -138,6 +147,11 @@ export default function RepsDetail({ label, tooltip }: Props) {
               emptyHint="Couldn't read the city site this cycle — try the official link." />
 
             <Section title="County — Supervisor, District 5" reps={data.county} onOpen={openBio}
+              headerExtra={
+                <button type="button" className="event-modal-btn" onClick={() => setD5MapOpen(true)} title="District 5 boundary map">
+                  🗺 Map
+                </button>
+              }
               emptyHint="Couldn't read the county BOS page this cycle." />
 
             <Section title="State Legislature — Senate Dist 9 + Assembly Dist 15" reps={data.stateLegislature} onOpen={openBio}
@@ -169,6 +183,16 @@ export default function RepsDetail({ label, tooltip }: Props) {
       </Modal>
 
       {bioRep && <RepBioModal rep={bioRep} onClose={() => setBioSlug(null)} />}
+
+      <Modal open={d5MapOpen} onClose={() => setD5MapOpen(false)} title="CCC Board of Supervisors — District 5" size="lg">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/img/district5map.jpg" alt="Contra Costa County District 5 boundary map" className="d5-map-img" />
+        <p style={{ marginTop: 10 }}>
+          <a className="event-modal-btn" href="/img/district5map.jpg" target="_blank" rel="noopener">
+            Open full-size in new tab →
+          </a>
+        </p>
+      </Modal>
     </>
   );
 }

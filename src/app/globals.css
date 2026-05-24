@@ -1798,6 +1798,16 @@ button.rep-card.clickable:focus-visible {
   background: var(--bg-elev);
 }
 
+/* CCC District 5 boundary map shown in the Reps popup. */
+.d5-map-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+}
+
 /* Economy popup — index cards + key-value grid */
 .econ-index-grid {
   display: grid;
