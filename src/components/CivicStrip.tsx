@@ -44,10 +44,21 @@ export default async function CivicStrip() {
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
 
+  // Defensive normalization: when the cron writes a fresh payload it
+  // uses the new short format ("4.4%"). But until the next 12h refresh
+  // runs, items[].value can still be the old "CC 4.4%/CA 5.1%/US 3.8%"
+  // shape — extract just the county number so the strip looks right now.
+  const displayValue = (it: GovStripItem): string => {
+    if (it.key !== 'unemp') return it.value;
+    const m = it.value.match(/CC\s*([\d.]+)%?/i);
+    return m ? `${m[1]}%` : it.value;
+  };
+
   return (
     <section className="civic-strip" aria-label="Civic indicators">
       {items.map((it) => {
-        const valHtml = `<span class="civic-strip-val ${it.color ?? ''}">${it.value}</span>`;
+        const shown = displayValue(it);
+        const valHtml = `<span class="civic-strip-val ${it.color ?? ''}">${shown}</span>`;
         if (it.key === 'rep')    return <BillsDetail key={it.key} tooltip={it.tooltip} label={valHtml} />;
         if (it.key === 'grants') return (
           <GrantsDetail
@@ -63,7 +74,7 @@ export default async function CivicStrip() {
         if (it.key === 'unemp')  return <UnempDetail key={it.key} tooltip={it.tooltip} label={valHtml} data={unempData} />;
         if (it.key === 'gas')    return <GasDetail   key={it.key} tooltip={it.tooltip} label={valHtml} data={gasData}   />;
         // Any other static items — non-interactive text with tooltip.
-        const inner = <span className={`civic-strip-val ${it.color ?? ''}`}>{it.value}</span>;
+        const inner = <span className={`civic-strip-val ${it.color ?? ''}`}>{shown}</span>;
         return (
           <span key={it.key} className="civic-strip-item" title={it.tooltip}>
             {it.href ? <a href={it.href} target="_blank" rel="noopener">{inner}</a> : inner}
