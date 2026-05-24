@@ -61,6 +61,13 @@ export interface CrimePayload {
 // Fetch one (ORI, offense, year) and return { count, agencyName }.
 // Sums ONLY the "<Agency> Offenses" keys — skips "<Agency> Clearances"
 // (which are a subset of offenses and would double-count).
+//
+// Note: the `agencyName` we read from the actuals key is for diagnostics
+// only. FBI's CDE API is known to mis-label some ORIs (queries to
+// CA0071400 / Martinez PD return responses tagged "El Cerrito Police
+// Department"). The displayed label comes from our hardcoded
+// AGENCIES fallbackName, which we verified against CA DOJ's authoritative
+// ORI registry.
 async function fetchOne(ori: string, offense: string, year: number): Promise<{ count: number; agencyName: string | null }> {
   const url =
     `https://api.usa.gov/crime/fbi/cde/summarized/agency/${ori}/${offense}` +
@@ -91,7 +98,10 @@ async function fetchAgency(ori: string, fallbackName: string): Promise<CrimeAgen
   const thisYear = new Date().getUTCFullYear();
   let year = 0;
   let counts: Record<string, number> = {};
-  let detectedName: string | null = null;
+  // Diagnostics: capture whatever name FBI reports in actuals keys.
+  // Wrapped in an object so TypeScript's narrowing doesn't think the
+  // outer var stays null after the forEach callback assignments.
+  const fbiName: { value: string | null } = { value: null };
   // Walk back up to 4 years to find a year with real data.
   for (const candidate of [thisYear - 1, thisYear - 2, thisYear - 3, thisYear - 4]) {
     const settled = await Promise.allSettled(OFFENSES.map(([k]) => fetchOne(ori, k, candidate)));
@@ -99,7 +109,7 @@ async function fetchAgency(ori: string, fallbackName: string): Promise<CrimeAgen
     OFFENSES.forEach(([k], i) => {
       if (settled[i].status === 'fulfilled') {
         tally[k] = settled[i].value.count;
-        if (!detectedName && settled[i].value.agencyName) detectedName = settled[i].value.agencyName;
+        if (!fbiName.value && settled[i].value.agencyName) fbiName.value = settled[i].value.agencyName;
       } else {
         tally[k] = 0;
       }
@@ -110,12 +120,22 @@ async function fetchAgency(ori: string, fallbackName: string): Promise<CrimeAgen
       break;
     }
   }
+  // Log when FBI's reported name disagrees with our verified mapping —
+  // visible in Railway logs for debugging, doesn't affect output.
+  if (fbiName.value && fbiName.value.toLowerCase() !== fallbackName.toLowerCase()) {
+    console.warn(`[crime] FBI labels ${ori} as "${fbiName.value}" but DOJ ORI registry says "${fallbackName}". Trusting registry; using fallback.`);
+  }
   const rows = OFFENSES.map(([k, label]) => ({ key: k, label, count: counts[k] ?? 0 }));
   const violent  = (counts['homicide'] ?? 0) + (counts['rape'] ?? 0) + (counts['robbery'] ?? 0) + (counts['aggravated-assault'] ?? 0);
   const property = (counts['burglary'] ?? 0) + (counts['larceny'] ?? 0) + (counts['motor-vehicle-theft'] ?? 0) + (counts['arson'] ?? 0);
   return {
     ori,
-    name: detectedName ?? fallbackName,
+    // Always use the hardcoded fallback — verified against CA DOJ's
+    // authoritative ORI registry. FBI CDE response labels can be wrong
+    // (e.g. CA0071400 / Martinez PD returns a key labeled "El Cerrito
+    // Police Department"; the data behind it IS Martinez's per the
+    // registry, just mis-tagged in FBI's response).
+    name: fallbackName,
     year,
     rows,
     violent,
