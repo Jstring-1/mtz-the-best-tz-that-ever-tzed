@@ -4,11 +4,14 @@ import { useMemo } from 'react';
 import Modal from './Modal';
 import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 import type { Park } from '@/lib/types';
+import { MARTINEZ_PARKS } from '@/lib/parks-data';
 
 interface Props {
   label: string;
   tooltip?: string;
-  data: Park[];
+  /** Optional override — defaults to the hand-maintained MARTINEZ_PARKS
+   *  registry. Caller can pass an alternate source if needed. */
+  data?: Park[];
 }
 
 // Two-level civic-strip popup:
@@ -19,9 +22,10 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('parks');
   const [parkId, setParkId] = useUrlString('park');
 
+  const parks = data ?? MARTINEZ_PARKS;
   const focused = useMemo<Park | null>(
-    () => (parkId ? data.find((p) => p.id === parkId) ?? null : null),
-    [parkId, data],
+    () => (parkId ? parks.find((p) => p.id === parkId) ?? null : null),
+    [parkId, parks],
   );
 
   return (
@@ -30,16 +34,16 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Martinez parks" size="lg">
-        {data.length === 0 ? (
-          <p className="muted">No parks cached yet — run /admin → 12h.</p>
+        {parks.length === 0 ? (
+          <p className="muted">No parks registered.</p>
         ) : (
           <>
             <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              {data.length} parks scraped from cityofmartinez.org. Click any card for address,
-              amenities, and a map link.
+              {parks.length} Martinez parks. Click any card for address, amenities,
+              and a map link.
             </p>
             <div className="reps-grid">
-              {data.map((p) => (
+              {parks.map((p) => (
                 <button
                   key={p.id}
                   type="button"

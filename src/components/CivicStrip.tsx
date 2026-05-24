@@ -1,7 +1,6 @@
 import { getJson } from '@/lib/cache';
 import type { GovLocalPayload, GovNationalPayload, GovStripItem } from '@/lib/gov';
 import type { CouncilScrapeResult } from '@/lib/scrape-council';
-import type { Park } from '@/lib/types';
 import BillsDetail from './BillsDetail';
 import GrantsDetail from './GrantsDetail';
 import CrimeDetail from './CrimeDetail';
@@ -24,14 +23,12 @@ export default async function CivicStrip() {
   let payload: GovLocalPayload | null = null;
   let council: CouncilScrapeResult | null = null;
   let national: GovNationalPayload | null = null;
-  let parks: Park[] | null = null;
   let stocks: Record<string, unknown> | null = null;
   try {
-    [payload, council, national, parks, stocks] = await Promise.all([
+    [payload, council, national, stocks] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
-      getJson<Park[]>('local_parks').catch(() => null),
       getJson<Record<string, unknown>>('12D_stocks').catch(() => null),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
@@ -75,12 +72,10 @@ export default async function CivicStrip() {
   const eonetTooltip = eonetList.length
     ? `${eonetList.length} active NASA EONET natural events — click to browse.`
     : 'NASA EONET natural events — cache empty. Run /admin → 4h.';
-  // Martinez parks.
-  const parksList = parks ?? [];
+  // Martinez parks — static registry (src/lib/parks-data.ts). ParksDetail
+  // pulls from it directly so we don't need to pass a `data` prop.
   const parksLabelHtml = `<span class="civic-strip-val green">Parks</span>`;
-  const parksTooltip = parksList.length
-    ? `${parksList.length} Martinez parks — click for amenities, photos, and map.`
-    : 'Martinez parks — cache empty. Run /admin → 12h.';
+  const parksTooltip = 'Martinez parks — click for address and map link.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -143,7 +138,7 @@ export default async function CivicStrip() {
       <EonetDetail   tooltip={eonetTooltip}   label={eonetLabelHtml}   data={eonetList} />
       <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
       <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
-      <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml}   data={parksList} />
+      <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
     </section>
   );
 }

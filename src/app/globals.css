@@ -243,6 +243,17 @@ main { padding-top: var(--top-stack-h); display: block; }
 .wx-strip::-webkit-scrollbar { display: none; }
 .wx-strip img { height: 16px; }
 .wx-strip .cond { display: inline-flex; align-items: center; gap: 6px; }
+/* When .cond is on a <button> (the clickable current-temp trigger),
+   reset browser default chrome so it visually matches the strip. */
+.wx-strip button.cond {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.wx-strip button.cond:hover { filter: brightness(1.2); text-decoration: underline; }
 .wx-strip .clock  { color: var(--wx-date); }
 .wx-strip .gold   { color: var(--wx-cond); }
 .wx-strip .red    { color: var(--wx-temp); }

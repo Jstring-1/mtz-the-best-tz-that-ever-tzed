@@ -1128,7 +1128,8 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await Promise.all([
       safe('osm_places',          () => osmPlaces(json),          ok, errors, timings),
       safe('ticketmaster_events', () => ticketmasterEvents(json), ok, errors, timings),
-      safe('local_parks',         () => localParks(json),         ok, errors, timings),
+      // local_parks cron job removed — see src/lib/parks-data.ts for
+      // the static registry that replaced it.
       safe('gov_local',           () => govLocal(json),           ok, errors, timings),
       safe('ccrmc_data',          () => ccrmcData(json),          ok, errors, timings),
       safe('ccc_comp',            () => cccCompensation(json),    ok, errors, timings),
