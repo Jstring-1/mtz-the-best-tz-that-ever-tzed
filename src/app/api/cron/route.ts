@@ -15,6 +15,13 @@ async function handle(req: NextRequest) {
       `OK [bucket=${bucket}] elapsed=${r.ms}ms`,
       `ran (${r.ok.length}): ${r.ok.join(', ')}`,
     ];
+    // Per-job timings, slowest first — surfaces which job is dragging
+    // the bucket toward Railway's ~90s HTTP-proxy timeout.
+    const timingEntries = Object.entries(r.timings).sort((a, b) => b[1] - a[1]);
+    if (timingEntries.length) {
+      lines.push('timings (slowest first):');
+      for (const [name, ms] of timingEntries) lines.push(`  ${name}: ${ms}ms`);
+    }
     const errKeys = Object.keys(r.errors);
     if (errKeys.length) {
       lines.push(`errors (${errKeys.length}):`);

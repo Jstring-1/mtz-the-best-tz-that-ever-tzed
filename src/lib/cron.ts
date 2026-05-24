@@ -27,9 +27,14 @@ interface RunResult {
   ok: string[];
   errors: Record<string, string>;
   ms: number;
+  // Per-job wall-clock duration in ms. Surfaced in the /api/cron text
+  // response so we can see at a glance which job is dragging the bucket
+  // toward Railway's ~90s HTTP proxy timeout.
+  timings: Record<string, number>;
 }
 
-async function safe<T>(name: string, fn: () => Promise<T>, ok: string[], errors: Record<string, string>): Promise<T | undefined> {
+async function safe<T>(name: string, fn: () => Promise<T>, ok: string[], errors: Record<string, string>, timings: Record<string, number>): Promise<T | undefined> {
+  const t0 = Date.now();
   try {
     const v = await fn();
     ok.push(name);
@@ -37,6 +42,8 @@ async function safe<T>(name: string, fn: () => Promise<T>, ok: string[], errors:
   } catch (e) {
     errors[name] = e instanceof Error ? e.message : String(e);
     return undefined;
+  } finally {
+    timings[name] = Date.now() - t0;
   }
 }
 
@@ -1054,6 +1061,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
   const start = Date.now();
   const ok: string[] = [];
   const errors: Record<string, string> = {};
+  const timings: Record<string, number> = {};
   const json: Record<string, unknown> = {};
   const xmlBag: Record<string, string> = {};
   const miscBag: Record<string, string> = {};
@@ -1063,32 +1071,32 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
   //     external pinger to truly fire every minute (GitHub Actions floors
   //     cron schedules at 5 min).
   if (bucket === '1m' || all) {
-    await safe('weatherapi_current', () => weatherapiCurrent(json), ok, errors);
-    await safe('openweather',        () => openweather(json),       ok, errors);
+    await safe('weatherapi_current', () => weatherapiCurrent(json), ok, errors, timings);
+    await safe('openweather',        () => openweather(json),       ok, errors, timings);
   }
 
   // 2m: AQI — sensor refreshes ~every 2 min.
   if (bucket === '2m' || all) {
-    await safe('purpleair', () => purpleair(json), ok, errors);
+    await safe('purpleair', () => purpleair(json), ok, errors, timings);
   }
 
   if (bucket === '5m' || all) {
-    await safe('noaa_alerts',        () => noaaAlerts(json),        ok, errors);
-    await safe('twelvedata_stocks',  () => twelvedataStocks(json),  ok, errors);
+    await safe('noaa_alerts',        () => noaaAlerts(json),        ok, errors, timings);
+    await safe('twelvedata_stocks',  () => twelvedataStocks(json),  ok, errors, timings);
   }
 
   if (bucket === '15m' || all) {
-    await safe('noaa_buoys', () => noaaBuoys(json), ok, errors);
+    await safe('noaa_buoys', () => noaaBuoys(json), ok, errors, timings);
   }
 
   if (bucket === '1h' || all) {
-    await safe('noaa_forecast',       () => noaaForecast(json),       ok, errors);
-    await safe('noaa_hourly',         () => noaaHourly(json),         ok, errors);
-    await safe('noaa_aviation',       () => noaaAviation(json),       ok, errors);
-    await safe('weatherapi_marine',   () => weatherapiMarine(json),   ok, errors);
-    await safe('weatherapi_forecast', () => weatherapiForecast(json), ok, errors);
-    await safe('usgs_quakes',         () => usgsQuakes(json),         ok, errors);
-    await safe('ebird',               () => ebird(json),              ok, errors);
+    await safe('noaa_forecast',       () => noaaForecast(json),       ok, errors, timings);
+    await safe('noaa_hourly',         () => noaaHourly(json),         ok, errors, timings);
+    await safe('noaa_aviation',       () => noaaAviation(json),       ok, errors, timings);
+    await safe('weatherapi_marine',   () => weatherapiMarine(json),   ok, errors, timings);
+    await safe('weatherapi_forecast', () => weatherapiForecast(json), ok, errors, timings);
+    await safe('usgs_quakes',         () => usgsQuakes(json),         ok, errors, timings);
+    await safe('ebird',               () => ebird(json),              ok, errors, timings);
   }
 
   if (bucket === '4h' || all) {
@@ -1096,16 +1104,16 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     // no contention. Total time = max(jobs), not sum — keeps us well
     // under Railway's ~90s HTTP proxy timeout.
     await Promise.all([
-      safe('news_feeds',      () => newsFeeds(),                ok, errors),
-      safe('news_aggregated', () => aggregatedNews(json),       ok, errors),
-      safe('affecting_bills', () => affectingBills(json),       ok, errors),
-      safe('noaa_water_rss',  () => noaaWaterRss(xmlBag),       ok, errors),
-      safe('weather_story',   () => weatherStory(miscBag),      ok, errors),
-      safe('local_events',    () => localEvents(json),          ok, errors),
-      safe('shelter_pets',    () => shelterPets(json),          ok, errors),
-      safe('gov_national',    () => govNational(json),          ok, errors),
-      safe('rep_votes',       () => repVotes(json),             ok, errors),
-      safe('council_votes',   () => councilVotes(json),         ok, errors),
+      safe('news_feeds',      () => newsFeeds(),                ok, errors, timings),
+      safe('news_aggregated', () => aggregatedNews(json),       ok, errors, timings),
+      safe('affecting_bills', () => affectingBills(json),       ok, errors, timings),
+      safe('noaa_water_rss',  () => noaaWaterRss(xmlBag),       ok, errors, timings),
+      safe('weather_story',   () => weatherStory(miscBag),      ok, errors, timings),
+      safe('local_events',    () => localEvents(json),          ok, errors, timings),
+      safe('shelter_pets',    () => shelterPets(json),          ok, errors, timings),
+      safe('gov_national',    () => govNational(json),          ok, errors, timings),
+      safe('rep_votes',       () => repVotes(json),             ok, errors, timings),
+      safe('council_votes',   () => councilVotes(json),         ok, errors, timings),
     ]);
   }
 
@@ -1113,21 +1121,21 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     // Parallelize for the same reason as 4h — distinct keys, no
     // contention. Run purge_stores LAST since it's a delete pass.
     await Promise.all([
-      safe('osm_places',          () => osmPlaces(json),          ok, errors),
-      safe('ticketmaster_events', () => ticketmasterEvents(json), ok, errors),
-      safe('local_parks',         () => localParks(json),         ok, errors),
-      safe('gov_local',           () => govLocal(json),           ok, errors),
-      safe('ccrmc_data',          () => ccrmcData(json),          ok, errors),
-      safe('ccc_comp',            () => cccCompensation(json),    ok, errors),
-      safe('reps_data',           () => repsData(json),           ok, errors),
-      safe('crime_data',          () => crimeData(json),          ok, errors),
+      safe('osm_places',          () => osmPlaces(json),          ok, errors, timings),
+      safe('ticketmaster_events', () => ticketmasterEvents(json), ok, errors, timings),
+      safe('local_parks',         () => localParks(json),         ok, errors, timings),
+      safe('gov_local',           () => govLocal(json),           ok, errors, timings),
+      safe('ccrmc_data',          () => ccrmcData(json),          ok, errors, timings),
+      safe('ccc_comp',            () => cccCompensation(json),    ok, errors, timings),
+      safe('reps_data',           () => repsData(json),           ok, errors, timings),
+      safe('crime_data',          () => crimeData(json),          ok, errors, timings),
     ]);
-    await safe('purge_stores',    () => purgeStores(),            ok, errors);
+    await safe('purge_stores',    () => purgeStores(),            ok, errors, timings);
   }
 
   if (Object.keys(json).length)    await upsertJsonMany(json);
   if (Object.keys(xmlBag).length)  await upsertXmlMany(xmlBag);
   if (Object.keys(miscBag).length) await upsertMiscMany(miscBag);
 
-  return { ok, errors, ms: Date.now() - start };
+  return { ok, errors, timings, ms: Date.now() - start };
 }

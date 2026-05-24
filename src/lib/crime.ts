@@ -74,7 +74,9 @@ async function fetchOne(ori: string, offense: string, year: number): Promise<{ c
     `?from=01-${year}&to=12-${year}&API_KEY=${KEY}`;
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
+    // 5s per call — FBI CDE is normally <1s when not rate-limited;
+    // longer means we're hitting throttle anyway and should fail fast.
+    const timer = setTimeout(() => ctrl.abort(), 5000);
     const r = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
     clearTimeout(timer);
     if (!r.ok) return { count: 0, agencyName: null };
@@ -102,8 +104,10 @@ async function fetchAgency(ori: string, fallbackName: string): Promise<CrimeAgen
   // Wrapped in an object so TypeScript's narrowing doesn't think the
   // outer var stays null after the forEach callback assignments.
   const fbiName: { value: string | null } = { value: null };
-  // Walk back up to 4 years to find a year with real data.
-  for (const candidate of [thisYear - 1, thisYear - 2, thisYear - 3, thisYear - 4]) {
+  // Walk back up to 3 years. FBI CDE typically has data for thisYear-1
+  // and lagging agencies have data for thisYear-2; anything older isn't
+  // useful operationally. Saves up to 8 calls per agency on cold runs.
+  for (const candidate of [thisYear - 1, thisYear - 2, thisYear - 3]) {
     const settled = await Promise.allSettled(OFFENSES.map(([k]) => fetchOne(ori, k, candidate)));
     const tally: Record<string, number> = {};
     OFFENSES.forEach(([k], i) => {
