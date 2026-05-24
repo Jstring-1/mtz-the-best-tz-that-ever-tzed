@@ -141,9 +141,9 @@ export default async function CivicStrip() {
       />
       <FemaDetail    tooltip={femaTooltip}    label={femaLabelHtml}    data={femaList} />
       <EonetDetail   tooltip={eonetTooltip}   label={eonetLabelHtml}   data={eonetList} />
-      <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml}   data={parksList} />
       <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
       <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
+      <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml}   data={parksList} />
     </section>
   );
 }

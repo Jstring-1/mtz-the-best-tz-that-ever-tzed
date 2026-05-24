@@ -34,7 +34,7 @@ const INDEX_URL = `${BASE}/departments/recreation/parks`;
 // site might actually use (/parks/<slug>, /recreation/parks/<slug>, …).
 const PATH_RE = /\/(?:[A-Za-z0-9_-]+\/)*parks?\/[A-Za-z0-9_-]+\/?$/i;
 
-async function fetchText(url: string): Promise<string | null> {
+async function fetchTextDirect(url: string): Promise<string | null> {
   try {
     const r = await fetch(url, { headers: COMMON_HEADERS, cache: 'no-store' });
     if (!r.ok) { console.warn(`[parks] ${url} → ${r.status}`); return null; }
@@ -43,6 +43,41 @@ async function fetchText(url: string): Promise<string | null> {
     console.warn(`[parks] ${url} threw:`, e instanceof Error ? e.message : e);
     return null;
   }
+}
+
+// cityofmartinez.org is Akamai-blocked to non-browser egress (UA spoofing
+// isn't enough). When direct fetches fail, fall back to the Wayback
+// Machine which is never blocked. Snapshots refresh as the Internet
+// Archive re-crawls; for park rosters that change yearly this is fine.
+interface WaybackAvailableResp {
+  archived_snapshots?: { closest?: { url?: string; timestamp?: string; available?: boolean } };
+}
+async function fetchViaWayback(originalUrl: string): Promise<string | null> {
+  try {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const lookupUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(originalUrl)}&timestamp=${today}`;
+    const r = await fetch(lookupUrl, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const meta = await r.json() as WaybackAvailableResp;
+    const closest = meta?.archived_snapshots?.closest;
+    if (!closest?.available || !closest.timestamp) return null;
+    const snapUrl = `https://web.archive.org/web/${closest.timestamp}id_/${originalUrl}`;
+    const snap = await fetch(snapUrl, { cache: 'no-store' });
+    if (!snap.ok) return null;
+    return await snap.text();
+  } catch (e) {
+    console.warn(`[parks] wayback fallback threw for ${originalUrl}:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+// Try direct fetch first; if blocked/404, ask the Wayback Machine.
+async function fetchText(url: string): Promise<string | null> {
+  const direct = await fetchTextDirect(url);
+  if (direct) return direct;
+  const wb = await fetchViaWayback(url);
+  if (wb) console.log(`[parks] used wayback snapshot for ${url}`);
+  return wb;
 }
 
 function stripHtml(s: string): string {
