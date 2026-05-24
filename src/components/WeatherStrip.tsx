@@ -46,22 +46,22 @@ export default async function WeatherStrip() {
       {(cur?.condition?.text || cur?.temp_f != null) && (
         <span
           className="cond gold"
-          title={`Current conditions${cur?.condition?.text ? `: ${cur.condition.text}` : ''}${cur?.temp_f != null ? ` — air temperature ${cur.temp_f}°F` : ''}`}
+          title={`Current conditions${cur?.condition?.text ? `: ${cur.condition.text}` : ''}${cur?.temp_f != null ? ` — air temperature ${Math.round(cur.temp_f)}°F` : ''}`}
         >
           {cur?.condition?.icon && <img src={`https:${cur.condition.icon}`} alt={cur.condition.text ?? ''} />}
-          {[cur?.condition?.text, cur?.temp_f != null ? `${cur.temp_f}°F` : null]
+          {[cur?.condition?.text, cur?.temp_f != null ? `${Math.round(cur.temp_f)}°F` : null]
             .filter(Boolean).join(' ')}
         </span>
       )}
       {cur?.feelslike_f != null && (
-        <span className="red" title={`Feels-like temperature (heat index / wind chill): ${cur.feelslike_f}°F`}>Feels {cur.feelslike_f}°F</span>
+        <span className="red" title={`Feels-like temperature (heat index / wind chill): ${Math.round(cur.feelslike_f)}°F`}>Feels {Math.round(cur.feelslike_f)}°F</span>
       )}
       {cur?.wind_mph != null && (
         <span
           className="dodger"
-          title={`Wind ${cur.wind_mph} mph${cur.wind_dir ? ` from ${cur.wind_dir}` : ''}${cur.gust_mph != null ? `, gusting to ${Math.round(cur.gust_mph)} mph` : ''}`}
+          title={`Wind ${Math.round(cur.wind_mph)} mph${cur.wind_dir ? ` from ${cur.wind_dir}` : ''}${cur.gust_mph != null ? `, gusting to ${Math.round(cur.gust_mph)} mph` : ''}`}
         >
-          {cur.wind_mph}mph {cur.wind_dir ?? ''}
+          {Math.round(cur.wind_mph)}mph {cur.wind_dir ?? ''}
           {cur.gust_mph != null ? ` g${Math.round(cur.gust_mph)}` : ''}
         </span>
       )}
@@ -69,10 +69,10 @@ export default async function WeatherStrip() {
         <span className="green" title={`Relative humidity: ${cur.humidity}%`}>{cur.humidity}%</span>
       )}
       {pa?.['pm2.5'] != null && (
-        <span className="blue" title={`Air quality — PM2.5 fine-particulate reading from the nearest PurpleAir sensor: ${pa['pm2.5']}`}>AQI {pa['pm2.5']}</span>
+        <span className="blue" title={`Air quality — PM2.5 fine-particulate reading from the nearest PurpleAir sensor: ${Math.round(pa['pm2.5'])}`}>AQI {Math.round(pa['pm2.5'])}</span>
       )}
       {cur?.uv != null && (
-        <span className="violet" title={`UV index: ${cur.uv} (0–2 low, 3–5 moderate, 6–7 high, 8–10 very high, 11+ extreme)`}>UV {cur.uv}</span>
+        <span className="violet" title={`UV index: ${Math.round(cur.uv)} (0–2 low, 3–5 moderate, 6–7 high, 8–10 very high, 11+ extreme)`}>UV {Math.round(cur.uv)}</span>
       )}
       {cur?.vis_miles != null && (
         <span className="peru" title={`Visibility: ${cur.vis_miles} miles`}>{cur.vis_miles}mi vis</span>
