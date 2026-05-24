@@ -1722,6 +1722,36 @@ button.rep-card.clickable:focus-visible {
 .unemp-grid dd { margin: 0; text-align: right; }
 .unemp-grid dd.big { font-size: 1.4em; font-weight: 600; color: var(--accent); }
 
+/* Recalls list */
+.recall-list { list-style: none; padding: 0; margin: 0; }
+.recall-item { border-bottom: 1px solid var(--border-soft); padding: 8px 0; }
+.recall-item:last-child { border-bottom: none; }
+.recall-head {
+  display: block; width: 100%; text-align: left;
+  background: transparent; border: 0; padding: 0;
+  color: inherit; font: inherit; cursor: pointer;
+}
+.recall-head:hover .recall-title { color: var(--accent); }
+.recall-title { font-weight: 600; display: block; line-height: 1.35; overflow-wrap: anywhere; }
+.recall-head .meta { font-size: .78em; color: var(--text-muted); margin-top: 2px; display: block; }
+.recall-src {
+  display: inline-block;
+  font-size: .72em; font-weight: 700;
+  padding: 1px 6px; border-radius: 3px;
+  background: var(--bg-elev-2); color: var(--text);
+  margin-right: 4px;
+}
+.recall-src.src-food   { color: #6cb96c; }
+.recall-src.src-drug   { color: #e07060; }
+.recall-src.src-device { color: #d0a050; }
+.recall-src.src-cpsc   { color: #6a9fd1; }
+.recall-reason {
+  font-size: .9em; line-height: 1.5; color: var(--text);
+  margin-top: 8px; padding: 8px 10px;
+  background: var(--bg-elev-2); border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
 /* Council member strip at the top of the Council popup — small
    clickable thumbnails that open each member's bio modal. */
 .council-strip {
