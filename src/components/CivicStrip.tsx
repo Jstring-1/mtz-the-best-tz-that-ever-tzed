@@ -33,7 +33,7 @@ export default async function CivicStrip() {
   // to keep the strip uncluttered.
   const councilCount = council?.meetings?.length ?? 0;
   const councilDate = council?.meetings?.[0]?.date ?? '';
-  const councilLabelHtml = `<span class="civic-strip-val gold">City Council</span>`;
+  const councilLabelHtml = `<span class="civic-strip-val gold">Council</span>`;
   const repsLabelHtml = `<span class="civic-strip-val dodger">Reps</span>`;
   const repsTooltip = 'Your elected representatives — Martinez Council & Mayor → CCC Board of Supervisors → CA Assembly/Senate → Statewide officers → U.S. Congress → White House.';
   const councilTooltip = councilCount > 0
