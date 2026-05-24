@@ -148,8 +148,13 @@ export default function RepsDetail({ label, tooltip }: Props) {
 
             <Section title="County — Supervisor, District 5" reps={data.county} onOpen={openBio}
               headerExtra={
-                <button type="button" className="event-modal-btn" onClick={() => setD5MapOpen(true)} title="District 5 boundary map">
-                  🗺 Map
+                <button
+                  type="button"
+                  className="rep-h-link"
+                  onClick={() => setD5MapOpen(true)}
+                  title="District 5 boundary map"
+                >
+                  map →
                 </button>
               }
               emptyHint="Couldn't read the county BOS page this cycle." />

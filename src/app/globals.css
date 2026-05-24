@@ -1809,6 +1809,23 @@ button.rep-card.clickable:focus-visible {
   background: var(--bg-elev);
 }
 
+/* Inline text-link rendered next to a section header (e.g. the
+   District 5 map link). Slightly smaller than the header, no button
+   chrome — just colored text. */
+.rep-h-link {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: .82em;
+  font-weight: 400;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+.rep-h-link:hover,
+.rep-h-link:focus-visible { text-decoration: underline; }
+
 /* Economy popup — index cards + key-value grid */
 .econ-index-grid {
   display: grid;
