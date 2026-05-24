@@ -1,6 +1,7 @@
 import { getJson } from '@/lib/cache';
 import type { GovLocalPayload, GovNationalPayload, GovStripItem } from '@/lib/gov';
 import type { CouncilScrapeResult } from '@/lib/scrape-council';
+import type { Park } from '@/lib/types';
 import BillsDetail from './BillsDetail';
 import GrantsDetail from './GrantsDetail';
 import CrimeDetail from './CrimeDetail';
@@ -9,6 +10,10 @@ import RepsDetail from './RepsDetail';
 import UnempDetail from './UnempDetail';
 import GasDetail from './GasDetail';
 import RecallsDetail from './RecallsDetail';
+import EconomyDetail from './EconomyDetail';
+import FemaDetail from './FemaDetail';
+import EonetDetail from './EonetDetail';
+import ParksDetail from './ParksDetail';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -19,11 +24,13 @@ export default async function CivicStrip() {
   let payload: GovLocalPayload | null = null;
   let council: CouncilScrapeResult | null = null;
   let national: GovNationalPayload | null = null;
+  let parks: Park[] | null = null;
   try {
-    [payload, council, national] = await Promise.all([
+    [payload, council, national, parks] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
+      getJson<Park[]>('local_parks').catch(() => null),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -48,6 +55,30 @@ export default async function CivicStrip() {
   const recallsTooltip = recallsList.length
     ? `${recallsList.length} active nationwide recalls (FDA food/drug/device + CPSC) — click to browse.`
     : 'Nationwide recalls (FDA + CPSC) — cache empty. Run /admin → 4h.';
+  // U.S. economy snapshot — debt + yields + unemployment + CPI.
+  const economyData = national?.economy ?? null;
+  const economyLabelHtml = `<span class="civic-strip-val green">Economy</span>`;
+  const economyTooltip = economyData?.debt
+    ? `U.S. federal debt ${economyData.debt.total} (${economyData.debt.date}); click for yields + unemp + CPI.`
+    : 'U.S. economy snapshot — cache empty. Run /admin → 4h.';
+  // FEMA active disaster declarations nationwide.
+  const femaList = national?.disasters?.fema ?? [];
+  const femaLabelHtml = `<span class="civic-strip-val red">FEMA</span>`;
+  const femaTooltip = femaList.length
+    ? `${femaList.length} active FEMA disaster declarations — click to browse.`
+    : 'FEMA active disaster declarations — cache empty. Run /admin → 4h.';
+  // NASA EONET — open natural events (wildfires, storms, volcanoes...).
+  const eonetList = national?.disasters?.eonet ?? [];
+  const eonetLabelHtml = `<span class="civic-strip-val peru">EONET</span>`;
+  const eonetTooltip = eonetList.length
+    ? `${eonetList.length} active NASA EONET natural events — click to browse.`
+    : 'NASA EONET natural events — cache empty. Run /admin → 4h.';
+  // Martinez parks.
+  const parksList = parks ?? [];
+  const parksLabelHtml = `<span class="civic-strip-val green">Parks</span>`;
+  const parksTooltip = parksList.length
+    ? `${parksList.length} Martinez parks — click for amenities, photos, and map.`
+    : 'Martinez parks — cache empty. Run /admin → 12h.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -94,14 +125,18 @@ export default async function CivicStrip() {
           </span>
         );
       })}
-      <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
-      <RepsDetail tooltip={repsTooltip} label={repsLabelHtml} />
       <RecallsDetail
         tooltip={recallsTooltip}
         label={recallsLabelHtml}
         data={recallsList}
         scrapedAt={national?.scrapedAt}
       />
+      <EconomyDetail tooltip={economyTooltip} label={economyLabelHtml} data={economyData} />
+      <FemaDetail    tooltip={femaTooltip}    label={femaLabelHtml}    data={femaList} />
+      <EonetDetail   tooltip={eonetTooltip}   label={eonetLabelHtml}   data={eonetList} />
+      <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml}   data={parksList} />
+      <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
+      <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
     </section>
   );
 }

@@ -1752,6 +1752,28 @@ button.rep-card.clickable:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* Treasury yield curve — narrow chips of (maturity / rate) pairs */
+.gov-yields { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; margin-top: 6px; }
+.gov-yield { background: var(--bg-elev-2); padding: 8px 6px; border-radius: 4px; text-align: center; }
+.gov-yield .m { font-size: .72em; color: var(--text-muted); }
+.gov-yield .r { font-size: 1.05em; font-weight: 600; color: var(--accent); margin-top: 2px; }
+
+/* NWS Weather Story image gallery */
+.wx-story-images { display: flex; flex-direction: column; gap: 8px; }
+.wx-story-images img { width: 100%; height: auto; border-radius: 4px; }
+.wx-story-html { font-size: .82em; overflow-x: auto; }
+.wx-story-html table { font-size: inherit; }
+
+/* Park-detail nested modal */
+.park-detail-photo {
+  width: 100%; max-height: 240px;
+  object-fit: cover; border-radius: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+}
+.park-amen-list { padding-left: 20px; margin: 4px 0; font-size: .9em; line-height: 1.5; }
+.park-amen-list li { margin-bottom: 2px; }
+
 /* Council member strip at the top of the Council popup — small
    clickable thumbnails that open each member's bio modal. */
 .council-strip {
