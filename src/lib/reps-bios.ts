@@ -17,6 +17,7 @@ export interface RepBio {
   appointedDate?: string;
   termExpires?: string;
   email?: string;
+  phone?: string;            // primary contact phone — shown as Call button
   photoFile?: string;        // basename in /public/img/, e.g. "zorn.jpg"
   bio: string;
 }
@@ -75,14 +76,21 @@ export const REP_BIOS: Record<string, RepBio> = {
       'Debbie was elected to the Martinez City Council in 2014 and served as Vice Mayor in 2017, 2021, and 2024. A fifth-generation Martinez resident and graduate of Alhambra High School, Debbie is proud to serve the community she has long called home. She is a working professional, mother of twin daughters, and previously served as a 4-H community leader. Debbie brings more than 40 years of experience in forensic science. She serves as the Sheriff\'s Chief of Forensic Services, overseeing a nationally accredited crime laboratory that provides countywide forensic services to 24 law enforcement agencies and more than one million county residents.\n\nHer academic credentials include an Executive Master of Public Administration from Golden Gate University in San Francisco, bachelor\'s degrees in chemistry and environmental studies from the University of California, Santa Barbara, and a Certificate in Forensic Science Laboratory Management from the University of California, Davis. Outside of her professional and public service roles, Debbie enjoys hiking, playing bocce, and attending movies and live theater with her family.',
   },
 
-  // Contra Costa County — District 5 Supervisor. Add photoFile +
-  // proper bio when you collect them; for now the card opens to a
-  // minimal popup with name + office + official-page link.
+  // Contra Costa County — District 5 Supervisor.
   'scales-preston': {
     fullName: 'Shanelle Scales-Preston',
     office: 'Supervisor',
     district: 'District 5 (Martinez)',
-    bio: '',
+    photoFile: 'preston.png',
+    phone: '925-608-4200',
+    bio:
+      'District 5 Supervisor on the Contra Costa County Board of Supervisors, representing Martinez and surrounding communities.\n\n' +
+      'Pittsburg Office\n' +
+      '190 E 4th Street, Pittsburg, CA 94565\n' +
+      'Phone: 925-608-4200  ·  Fax: 925-608-4209\n\n' +
+      'Martinez Office\n' +
+      '1025 Escobar Street, Martinez, CA 94553\n' +
+      'Phone: 925-608-4200  ·  Fax: 925-608-4209',
   },
 };
 
@@ -121,6 +129,7 @@ export function bioToRep(slug: string, bio: RepBio, level: RepLevel = 'city', ur
     district: bio.district,
     photoUrl: bio.photoFile ? `/img/${bio.photoFile}` : undefined,
     email: bio.email,
+    phone: bio.phone,
     url: urlOverride ?? 'https://www.cityofmartinez.org/government/mayor-and-city-council',
     bio: bio.bio,
     electedDate: bio.electedDate,
