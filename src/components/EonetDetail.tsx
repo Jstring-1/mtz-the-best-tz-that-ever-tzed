@@ -127,11 +127,9 @@ export default function EonetDetail({ label, tooltip, data }: Props) {
                 );
               })}
             </ul>
-            <p style={{ marginTop: 12 }}>
-              <a className="event-modal-btn primary" href="https://eonet.gsfc.nasa.gov/" target="_blank" rel="noopener">
-                EONET event tracker →
-              </a>
-            </p>
+            <div className="popup-ext-links">
+              <a href="https://eonet.gsfc.nasa.gov/" target="_blank" rel="noopener">EONET event tracker →</a>
+            </div>
           </>
         )}
       </Modal>

@@ -281,25 +281,9 @@ async function stateLegislature(diag: Record<string, string>): Promise<Rep[]> {
 // per-site regex, and fall back to a link-only row when extraction
 // fails. Update the OFFICES list when a constitutional office is added.
 
-// CA state constitutional officers — sourced from the Ballotpedia
-// "State officials" table on the Contra_Costa_County,_California page.
-// One fetch returns all 10 rows. The table format is stable: each row
-// has the office in column 1 and a wiki-linked name in column 2.
+// Ballotpedia's Contra Costa County page is still used as a fallback
+// in countyReps() (Board of Supervisors section).
 const BALLOTPEDIA_CCC_URL = 'https://ballotpedia.org/Contra_Costa_County,_California';
-// Office labels as written in the Ballotpedia table. We use these to
-// build the friendly display label and to validate parsed names.
-const STATEWIDE_OFFICES: Array<{ ballotpediaLabel: string; display: string }> = [
-  { ballotpediaLabel: 'Governor of California',                       display: 'Governor' },
-  { ballotpediaLabel: 'Lieutenant Governor of California',            display: 'Lieutenant Governor' },
-  { ballotpediaLabel: 'Attorney General of California',               display: 'Attorney General' },
-  { ballotpediaLabel: 'California Secretary of State',                display: 'Secretary of State' },
-  { ballotpediaLabel: 'California Controller',                        display: 'Controller' },
-  { ballotpediaLabel: 'California Treasurer',                         display: 'Treasurer' },
-  { ballotpediaLabel: 'California Commissioner of Insurance',         display: 'Insurance Commissioner' },
-  { ballotpediaLabel: 'California Superintendent of Public Instruction', display: 'Supt. of Public Instruction' },
-  { ballotpediaLabel: 'California State Auditor',                     display: 'State Auditor' },
-  { ballotpediaLabel: 'California Secretary for Natural Resources',   display: 'Sec. for Natural Resources' },
-];
 
 function decodeEntities(s: string): string {
   return s.replace(/&amp;/g, '&').replace(/&#039;|&#39;|&apos;/g, "'")
@@ -308,64 +292,15 @@ function decodeEntities(s: string): string {
 function stripTags(s: string): string { return s.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' '); }
 
 async function statewideOfficers(diag: Record<string, string>): Promise<Rep[]> {
-  // One fetch, parse all 10 rows from the State officials table on
-  // ballotpedia.org/Contra_Costa_County,_California.
-  const html = await safeText(BALLOTPEDIA_CCC_URL);
-  if (!html) {
-    diag.statewide = 'Ballotpedia CCC page fetch failed';
-    return STATEWIDE_OFFICES.map((o) => ({
-      level: 'state' as const, office: o.display, name: '', url: BALLOTPEDIA_CCC_URL,
-    }));
-  }
-  // The "State officials" section sits under an <h2> with that label.
-  // Inside is a <table> whose rows have:
-  //   <td>Office of California</td>
-  //   <td><a href="/Name">Name</a></td>
-  //   <td>Party</td>
-  //   <td>Date</td>
-  // We find the section, then walk rows.
-  const sectionStart = html.search(/<h2[^>]*>\s*(?:<span[^>]*>)?\s*State\s+officials/i);
-  const sectionEnd = sectionStart >= 0 ? html.indexOf('<h2', sectionStart + 10) : -1;
-  const sectionHtml = sectionStart >= 0
-    ? html.slice(sectionStart, sectionEnd > sectionStart ? sectionEnd : sectionStart + 12000)
-    : '';
-  if (!sectionHtml) {
-    diag.statewide = "couldn't find 'State officials' h2 anchor";
-  }
-  // Map ballotpediaLabel -> Rep. Iterate each row and match label substring.
-  const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
-  const cellRe = /<td\b[^>]*>([\s\S]*?)<\/td>/gi;
-  const nameAnchorRe = /<a\s[^>]*href=["']\/([A-Z][A-Za-z0-9._-]*(?:_[A-Z][A-Za-z0-9._-]*){1,4})["'][^>]*>([^<]+)<\/a>/;
-  const partyTextRe = /(Democratic|Republican|Independent|Nonpartisan|Libertarian|Green)/i;
-  const found: Map<string, { name: string; party: string }> = new Map();
-  let rm: RegExpExecArray | null;
-  while ((rm = rowRe.exec(sectionHtml)) !== null) {
-    const row = rm[1];
-    const cells: string[] = [];
-    let cm: RegExpExecArray | null;
-    cellRe.lastIndex = 0;
-    while ((cm = cellRe.exec(row)) !== null) cells.push(cm[1]);
-    if (cells.length < 2) continue;
-    const officeText = decodeEntities(stripTags(cells[0])).trim();
-    const nameAnchor = cells[1].match(nameAnchorRe);
-    const nameText = nameAnchor
-      ? decodeEntities(nameAnchor[2]).trim()
-      : decodeEntities(stripTags(cells[1])).trim();
-    if (!nameText) continue;
-    const partyText = cells[2] ? (decodeEntities(stripTags(cells[2])).match(partyTextRe)?.[1] ?? '') : '';
-    found.set(officeText.toLowerCase(), { name: nameText, party: partyText });
-  }
-  diag.statewideRows = `${found.size} office rows parsed`;
-  return STATEWIDE_OFFICES.map((o) => {
-    const hit = found.get(o.ballotpediaLabel.toLowerCase());
-    return {
-      level: 'state' as const,
-      office: o.display,
-      name: hit?.name ?? '',
-      party: hit?.party ? hit.party[0] : undefined,
-      url: BALLOTPEDIA_CCC_URL,
-    };
-  });
+  // Now sourced from the hand-maintained registry in
+  // src/lib/state-officials-data.ts (10 constitutional officers + 18
+  // cabinet members). The previous Ballotpedia scrape was unreliable
+  // — table parsing kept producing empty rows — and the data is
+  // semi-static so a curated list is easier to keep correct.
+  const { staticStateOfficials } = await import('./state-officials-data');
+  const out = staticStateOfficials();
+  diag.statewideRows = `${out.length} from static registry`;
+  return out;
 }
 
 // =====================================================================

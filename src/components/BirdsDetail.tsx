@@ -83,11 +83,9 @@ export default function BirdsDetail({ label, tooltip, data }: Props) {
                 );
               })}
             </ul>
-            <p style={{ marginTop: 12 }}>
-              <a className="event-modal-btn primary" href="https://ebird.org/region/US-CA-013/recent" target="_blank" rel="noopener">
-                eBird — Contra Costa County recent →
-              </a>
-            </p>
+            <div className="popup-ext-links">
+              <a href="https://ebird.org/region/US-CA-013/recent" target="_blank" rel="noopener">eBird — Contra Costa County recent →</a>
+            </div>
           </>
         )}
       </Modal>
@@ -122,21 +120,17 @@ export default function BirdsDetail({ label, tooltip, data }: Props) {
               </p>
             )}
 
-            <p className="rep-bio-links">
+            <div className="popup-ext-links">
               {focused.wiki_url && (
-                <a className="event-modal-btn primary" href={focused.wiki_url} target="_blank" rel="noopener">
-                  Read on Wikipedia →
-                </a>
+                <a href={focused.wiki_url} target="_blank" rel="noopener">Read on Wikipedia →</a>
               )}
               {focused.lat != null && focused.lon != null && (
-                <a className="event-modal-btn" href={`https://www.google.com/maps/?q=${focused.lat},${focused.lon}`} target="_blank" rel="noopener">
-                  Sighting location ↗
-                </a>
+                <a href={`https://www.google.com/maps/?q=${focused.lat},${focused.lon}`} target="_blank" rel="noopener">Sighting location on map →</a>
               )}
-              <a className="event-modal-btn" href={`https://ebird.org/species/${encodeURIComponent(focused.common_name)}`} target="_blank" rel="noopener">
+              <a href={`https://ebird.org/species/${encodeURIComponent(focused.common_name)}`} target="_blank" rel="noopener">
                 eBird species page →
               </a>
-            </p>
+            </div>
           </div>
         </Modal>
       )}

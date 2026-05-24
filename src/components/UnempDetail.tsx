@@ -62,17 +62,11 @@ export default function UnempDetail({ label, tooltip, data }: Props) {
               Statistics, not seasonally adjusted). The U.S. rate uses BLS LNS (Current
               Population Survey, seasonally adjusted) — the headline number you hear on the news.
             </p>
-            <p style={{ marginTop: 14 }}>
-              <a className="event-modal-btn primary" href="https://www.bls.gov/lau/" target="_blank" rel="noopener">
-                BLS LAUS dashboard →
-              </a>{' '}
-              <a className="event-modal-btn" href="https://data.bls.gov/timeseries/LASST060000000000003" target="_blank" rel="noopener">
-                California series →
-              </a>{' '}
-              <a className="event-modal-btn" href="https://data.bls.gov/timeseries/LAUCN060130000000003" target="_blank" rel="noopener">
-                Contra Costa series →
-              </a>
-            </p>
+            <div className="popup-ext-links">
+              <a href="https://www.bls.gov/lau/" target="_blank" rel="noopener">BLS LAUS dashboard →</a>
+              <a href="https://data.bls.gov/timeseries/LASST060000000000003" target="_blank" rel="noopener">California series →</a>
+              <a href="https://data.bls.gov/timeseries/LAUCN060130000000003" target="_blank" rel="noopener">Contra Costa series →</a>
+            </div>
           </>
         )}
       </Modal>

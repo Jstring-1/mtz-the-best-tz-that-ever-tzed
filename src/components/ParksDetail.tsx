@@ -119,14 +119,10 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
               className="park-pdf-frame"
               loading="lazy"
             />
-            <p style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <a className="event-modal-btn primary" href={focusedMap.file} target="_blank" rel="noopener">
-                Open PDF in new tab →
-              </a>
-              <a className="event-modal-btn" href={focusedMap.file} download>
-                Download PDF →
-              </a>
-            </p>
+            <div className="popup-ext-links">
+              <a href={focusedMap.file} target="_blank" rel="noopener">Open PDF in new tab →</a>
+              <a href={focusedMap.file} download>Download PDF →</a>
+            </div>
           </div>
         </Modal>
       )}
@@ -159,20 +155,17 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
                 </ul>
               </>
             )}
-            <p className="rep-bio-links" style={{ marginTop: 8 }}>
+            <div className="popup-ext-links">
               {focused.url && (
-                <a className="event-modal-btn primary" href={focused.url} target="_blank" rel="noopener">
-                  Park page on cityofmartinez.org →
-                </a>
+                <a href={focused.url} target="_blank" rel="noopener">Park page on cityofmartinez.org →</a>
               )}
               {focused.address && (
-                <a className="event-modal-btn"
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(focused.address)}`}
-                  target="_blank" rel="noopener">
+                <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(focused.address)}`}
+                   target="_blank" rel="noopener">
                   Open in Google Maps →
                 </a>
               )}
-            </p>
+            </div>
           </div>
         </Modal>
       )}

@@ -25,14 +25,10 @@ export default function CodeDetail({ label, tooltip }: Props) {
             className="park-pdf-frame"
             loading="lazy"
           />
-          <p style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <a className="event-modal-btn primary" href={CODE_PDF} target="_blank" rel="noopener">
-              Open PDF in new tab →
-            </a>
-            <a className="event-modal-btn" href={CODE_PDF} download>
-              Download PDF →
-            </a>
-          </p>
+          <div className="popup-ext-links">
+            <a href={CODE_PDF} target="_blank" rel="noopener">Open PDF in new tab →</a>
+            <a href={CODE_PDF} download>Download PDF →</a>
+          </div>
           <p className="muted" style={{ fontSize: '.78em', marginTop: 8 }}>
             Includes: General Provisions · Administration and Personnel · Revenue and Finance · Business
             Taxes and Regulations · Animals · Health and Safety · Public Peace, Morals and Welfare ·

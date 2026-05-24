@@ -154,20 +154,12 @@ export default function EconomyDetail({ label, tooltip, data, stocks }: Props) {
               </section>
             )}
 
-            <p className="rep-bio-links" style={{ marginTop: 18 }}>
-              <a className="event-modal-btn primary" href="https://fiscaldata.treasury.gov/datasets/debt-to-the-penny/" target="_blank" rel="noopener">
-                Treasury Fiscal Data →
-              </a>
-              <a className="event-modal-btn" href="https://www.bls.gov/news.release/empsit.toc.htm" target="_blank" rel="noopener">
-                BLS Employment Situation →
-              </a>
-              <a className="event-modal-btn" href="https://www.bls.gov/cpi/" target="_blank" rel="noopener">
-                BLS CPI →
-              </a>
-              <a className="event-modal-btn" href="https://fred.stlouisfed.org/" target="_blank" rel="noopener">
-                FRED (Fed economic data) →
-              </a>
-            </p>
+            <div className="popup-ext-links">
+              <a href="https://fiscaldata.treasury.gov/datasets/debt-to-the-penny/" target="_blank" rel="noopener">Treasury Fiscal Data →</a>
+              <a href="https://www.bls.gov/news.release/empsit.toc.htm" target="_blank" rel="noopener">BLS Employment Situation →</a>
+              <a href="https://www.bls.gov/cpi/" target="_blank" rel="noopener">BLS CPI →</a>
+              <a href="https://fred.stlouisfed.org/" target="_blank" rel="noopener">FRED (Fed economic data) →</a>
+            </div>
           </>
         )}
       </Modal>

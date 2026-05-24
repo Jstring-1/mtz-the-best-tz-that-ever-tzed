@@ -95,22 +95,18 @@ export default function FemaDetail({ label, tooltip, data }: Props) {
                             <dd>FY{d.fyDeclared}</dd>
                           </>}
                         </dl>
-                        <p style={{ marginTop: 8 }}>
-                          <a className="event-modal-btn primary" href={femaUrl(d)} target="_blank" rel="noopener">
-                            View on FEMA.gov →
-                          </a>
-                        </p>
+                        <div className="popup-ext-links">
+                          <a href={femaUrl(d)} target="_blank" rel="noopener">View on FEMA.gov →</a>
+                        </div>
                       </div>
                     )}
                   </li>
                 );
               })}
             </ul>
-            <p style={{ marginTop: 12 }}>
-              <a className="event-modal-btn" href="https://www.fema.gov/disaster/declarations" target="_blank" rel="noopener">
-                All FEMA declarations →
-              </a>
-            </p>
+            <div className="popup-ext-links">
+              <a href="https://www.fema.gov/disaster/declarations" target="_blank" rel="noopener">All FEMA declarations →</a>
+            </div>
           </>
         )}
       </Modal>

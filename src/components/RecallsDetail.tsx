@@ -106,11 +106,9 @@ export default function RecallsDetail({ label, tooltip, data, scrapedAt }: Props
                         <div className="recall-reason">{r.reason}</div>
                       )}
                       {expanded && r.url && (
-                        <p style={{ marginTop: 6 }}>
-                          <a className="event-modal-btn" href={r.url} target="_blank" rel="noopener">
-                            Source page →
-                          </a>
-                        </p>
+                        <div className="popup-ext-links">
+                          <a href={r.url} target="_blank" rel="noopener">Source page →</a>
+                        </div>
                       )}
                     </li>
                   );

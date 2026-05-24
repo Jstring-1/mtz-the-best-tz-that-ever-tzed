@@ -85,11 +85,9 @@ export default function CrimeDetail({ label, tooltip }: { label: string; tooltip
                     </li>
                   ))}
                 </ul>
-                <p style={{ marginTop: 6 }}>
-                  <a className="event-modal-btn" href={a.cdeUrl} target="_blank" rel="noopener">
-                    {a.name} on FBI CDE →
-                  </a>
-                </p>
+                <div className="popup-ext-links">
+                  <a href={a.cdeUrl} target="_blank" rel="noopener">{a.name} on FBI CDE →</a>
+                </div>
               </section>
             ))}
             <p className="muted" style={{ fontSize: '.75em', marginTop: 10 }}>

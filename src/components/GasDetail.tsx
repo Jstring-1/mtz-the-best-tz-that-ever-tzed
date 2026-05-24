@@ -38,18 +38,14 @@ export default function GasDetail({ label, tooltip, data }: Props) {
               an average of self-reported retail prices from ~340 gas stations across California
               the prior week. Includes all taxes.
             </p>
-            <p style={{ marginTop: 14 }}>
-              <a className="event-modal-btn primary"
-                 href="https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?n=PET&s=EMM_EPMR_PTE_SCA_DPG&f=W"
-                 target="_blank" rel="noopener">
+            <div className="popup-ext-links">
+              <a href="https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?n=PET&s=EMM_EPMR_PTE_SCA_DPG&f=W" target="_blank" rel="noopener">
                 EIA weekly series →
-              </a>{' '}
-              <a className="event-modal-btn"
-                 href="https://gasprices.aaa.com/?state=CA"
-                 target="_blank" rel="noopener">
+              </a>
+              <a href="https://gasprices.aaa.com/?state=CA" target="_blank" rel="noopener">
                 AAA daily averages →
               </a>
-            </p>
+            </div>
           </>
         )}
       </Modal>

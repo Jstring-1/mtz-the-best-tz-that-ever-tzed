@@ -41,21 +41,15 @@ export default function RepBioModal({ rep, onClose }: { rep: Rep; onClose: () =>
           </div>
         )}
 
-        <div className="rep-bio-links">
+        <div className="popup-ext-links">
           {rep.url && (
-            <a className="event-modal-btn primary" href={rep.url} target="_blank" rel="noopener">
-              Official page →
-            </a>
+            <a href={rep.url} target="_blank" rel="noopener">Official page →</a>
           )}
           {rep.email && (
-            <a className="event-modal-btn" href={`mailto:${rep.email}`}>
-              Email {rep.name.split(/\s+/)[0]} →
-            </a>
+            <a href={`mailto:${rep.email}`}>Email {rep.name.split(/\s+/)[0]} →</a>
           )}
           {rep.phone && (
-            <a className="event-modal-btn" href={`tel:${rep.phone}`}>
-              Call {rep.phone} →
-            </a>
+            <a href={`tel:${rep.phone}`}>Call {rep.phone} →</a>
           )}
         </div>
       </div>
