@@ -1108,12 +1108,12 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     // Parallelize: each job writes to its own apis_json key, so there's
     // no contention. Total time = max(jobs), not sum — keeps us well
     // under Railway's ~90s HTTP proxy timeout.
+    // Dropped: noaa_water_rss + weather_story — no UI consumed them
+    // (the WeatherDetail popup is OpenWeather-only now).
     await Promise.all([
       safe('news_feeds',      () => newsFeeds(),                ok, errors, timings),
       safe('news_aggregated', () => aggregatedNews(json),       ok, errors, timings),
       safe('affecting_bills', () => affectingBills(json),       ok, errors, timings),
-      safe('noaa_water_rss',  () => noaaWaterRss(xmlBag),       ok, errors, timings),
-      safe('weather_story',   () => weatherStory(miscBag),      ok, errors, timings),
       safe('local_events',    () => localEvents(json),          ok, errors, timings),
       safe('shelter_pets',    () => shelterPets(json),          ok, errors, timings),
       safe('gov_national',    () => govNational(json),          ok, errors, timings),

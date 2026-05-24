@@ -1,4 +1,4 @@
-import { getJson, getXml, getMisc } from '@/lib/cache';
+import { getJson } from '@/lib/cache';
 import { getLocation } from '@/lib/location';
 import WeatherDetail from './WeatherDetail';
 
@@ -19,16 +19,6 @@ interface WxForecast {
 }
 interface PurpleAir { sensor?: { 'pm2.5'?: number } }
 
-// Local water-RSS stations (mirrors src/lib/cron.ts noaaWaterRss).
-const WATER_STATIONS = [
-  { key: 'NOAA_w_d_st',    label: 'Sacramento River — Davis Lake / Stockton',
-    url: 'https://water.weather.gov/ahps2/hydrograph.php?wfo=mtr&gage=albc1' },
-  { key: 'NOAA_w_mrna',    label: 'Sacramento River — Martinez',
-    url: 'https://water.weather.gov/ahps2/hydrograph.php?wfo=mtr&gage=nezc1' },
-  { key: 'NOAA_w_tbl_hrly',label: 'Local hourly forecast XML (DWML)',
-    url: 'https://forecast.weather.gov/MapClick.php?lat=38.0117&lon=-122.1372' },
-];
-
 export default async function WeatherStrip() {
   const loc = getLocation();
   // Defensive: never let a DB hiccup blank out the strip on every page.
@@ -36,16 +26,12 @@ export default async function WeatherStrip() {
   let wxForecast: WxForecast | null = null;
   let purpleAir: PurpleAir | null = null;
   let openWeather: unknown = null;
-  let waterXml: Array<string | null> = [];
-  let miscRows: Array<{ id: string; text: string | null }> = [];
   try {
-    [wxNow, wxForecast, purpleAir, openWeather, waterXml, miscRows] = await Promise.all([
+    [wxNow, wxForecast, purpleAir, openWeather] = await Promise.all([
       getJson<WxNow>('weatherAPI'),
       getJson<WxForecast>('weatherAPI_forecast'),
       loc.purpleAirSensor ? getJson<PurpleAir>(`purple_air_${loc.purpleAirSensor}`) : Promise.resolve(null),
       getJson('OPEN_weather'),
-      Promise.all(WATER_STATIONS.map((s) => getXml(s.key))),
-      getMisc().catch(() => []),
     ]);
   } catch (e) {
     console.error('WeatherStrip cache read failed:', e);
@@ -55,17 +41,6 @@ export default async function WeatherStrip() {
   const astro = wxForecast?.forecast?.forecastday?.[0]?.astro ?? null;
   const pa = purpleAir?.sensor ?? null;
 
-  // Assemble the data the click-to-expand WeatherDetail popup needs.
-  const waterRssData = WATER_STATIONS.map((s, i) => ({
-    key: s.key, label: s.label, url: s.url, xml: waterXml[i] ?? null,
-  }));
-  const miscMap = new Map(miscRows.map((r) => [r.id, r.text]));
-  const weatherStoryImages: number[] = [];
-  for (let n = 0; n <= 9; n++) {
-    if (miscMap.get(`WeatherStory${n}.png`) === 'true') weatherStoryImages.push(n);
-  }
-  const weatherStoryHtml = miscMap.get('NOAA_key') ?? null;
-
   return (
     <section className="wx-strip">
       <span className="clock" title="Current local date">
@@ -74,11 +49,8 @@ export default async function WeatherStrip() {
       {(cur?.condition?.text || cur?.temp_f != null) && (
         <WeatherDetail
           triggerClassName="cond gold"
-          tooltip={`Current conditions${cur?.condition?.text ? `: ${cur.condition.text}` : ''}${cur?.temp_f != null ? ` — air temperature ${Math.round(cur.temp_f)}°F` : ''}. Click for OpenWeather + NWS story + water levels.`}
+          tooltip={`Current conditions${cur?.condition?.text ? `: ${cur.condition.text}` : ''}${cur?.temp_f != null ? ` — air temperature ${Math.round(cur.temp_f)}°F` : ''}. Click for full OpenWeather snapshot.`}
           openWeather={openWeather as Parameters<typeof WeatherDetail>[0]['openWeather']}
-          weatherStoryHtml={weatherStoryHtml}
-          weatherStoryImages={weatherStoryImages}
-          waterRss={waterRssData}
           triggerContent={
             <>
               {cur?.condition?.icon && <img src={`https:${cur.condition.icon}`} alt={cur.condition.text ?? ''} />}
