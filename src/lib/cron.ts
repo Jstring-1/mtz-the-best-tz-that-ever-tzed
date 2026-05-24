@@ -532,10 +532,22 @@ async function repsData(json: Record<string, unknown>) {
 // showing all zeros). Refreshed in the 12h bucket.
 async function crimeData(json: Record<string, unknown>) {
   const { fetchCrimePayload } = await import('./crime');
+  const { getJson } = await import('./cache');
   const payload = await fetchCrimePayload();
-  // Only persist if at least one agency surfaced real data — avoid
-  // overwriting a healthy cache with a zeroed-out one on a flaky run.
-  if (payload.agencies.some((a) => a.total > 0)) {
+
+  // Write conditions (in priority order):
+  //   1. Cache is empty — bootstrap, write whatever we got.
+  //   2. agencyOris config differs from cache — config changed (e.g.
+  //      ORI correction). MUST overwrite or the stale-detection in
+  //      /api/crime-detail keeps returning the empty sentinel forever.
+  //   3. We got real data — normal happy path.
+  //   4. Otherwise (same config + all zeros) — skip, preserve good cache
+  //      through a transient FBI rate-limit / outage.
+  const prev = await getJson<{ agencyOris?: string }>('crime_data').catch(() => null);
+  const cacheEmpty = !prev;
+  const configChanged = prev?.agencyOris !== payload.agencyOris;
+  const hasData = payload.agencies.some((a) => a.total > 0);
+  if (cacheEmpty || configChanged || hasData) {
     json['crime_data'] = payload;
   }
 }
