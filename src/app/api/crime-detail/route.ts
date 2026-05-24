@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getJson } from '@/lib/cache';
-import type { CrimePayload } from '@/lib/crime';
+import { CURRENT_AGENCY_ORIS, type CrimePayload } from '@/lib/crime';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -10,18 +10,26 @@ export const revalidate = 0;
 // fan-out of ~64 FBI API calls per request which routinely hit the
 // api.data.gov rate limit and returned all zeros.
 //
-// The response shape matches the legacy single-agency fields the
-// CrimeDetail component already understands, with `agencies[]` added
-// for multi-agency rendering.
+// If the cached payload was written under a DIFFERENT set of agency
+// ORIs than the current code expects (i.e. the AGENCIES list changed,
+// e.g. when we corrected Martinez PD's ORI from CA0070500 to CA0071400),
+// we treat the cache as stale and ask for a refresh — otherwise the
+// popup would show data tagged with the wrong agency names.
 export async function GET() {
   const payload = await getJson<CrimePayload>('crime_data').catch(() => null);
-  if (!payload || payload.agencies.length === 0) {
+
+  // Stale-config detection. The `agencyOris` field is the snapshot of
+  // AGENCIES at write time. A missing/different value means the
+  // payload predates the current code.
+  const stale = payload && payload.agencyOris !== CURRENT_AGENCY_ORIS;
+
+  if (!payload || payload.agencies.length === 0 || stale) {
     return NextResponse.json({
       empty: true,
-      reason: 'Cache not populated yet. Run /admin → 12h after Railway redeploys.',
-      // Legacy fields so the client doesn't crash on the back-compat
-      // single-agency render path.
-      agency: 'Martinez area PD',
+      reason: stale
+        ? 'Crime data ORIs were corrected — cache is stale. Run /admin → 12h to refresh.'
+        : 'Cache not populated yet. Run /admin → 12h after Railway redeploys.',
+      agency: 'Martinez Police Department',
       year: 0,
       rows: [],
       violent: 0,
@@ -30,6 +38,7 @@ export async function GET() {
       cdeUrl: 'https://cde.ucr.cjis.gov/',
     }, { headers: { 'Cache-Control': 'no-store' } });
   }
+
   const primary = payload.agencies[0];
   return NextResponse.json({
     agencies: payload.agencies,

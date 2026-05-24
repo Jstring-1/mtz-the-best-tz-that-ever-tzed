@@ -19,6 +19,11 @@ const AGENCIES: Array<{ ori: string; fallbackName: string }> = [
   { ori: 'CA0070000', fallbackName: "Contra Costa County Sheriff's Department" },
 ];
 
+// Comma-joined list of current ORIs — embedded in the cached payload
+// so /api/crime-detail can detect when the cache was written under a
+// different config (e.g. after an ORI change) and ask for a refresh.
+export const CURRENT_AGENCY_ORIS = AGENCIES.map((a) => a.ori).join(',');
+
 const OFFENSES: Array<[string, string]> = [
   ['homicide',             'Homicide'],
   ['rape',                 'Rape'],
@@ -45,6 +50,12 @@ export interface CrimeAgencyData {
 export interface CrimePayload {
   scrapedAt: string;
   agencies: CrimeAgencyData[];
+  // Snapshot of the ORI list used to generate this payload. If the
+  // code's AGENCIES list changes (e.g. ORI correction), the API route
+  // compares this against the live config and treats a mismatch as
+  // a stale cache — returning empty so users see "refresh pending"
+  // instead of data tagged with old agency names.
+  agencyOris?: string;
 }
 
 // Fetch one (ORI, offense, year) and return { count, agencyName }.
@@ -118,5 +129,9 @@ export async function fetchCrimePayload(): Promise<CrimePayload> {
   // Fan out per-agency in parallel. Per-agency walks back through years
   // sequentially (within the agency).
   const agencies = await Promise.all(AGENCIES.map((a) => fetchAgency(a.ori, a.fallbackName)));
-  return { scrapedAt: new Date().toISOString(), agencies };
+  return {
+    scrapedAt: new Date().toISOString(),
+    agencies,
+    agencyOris: CURRENT_AGENCY_ORIS,
+  };
 }
