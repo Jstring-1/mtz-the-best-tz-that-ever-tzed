@@ -13,6 +13,7 @@ import EconomyDetail from './EconomyDetail';
 import FemaDetail from './FemaDetail';
 import EonetDetail from './EonetDetail';
 import ParksDetail from './ParksDetail';
+import CodeDetail from './CodeDetail';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -76,6 +77,9 @@ export default async function CivicStrip() {
   // pulls from it directly so we don't need to pass a `data` prop.
   const parksLabelHtml = `<span class="civic-strip-val green">Parks</span>`;
   const parksTooltip = 'Martinez parks — click for address and map link.';
+  // Martinez Municipal Code — bundled PDF, displayed in-site via iframe.
+  const codeLabelHtml = `<span class="civic-strip-val gold">Code</span>`;
+  const codeTooltip = 'Martinez Municipal Code (68 pages, PDF) — click to read in-site.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -139,6 +143,7 @@ export default async function CivicStrip() {
       <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
       <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
       <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
+      <CodeDetail    tooltip={codeTooltip}    label={codeLabelHtml} />
     </section>
   );
 }
