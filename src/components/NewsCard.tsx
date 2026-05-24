@@ -157,7 +157,7 @@ export default function NewsCard(props: Props) {
           >
             {t === 'all' ? 'All' : SCOPE_LABEL[t]}
             {t !== 'all' && (
-              <span className="news-tab-count">{counts[t]}</span>
+              <> <span className="count">{counts[t]}</span></>
             )}
           </button>
         ))}

@@ -77,7 +77,7 @@ export default function RecallsDetail({ label, tooltip, data, scrapedAt }: Props
                   onClick={() => setTab(t)}
                 >
                   {SOURCE_LABEL[t]}
-                  {t !== 'all' && <span className="news-tab-count">{counts[t]}</span>}
+                  {t !== 'all' && <> <span className="count">{counts[t]}</span></>}
                 </button>
               ))}
             </div>

@@ -1616,8 +1616,9 @@ main { padding-top: var(--top-stack-h); display: block; }
   color: #000;
   border-color: var(--accent);
 }
-.news-tab.active .news-tab-count { color: #000; opacity: .7; }
-.news-tab-count { font-size: .9em; color: var(--text-muted); }
+/* News uses the same .count class events do — same color/size rules. */
+.news-tab .count { font-size: .9em; color: var(--text-muted); }
+.news-tab.active .count { color: #000; opacity: .7; }
 
 /* Per-row scope badge (shown only in the "All" merged view) */
 .news-scope-badge {

@@ -190,8 +190,8 @@ export default function BillsDetail({ label, tooltip }: Props) {
                   className={`news-tab${tab === t ? ' active' : ''}`}
                   onClick={() => setTab(t)}
                 >
-                  {t === 'federal' ? 'Federal' : 'California'}
-                  <span className="news-tab-count">{t === 'federal' ? totalFederal : totalState}</span>
+                  {t === 'federal' ? 'Federal' : 'California'}{' '}
+                  <span className="count">{t === 'federal' ? totalFederal : totalState}</span>
                 </button>
               ))}
             </div>
