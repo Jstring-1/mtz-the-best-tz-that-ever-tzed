@@ -12,12 +12,11 @@
 const KEY = process.env.GOV_API_TOKEN ?? '';
 
 const AGENCIES: Array<{ ori: string; fallbackName: string }> = [
-  // ORI codes used by /api/crime-detail. CA0070500 was originally
-  // labeled "Martinez Police Department" here but verification suggests
-  // it's actually El Cerrito — the FBI response now provides the
-  // real name and we display that.
-  { ori: 'CA0070500', fallbackName: 'Martinez area PD' },
-  { ori: 'CA0070000', fallbackName: 'Contra Costa County Sheriff' },
+  // ORIs verified against the California DOJ authoritative directory
+  // (UseofForce_ORI-Agency_Names_2022f.csv on data-openjustice.doj.ca.gov).
+  // CA0070500 was previously labeled Martinez but is actually El Cerrito.
+  { ori: 'CA0071400', fallbackName: 'Martinez Police Department' },
+  { ori: 'CA0070000', fallbackName: "Contra Costa County Sheriff's Department" },
 ];
 
 const OFFENSES: Array<[string, string]> = [
