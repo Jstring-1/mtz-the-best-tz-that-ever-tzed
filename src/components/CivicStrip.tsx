@@ -1,4 +1,5 @@
 import { getJson } from '@/lib/cache';
+import { listRecentBirds, type StoredBird } from '@/lib/store';
 import type { GovLocalPayload, GovNationalPayload, GovStripItem } from '@/lib/gov';
 import type { CouncilScrapeResult } from '@/lib/scrape-council';
 import BillsDetail from './BillsDetail';
@@ -14,6 +15,7 @@ import FemaDetail from './FemaDetail';
 import EonetDetail from './EonetDetail';
 import ParksDetail from './ParksDetail';
 import CodeDetail from './CodeDetail';
+import BirdsDetail from './BirdsDetail';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -25,12 +27,16 @@ export default async function CivicStrip() {
   let council: CouncilScrapeResult | null = null;
   let national: GovNationalPayload | null = null;
   let stocks: Record<string, unknown> | null = null;
+  let birds: StoredBird[] = [];
   try {
-    [payload, council, national, stocks] = await Promise.all([
+    [payload, council, national, stocks, birds] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
       getJson<Record<string, unknown>>('12D_stocks').catch(() => null),
+      // listRecentBirds already deduplicates by common_name via
+      // DISTINCT ON, returning newest first.
+      listRecentBirds(80).catch(() => []),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -80,6 +86,11 @@ export default async function CivicStrip() {
   // Martinez Municipal Code — bundled PDF, displayed in-site via iframe.
   const codeLabelHtml = `<span class="civic-strip-val gold">Code</span>`;
   const codeTooltip = 'Martinez Municipal Code (68 pages, PDF) — click to read in-site.';
+  // Recent bird sightings (eBird) — deduped to unique species, newest first.
+  const birdsLabelHtml = `<span class="civic-strip-val dodger">Birds</span>`;
+  const birdsTooltip = birds.length
+    ? `${birds.length} unique species recently reported in the Martinez radius (eBird).`
+    : 'Bird sightings — cache empty. Run /admin → 1h.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -144,6 +155,7 @@ export default async function CivicStrip() {
       <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
       <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
       <CodeDetail    tooltip={codeTooltip}    label={codeLabelHtml} />
+      <BirdsDetail   tooltip={birdsTooltip}   label={birdsLabelHtml} data={birds} />
     </section>
   );
 }

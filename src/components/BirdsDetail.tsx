@@ -1,0 +1,145 @@
+'use client';
+
+import { useMemo } from 'react';
+import Modal from './Modal';
+import { useUrlBool, useUrlString } from '@/lib/useUrlState';
+import type { StoredBird } from '@/lib/store';
+
+interface Props {
+  label: string;
+  tooltip?: string;
+  data: StoredBird[];
+}
+
+// Slugify a common name for URL-state matching ("Spotted Towhee" →
+// "spotted-towhee"). Tolerant of punctuation.
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function fmtDate(unixSec: number | null): string {
+  if (!unixSec) return '';
+  const d = new Date(unixSec * 1000);
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+export default function BirdsDetail({ label, tooltip, data }: Props) {
+  const [open, setOpen] = useUrlBool('birds');
+  const [focusSlug, setFocusSlug] = useUrlString('bird');
+
+  // The store query already deduplicates by common_name (DISTINCT ON) and
+  // returns newest first, but be defensive in case caller passes raw data.
+  const unique = useMemo<StoredBird[]>(() => {
+    const seen = new Set<string>();
+    const out: StoredBird[] = [];
+    for (const b of data) {
+      const k = b.common_name.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(b);
+    }
+    return out;
+  }, [data]);
+
+  const focused = useMemo<StoredBird | null>(
+    () => (focusSlug ? unique.find((b) => slugify(b.common_name) === focusSlug) ?? null : null),
+    [focusSlug, unique],
+  );
+
+  return (
+    <>
+      <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
+        <span dangerouslySetInnerHTML={{ __html: label }} />
+      </button>
+
+      <Modal open={open} onClose={() => setOpen(false)} title="Recent bird sightings — Martinez area" size="lg">
+        {unique.length === 0 ? (
+          <p className="muted">No sightings cached. Run /admin → 1h.</p>
+        ) : (
+          <>
+            <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
+              {unique.length} unique species recently reported on eBird within the local radius.
+              Click any species for a Wikipedia summary, last-seen location, and date.
+            </p>
+            <ul className="recall-list">
+              {unique.map((b) => {
+                const slug = slugify(b.common_name);
+                return (
+                  <li key={b.id} className="recall-item">
+                    <button
+                      type="button"
+                      className="recall-head"
+                      onClick={() => setFocusSlug(slug)}
+                    >
+                      <span className="recall-title">{b.common_name}</span>
+                      <span className="meta">
+                        {b.sci_name && <span className="recall-src" style={{ fontStyle: 'italic' }}>{b.sci_name}</span>}
+                        {b.observed_at && <span> · {fmtDate(b.observed_at)}</span>}
+                        {b.place && <span> · {b.place}</span>}
+                        {b.cnt != null && b.cnt > 1 && <span> · {b.cnt} seen</span>}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <p style={{ marginTop: 12 }}>
+              <a className="event-modal-btn primary" href="https://ebird.org/region/US-CA-013/recent" target="_blank" rel="noopener">
+                eBird — Contra Costa County recent →
+              </a>
+            </p>
+          </>
+        )}
+      </Modal>
+
+      {focused && (
+        <Modal open={true} onClose={() => setFocusSlug(null)} title={focused.common_name} size="md">
+          <div className="rep-bio-detail">
+            <div className="rep-bio-head">
+              {focused.wiki_thumbnail ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={focused.wiki_thumbnail} alt={focused.common_name} className="rep-bio-photo" />
+              ) : (
+                <div className="rep-bio-photo placeholder">🐦</div>
+              )}
+              <div className="rep-bio-meta">
+                {focused.sci_name && <div className="muted" style={{ fontStyle: 'italic' }}>{focused.sci_name}</div>}
+                {focused.wiki_description && <div className="muted">{focused.wiki_description}</div>}
+                {focused.observed_at && <div className="muted">Last seen {fmtDate(focused.observed_at)}</div>}
+                {focused.place && <div className="muted">{focused.place}</div>}
+                {focused.cnt != null && focused.cnt > 1 && <div className="muted">{focused.cnt} seen</div>}
+              </div>
+            </div>
+
+            {focused.wiki_extract && (
+              <div className="rep-bio-text">
+                {focused.wiki_extract.split(/\n\n+/).map((p, i) => <p key={i}>{p}</p>)}
+              </div>
+            )}
+            {!focused.wiki_extract && (
+              <p className="muted">
+                Wikipedia summary not yet cached for this species — will populate on the next eBird cron run.
+              </p>
+            )}
+
+            <p className="rep-bio-links">
+              {focused.wiki_url && (
+                <a className="event-modal-btn primary" href={focused.wiki_url} target="_blank" rel="noopener">
+                  Read on Wikipedia →
+                </a>
+              )}
+              {focused.lat != null && focused.lon != null && (
+                <a className="event-modal-btn" href={`https://www.google.com/maps/?q=${focused.lat},${focused.lon}`} target="_blank" rel="noopener">
+                  Sighting location ↗
+                </a>
+              )}
+              <a className="event-modal-btn" href={`https://ebird.org/species/${encodeURIComponent(focused.common_name)}`} target="_blank" rel="noopener">
+                eBird species page →
+              </a>
+            </p>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}

@@ -1,6 +1,5 @@
 import { getJson } from '@/lib/cache';
 import { getLocation } from '@/lib/location';
-import WeatherDetail from './WeatherDetail';
 
 // Top-of-page weather summary, rendered on every page above the site header.
 // Reads from cache only — no fetches on render.
@@ -25,13 +24,11 @@ export default async function WeatherStrip() {
   let wxNow: WxNow | null = null;
   let wxForecast: WxForecast | null = null;
   let purpleAir: PurpleAir | null = null;
-  let openWeather: unknown = null;
   try {
-    [wxNow, wxForecast, purpleAir, openWeather] = await Promise.all([
+    [wxNow, wxForecast, purpleAir] = await Promise.all([
       getJson<WxNow>('weatherAPI'),
       getJson<WxForecast>('weatherAPI_forecast'),
       loc.purpleAirSensor ? getJson<PurpleAir>(`purple_air_${loc.purpleAirSensor}`) : Promise.resolve(null),
-      getJson('OPEN_weather'),
     ]);
   } catch (e) {
     console.error('WeatherStrip cache read failed:', e);
@@ -47,18 +44,14 @@ export default async function WeatherStrip() {
         {new Date().toLocaleString('en-US', { timeZone: loc.timezone, weekday: 'short', month: 'short', day: 'numeric' })}
       </span>
       {(cur?.condition?.text || cur?.temp_f != null) && (
-        <WeatherDetail
-          triggerClassName="cond gold"
-          tooltip={`Current conditions${cur?.condition?.text ? `: ${cur.condition.text}` : ''}${cur?.temp_f != null ? ` — air temperature ${Math.round(cur.temp_f)}°F` : ''}. Click for full OpenWeather snapshot.`}
-          openWeather={openWeather as Parameters<typeof WeatherDetail>[0]['openWeather']}
-          triggerContent={
-            <>
-              {cur?.condition?.icon && <img src={`https:${cur.condition.icon}`} alt={cur.condition.text ?? ''} />}
-              {[cur?.condition?.text, cur?.temp_f != null ? `${Math.round(cur.temp_f)}°F` : null]
-                .filter(Boolean).join(' ')}
-            </>
-          }
-        />
+        <span
+          className="cond gold"
+          title={`Current conditions${cur?.condition?.text ? `: ${cur.condition.text}` : ''}${cur?.temp_f != null ? ` — air temperature ${Math.round(cur.temp_f)}°F` : ''}`}
+        >
+          {cur?.condition?.icon && <img src={`https:${cur.condition.icon}`} alt={cur.condition.text ?? ''} />}
+          {[cur?.condition?.text, cur?.temp_f != null ? `${Math.round(cur.temp_f)}°F` : null]
+            .filter(Boolean).join(' ')}
+        </span>
       )}
       {cur?.feelslike_f != null && (
         <span className="red" title={`Feels-like temperature (heat index / wind chill): ${Math.round(cur.feelslike_f)}°F`}>Feels {Math.round(cur.feelslike_f)}°F</span>

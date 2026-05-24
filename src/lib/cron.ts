@@ -255,11 +255,6 @@ async function weatherapiForecast(json: Record<string, unknown>) {
   json.weatherAPI_forecast = await fetchJson(`http://api.weatherapi.com/v1/forecast.json?${params}`);
 }
 
-async function openweather(json: Record<string, unknown>) {
-  const loc = getLocation();
-  const params = new URLSearchParams({ units: 'imperial', lat: String(loc.lat), lon: String(loc.lon), appid: process.env.OPENWEATHER_KEY ?? '' });
-  json.OPEN_weather = await fetchJson(`https://api.openweathermap.org/data/2.5/weather?${params}`);
-}
 
 async function usgsQuakes(json: Record<string, unknown>) {
   type Q = { features?: { id: string; properties: { place?: string; mag?: number; time?: number; url?: string } }[] };
@@ -1076,8 +1071,10 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
   //     external pinger to truly fire every minute (GitHub Actions floors
   //     cron schedules at 5 min).
   if (bucket === '1m' || all) {
+    // openweather dropped — was only used by the (now-removed) current-
+    // temp click popup. weatherapi_current is the source of truth for
+    // the strip; OPEN_weather key in apis_json will age out.
     await safe('weatherapi_current', () => weatherapiCurrent(json), ok, errors, timings);
-    await safe('openweather',        () => openweather(json),       ok, errors, timings);
   }
 
   // 2m: AQI — sensor refreshes ~every 2 min.
