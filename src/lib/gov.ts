@@ -714,14 +714,21 @@ export async function fetchGovLocal(): Promise<GovLocalPayload> {
   // substitute the value from the previous cached payload so the strip
   // doesn't flash "—" between fetches. Tooltip gets a "(cached)" tag
   // so the staleness is visible on hover.
+  //
+  // STRIP any prior "· cached — current fetch unavailable" before re-
+  // appending — otherwise consecutive failed runs stack the suffix
+  // (e.g. "...cached — current fetch unavailable · cached — current
+  // fetch unavailable · ..." after N misses).
+  const CACHE_SUFFIX_RE = /(?:\s*·\s*cached\s+—\s+current fetch unavailable)+\s*$/i;
   for (let i = 0; i < items.length; i++) {
     if (items[i].value !== '—') continue;
     const old = prevItem(items[i].key);
     if (old && old.value && old.value !== '—') {
+      const baseTooltip = (old.tooltip ?? '').replace(CACHE_SUFFIX_RE, '');
       items[i] = {
         ...items[i],
         value: old.value,
-        tooltip: `${old.tooltip} · cached — current fetch unavailable`,
+        tooltip: `${baseTooltip} · cached — current fetch unavailable`,
       };
     }
   }
