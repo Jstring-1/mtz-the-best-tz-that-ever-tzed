@@ -26,8 +26,9 @@ function partyColor(p?: string): string {
 
 function RepCard({ r, onOpen }: { r: Rep; onOpen: (r: Rep) => void }) {
   const name = r.name?.trim() || '(name unavailable)';
-  // Only make the card clickable if there's actually more info to show.
-  const hasMore = !!(r.bio || r.phone || r.email || r.notes || r.electedDate || r.termExpires);
+  // Clickable if there's anything to show in the popup — bio text,
+  // contact info, term dates, or even just an official-page link.
+  const hasMore = !!(r.bio || r.phone || r.email || r.notes || r.electedDate || r.termExpires || r.url || r.photoUrl);
   const inner = (
     <>
       {r.photoUrl ? (

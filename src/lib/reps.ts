@@ -444,13 +444,36 @@ async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
   }
 
   if (!name) diag.county = 'contracosta.ca.gov/781 + Ballotpedia both failed';
-  return [{
+  const base: Rep = {
     level: 'county',
     office: `Supervisor, District ${COUNTY_BOS_DISTRICT} (Martinez)`,
     name,
     district: `BOS Dist ${COUNTY_BOS_DISTRICT}`,
     url: usedUrl,
-  }];
+  };
+  // Enrich from REP_BIOS if there's a match (same pattern as cityReps).
+  if (name) {
+    const { findBio } = await import('./reps-bios');
+    const bio = findBio(name);
+    if (bio) {
+      const slug = bio.photoFile?.replace(/\.[^.]+$/, '')
+        ?? bio.fullName.split(/\s+/).pop()!.toLowerCase().replace(/[^a-z-]/g, '');
+      diag.countyBio = `enriched from registry (${slug})`;
+      return [{
+        ...base,
+        name: bio.fullName,
+        office: bio.office + (bio.district ? `, ${bio.district}` : ''),
+        photoUrl: bio.photoFile ? `/img/${bio.photoFile}` : base.photoUrl,
+        email: bio.email,
+        bio: bio.bio,
+        electedDate: bio.electedDate,
+        appointedDate: bio.appointedDate,
+        termExpires: bio.termExpires,
+        bioKey: slug,
+      }];
+    }
+  }
+  return [base];
 }
 
 // =====================================================================

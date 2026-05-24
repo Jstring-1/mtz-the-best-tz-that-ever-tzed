@@ -74,32 +74,54 @@ export const REP_BIOS: Record<string, RepBio> = {
     bio:
       'Debbie was elected to the Martinez City Council in 2014 and served as Vice Mayor in 2017, 2021, and 2024. A fifth-generation Martinez resident and graduate of Alhambra High School, Debbie is proud to serve the community she has long called home. She is a working professional, mother of twin daughters, and previously served as a 4-H community leader. Debbie brings more than 40 years of experience in forensic science. She serves as the Sheriff\'s Chief of Forensic Services, overseeing a nationally accredited crime laboratory that provides countywide forensic services to 24 law enforcement agencies and more than one million county residents.\n\nHer academic credentials include an Executive Master of Public Administration from Golden Gate University in San Francisco, bachelor\'s degrees in chemistry and environmental studies from the University of California, Santa Barbara, and a Certificate in Forensic Science Laboratory Management from the University of California, Davis. Outside of her professional and public service roles, Debbie enjoys hiking, playing bocce, and attending movies and live theater with her family.',
   },
+
+  // Contra Costa County — District 5 Supervisor. Add photoFile +
+  // proper bio when you collect them; for now the card opens to a
+  // minimal popup with name + office + official-page link.
+  'scales-preston': {
+    fullName: 'Shanelle Scales-Preston',
+    office: 'Supervisor',
+    district: 'District 5 (Martinez)',
+    bio: '',
+  },
 };
 
-// Look up a bio by full-name. Strips honorifics, lowercases the last
-// word, and matches against the REP_BIOS keys. Returns null if no match.
+// Look up a bio by full-name. Strips honorifics, then tries the last
+// word (lowercased + non-letter-stripped) AND the hyphenated-last-name
+// variant — e.g., "Shanelle Scales-Preston" tries "preston" first
+// (last word after final space) then "scales-preston" (hyphen kept).
 export function findBio(fullName: string): RepBio | null {
-  const cleaned = fullName.replace(/\b(Mayor|Vice|Councilmember|Council\s+Member|Hon\.|Dr\.|Mr\.|Mrs\.|Ms\.)\b/gi, '').trim();
+  const cleaned = fullName
+    .replace(/\b(Mayor|Vice|Councilmember|Council\s+Member|Supervisor|Hon\.|Dr\.|Mr\.|Mrs\.|Ms\.)\b/gi, '')
+    .trim();
   const tokens = cleaned.split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return null;
-  const last = tokens[tokens.length - 1].toLowerCase().replace(/[^a-z]/g, '');
-  return REP_BIOS[last] ?? null;
+  const lastRaw = tokens[tokens.length - 1];
+  const candidates = [
+    lastRaw.toLowerCase().replace(/[^a-z-]/g, ''),       // 'scales-preston'
+    lastRaw.toLowerCase().replace(/[^a-z]/g, ''),        // 'scalespreston'
+    lastRaw.toLowerCase().split('-').pop()!.replace(/[^a-z]/g, ''), // 'preston'
+  ];
+  for (const k of candidates) {
+    if (REP_BIOS[k]) return REP_BIOS[k];
+  }
+  return null;
 }
 
-import type { Rep } from './reps';
+import type { Rep, RepLevel } from './reps';
 
 // Convert a RepBio + its slug into a Rep object the RepBioModal can
 // render. Used by CouncilDetail's top-strip (where we don't have the
 // cron-cached Rep list available — we render directly from REP_BIOS).
-export function bioToRep(slug: string, bio: RepBio): Rep {
+export function bioToRep(slug: string, bio: RepBio, level: RepLevel = 'city', urlOverride?: string): Rep {
   return {
-    level: 'city',
+    level,
     name: bio.fullName,
     office: bio.office + (bio.district ? `, ${bio.district}` : ''),
     district: bio.district,
     photoUrl: bio.photoFile ? `/img/${bio.photoFile}` : undefined,
     email: bio.email,
-    url: 'https://www.cityofmartinez.org/government/mayor-and-city-council',
+    url: urlOverride ?? 'https://www.cityofmartinez.org/government/mayor-and-city-council',
     bio: bio.bio,
     electedDate: bio.electedDate,
     appointedDate: bio.appointedDate,
