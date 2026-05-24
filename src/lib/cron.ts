@@ -527,6 +527,19 @@ async function repsData(json: Record<string, unknown>) {
   json['reps_data'] = payload;
 }
 
+// FBI Crime Data Explorer — cached so the popup doesn't fire ~64 live
+// FBI calls per open (which was hitting api.data.gov rate limits and
+// showing all zeros). Refreshed in the 12h bucket.
+async function crimeData(json: Record<string, unknown>) {
+  const { fetchCrimePayload } = await import('./crime');
+  const payload = await fetchCrimePayload();
+  // Only persist if at least one agency surfaced real data — avoid
+  // overwriting a healthy cache with a zeroed-out one on a flaky run.
+  if (payload.agencies.some((a) => a.total > 0)) {
+    json['crime_data'] = payload;
+  }
+}
+
 async function affectingBills(json: Record<string, unknown>) {
   const { fetchAffectingBills } = await import('./bills');
   const payload = await fetchAffectingBills();
@@ -1095,6 +1108,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
       safe('ccrmc_data',          () => ccrmcData(json),          ok, errors),
       safe('ccc_comp',            () => cccCompensation(json),    ok, errors),
       safe('reps_data',           () => repsData(json),           ok, errors),
+      safe('crime_data',          () => crimeData(json),          ok, errors),
     ]);
     await safe('purge_stores',    () => purgeStores(),            ok, errors);
   }
