@@ -44,14 +44,19 @@ export default async function CivicStrip() {
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
 
-  // Defensive normalization: when the cron writes a fresh payload it
-  // uses the new short format ("4.4%"). But until the next 12h refresh
-  // runs, items[].value can still be the old "CC 4.4%/CA 5.1%/US 3.8%"
-  // shape — extract just the county number so the strip looks right now.
+  // Defensive normalization: across cron generations the unemployment
+  // value has shipped in multiple shapes — "CC 4.4/CA 5.1/US 3.8",
+  // "CC 4.4%/CA 5.1%/US 3.8%", "4.4%%" (double %), and "4.4%". Strip
+  // any "CC ..." prefix, find the first numeric run, and append exactly
+  // one "%" so the strip always reads "4.4%" no matter what's cached.
   const displayValue = (it: GovStripItem): string => {
     if (it.key !== 'unemp') return it.value;
-    const m = it.value.match(/CC\s*([\d.]+)%?/i);
-    return m ? `${m[1]}%` : it.value;
+    if (it.value === '—') return it.value;
+    // Prefer the CC number when present; otherwise the first number in
+    // the string (covers the new short-format shape).
+    const ccMatch = it.value.match(/CC\s*([\d.]+)/i);
+    const num = ccMatch ? ccMatch[1] : it.value.match(/[\d.]+/)?.[0];
+    return num ? `${num}%` : it.value;
   };
 
   return (

@@ -107,10 +107,13 @@ async function blsUnemployment(): Promise<{
   const newest = [cc, ca, us]
     .filter((d): d is { year: string; periodName: string; value: string } => !!d)
     .sort((a, b) => (b.year + b.periodName).localeCompare(a.year + a.periodName))[0];
+  // Return RAW numeric strings (e.g. "4.4") — consumers append the
+  // '%' when displaying. Avoids the double-% bug where this function
+  // appended '%' AND callers appended another.
   return {
-    county: cc ? `${cc.value}%` : null,
-    state:  ca ? `${ca.value}%` : null,
-    nation: us ? `${us.value}%` : null,
+    county: cc ? `${cc.value}` : null,
+    state:  ca ? `${ca.value}` : null,
+    nation: us ? `${us.value}` : null,
     period: newest ? `${newest.periodName} ${newest.year}` : '',
   };
 }

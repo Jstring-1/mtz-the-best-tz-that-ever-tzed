@@ -3,6 +3,15 @@
 import Modal from './Modal';
 import { useUrlBool } from '@/lib/useUrlState';
 
+// Strip any existing '%' and append exactly one. Handles both the new
+// raw-numeric BLS shape ("4.4") and the old already-suffixed cache
+// shape ("4.4%") without producing double %.
+function fmtPct(v: string | null | undefined): string {
+  if (!v) return '—';
+  const num = v.match(/[\d.]+/)?.[0];
+  return num ? `${num}%` : '—';
+}
+
 interface Props {
   label: string;
   tooltip?: string;
@@ -35,11 +44,11 @@ export default function UnempDetail({ label, tooltip, data }: Props) {
             </p>
             <dl className="unemp-grid">
               <dt>Contra Costa County</dt>
-              <dd className="big">{data.county ?? '—'}{data.county ? '%' : ''}</dd>
+              <dd className="big">{fmtPct(data.county)}</dd>
               <dt>California</dt>
-              <dd className="big">{data.state ?? '—'}{data.state ? '%' : ''}</dd>
+              <dd className="big">{fmtPct(data.state)}</dd>
               <dt>United States</dt>
-              <dd className="big">{data.nation ?? '—'}{data.nation ? '%' : ''}</dd>
+              <dd className="big">{fmtPct(data.nation)}</dd>
             </dl>
             <h3 className="rep-h" style={{ marginTop: 18 }}>About this number</h3>
             <p style={{ fontSize: '.9em', lineHeight: 1.5 }}>
