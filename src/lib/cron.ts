@@ -539,11 +539,11 @@ async function affectingBills(json: Record<string, unknown>) {
   }
 }
 
-// Aggregated State / US / World feeds (apolitical wire-service mix).
-// One scope per apis_json key so the UI can lazy-load if it ever needs to.
+// Aggregated World feed (BBC only). One key per scope so the UI can
+// lazy-load if it ever needs to.
 async function aggregatedNews(json: Record<string, unknown>) {
   const { fetchNewsScope } = await import('./news-aggregator');
-  const scopes = ['state', 'us', 'world'] as const;
+  const scopes = ['world'] as const;
   const results = await Promise.all(scopes.map((s) => fetchNewsScope(s).catch(() => null)));
   for (let i = 0; i < scopes.length; i++) {
     const r = results[i];

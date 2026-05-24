@@ -8,13 +8,11 @@ import { relativeFromUnixSeconds } from '@/lib/time';
 import { useUrlString, useUrlEnum } from '@/lib/useUrlState';
 
 // 'all' = merged & sorted (default). Others act as exclusive filters.
-type Tab = 'all' | 'local' | 'state' | 'us' | 'world';
-const TABS: Tab[] = ['all', 'local', 'state', 'us', 'world'];
+type Tab = 'all' | 'local' | 'world';
+const TABS: Tab[] = ['all', 'local', 'world'];
 
 interface Props {
   local: FeedRow[];
-  state: NewsItem[];
-  us: NewsItem[];
   world: NewsItem[];
 }
 
@@ -67,8 +65,6 @@ function mapWire(scope: Exclude<Tab, 'all' | 'local'>, items: NewsItem[]): Row[]
 
 const SCOPE_LABEL: Record<Exclude<Tab, 'all'>, string> = {
   local: 'Local',
-  state: 'State',
-  us: 'US',
   world: 'World',
 };
 
@@ -81,8 +77,6 @@ export default function NewsCard(props: Props) {
   const allRows = useMemo<Row[]>(() => {
     const merged: Row[] = [
       ...mapLocal(props.local),
-      ...mapWire('state', props.state),
-      ...mapWire('us', props.us),
       ...mapWire('world', props.world),
     ];
     merged.sort((a, b) => b.ts - a.ts);
@@ -90,7 +84,7 @@ export default function NewsCard(props: Props) {
   }, [props]);
 
   const counts = useMemo(() => {
-    const c: Record<Exclude<Tab, 'all'>, number> = { local: 0, state: 0, us: 0, world: 0 };
+    const c: Record<Exclude<Tab, 'all'>, number> = { local: 0, world: 0 };
     for (const r of allRows) c[r.scope]++;
     return c;
   }, [allRows]);

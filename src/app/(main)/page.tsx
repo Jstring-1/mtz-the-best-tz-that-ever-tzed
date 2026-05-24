@@ -21,7 +21,7 @@ export default async function MainPage() {
   const [
     storedEvents, storedAlerts,
     storedPets, storedQuakes, feeds, misc,
-    newsState, newsUs, newsWorld,
+    newsWorld,
   ] = await Promise.all([
     listUpcomingEvents(),
     listActiveAlerts(),
@@ -29,8 +29,6 @@ export default async function MainPage() {
     listRecentQuakes(10),
     getFeeds(1000),
     getMisc(),
-    getJson<NewsScopePayload>('news_state').catch(() => null),
-    getJson<NewsScopePayload>('news_us').catch(() => null),
     getJson<NewsScopePayload>('news_world').catch(() => null),
   ]);
 
@@ -100,8 +98,6 @@ export default async function MainPage() {
       <EventsCard events={events} tz={loc.timezone} />
       <NewsCard
         local={feeds}
-        state={newsState?.items ?? []}
-        us={newsUs?.items ?? []}
         world={newsWorld?.items ?? []}
       />
       <PetsCard   pets={storedPets} />

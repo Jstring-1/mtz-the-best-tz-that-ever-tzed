@@ -1,21 +1,12 @@
-// Aggregated, politically-moderate news for the State / US / World tabs.
+// Aggregated, politically-moderate news for the World tab.
 //
 // "Local" stays on the existing `feeds` table (Martinez-specific RSS).
-// These wider scopes come from BBC direct RSS + Google News RSS filtered
-// to apnews.com / reuters.com / bbc.com via `site:` operators. Google
-// News is the proxy because:
-//   - AP's own feeds.apnews.com is flaky from cloud egress
-//   - Reuters retired their public RSS in 2020
-//   - The Google News RSS endpoint is the one we already proved works
-//     from Railway (used by the CCRMC news fetcher).
+// "World" comes from BBC's direct RSS — single trusted source, no
+// Google News proxy noise.
 //
-// Each item carries its actual publisher in `source` so the UI can
-// surface attribution. Items are deduped by URL host+path and capped
-// at 40 per scope.
-//
-// Stored in apis_json under keys `news_state`, `news_us`, `news_world`.
+// Stored in apis_json under key `news_world`.
 
-export type NewsScope = 'state' | 'us' | 'world';
+export type NewsScope = 'world';
 
 export interface NewsItem {
   ts: number;        // unix epoch seconds
@@ -40,22 +31,8 @@ const COMMON_HEADERS = {
 // deduped, sorted desc by pubDate. The Google News `site:` filters
 // ensure we only surface AP / Reuters / BBC stories.
 const FEEDS: Record<NewsScope, string[]> = {
-  state: [
-    // CA section from Google News (includes McClatchy / Sac Bee / LA Times etc.
-    // alongside AP wire). This is the most useful for "what's happening in CA".
-    'https://news.google.com/rss/headlines/section/geo/California?hl=en-US&gl=US&ceid=US:en',
-    // Then AP/Reuters/BBC stories about California specifically.
-    'https://news.google.com/rss/search?q=California+(site:apnews.com+OR+site:reuters.com+OR+site:bbc.com)+when:2d&hl=en-US&gl=US&ceid=US:en',
-  ],
-  us: [
-    // BBC's North America section — well-established, stable RSS.
-    'https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml',
-    // AP + Reuters US headlines proxied via Google News.
-    'https://news.google.com/rss/search?q=(site:apnews.com+OR+site:reuters.com)+when:1d&hl=en-US&gl=US&ceid=US:en',
-  ],
   world: [
     'https://feeds.bbci.co.uk/news/world/rss.xml',
-    'https://news.google.com/rss/search?q=world+(site:apnews.com+OR+site:reuters.com)+when:1d&hl=en-US&gl=US&ceid=US:en',
   ],
 };
 
