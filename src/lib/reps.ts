@@ -91,6 +91,13 @@ export interface Rep {
   email?: string;
   photoUrl?: string;
   notes?: string;            // term-end, role context, etc.
+  // Long-form bio + dates, populated from src/lib/reps-bios.ts when a
+  // last-name match exists. The modal shows these in a nested popup.
+  bio?: string;
+  electedDate?: string;
+  appointedDate?: string;
+  termExpires?: string;
+  bioKey?: string;           // lowercase last-name slug (e.g. 'zorn')
 }
 
 export interface RepsPayload {
@@ -567,7 +574,32 @@ async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
     diag.city = 'wayback snapshot fetched but no h2 name-office pairs matched';
     return [{ level: 'city', office: 'Mayor + Council', name: '', url: COUNCIL_PAGE_URL }];
   }
-  return reps;
+
+  // Enrich with first-party bio data when we have it. Bio is the
+  // current source of truth for office/role (Vice Mayor rotates between
+  // members, and our Wayback snapshot can be months stale), so let the
+  // bio's office field override the scraped value when present.
+  const { findBio } = await import('./reps-bios');
+  const enriched = reps.map((r): Rep => {
+    const bio = findBio(r.name);
+    if (!bio) return r;
+    const slug = bio.photoFile?.replace(/\.[^.]+$/, '');
+    return {
+      ...r,
+      name: bio.fullName,                                   // canonical capitalization
+      office: bio.office + (bio.district ? `, ${bio.district}` : ''),
+      district: bio.district ?? r.district,
+      photoUrl: bio.photoFile ? `/img/${bio.photoFile}` : r.photoUrl,
+      email: bio.email ?? r.email,
+      bio: bio.bio,
+      electedDate: bio.electedDate,
+      appointedDate: bio.appointedDate,
+      termExpires: bio.termExpires,
+      bioKey: slug,
+    };
+  });
+  diag.cityBios = `${enriched.filter((r) => r.bio).length}/${enriched.length} enriched from registry`;
+  return enriched;
 }
 
 // =====================================================================

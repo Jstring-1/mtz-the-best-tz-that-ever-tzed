@@ -1674,6 +1674,42 @@ main { padding-top: var(--top-stack-h); display: block; }
 .rep-contact a:hover { text-decoration: underline; }
 .rep-notes { font-size: .78em; margin-top: 4px; }
 
+/* Clickable rep cards open a nested bio modal. */
+button.rep-card.clickable {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: border-color 80ms, background 80ms;
+}
+button.rep-card.clickable:hover,
+button.rep-card.clickable:focus-visible {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+
+/* Bio detail modal — photo on the left, metadata + bio on the right. */
+.rep-bio-detail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.rep-bio-head {
+  display: flex; gap: 14px; align-items: flex-start;
+}
+.rep-bio-photo {
+  width: 120px; height: 150px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  flex: 0 0 120px;
+}
+.rep-bio-photo.placeholder {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.4em; color: var(--text-muted); font-weight: 600;
+}
+.rep-bio-meta { flex: 1 1 auto; font-size: .9em; min-width: 0; }
+.rep-bio-meta > div { margin-bottom: 2px; }
+.rep-bio-text p { line-height: 1.55; margin: 0 0 10px; font-size: .92em; }
+.rep-bio-links { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* Extracted-article body (Readability output). Constrain images,
    keep paragraph rhythm, hide ads/figure-credit junk. */
 .article-extracted img,

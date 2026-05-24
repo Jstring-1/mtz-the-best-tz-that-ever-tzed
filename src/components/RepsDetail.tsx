@@ -1,21 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal';
-import { useUrlBool } from '@/lib/useUrlState';
+import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 import type { Rep, RepsPayload } from '@/lib/reps';
 
 interface Props { label: string; tooltip?: string }
 
-function RepCard({ r }: { r: Rep }) {
-  const name = r.name?.trim() || '(name unavailable)';
-  const partyColor = r.party === 'D' ? 'var(--accent-cool)'
-    : r.party === 'R' ? 'var(--accent-warm)'
+// Stable per-rep key for URL-state. Uses bioKey (last-name slug) when
+// the rep has one — those have curated bios so they're worth sharing.
+// Falls back to a generated slug for everyone else.
+function repSlug(r: Rep): string {
+  if (r.bioKey) return r.bioKey;
+  const base = `${r.level}-${r.name || r.office}`.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return base || 'unknown';
+}
+
+function partyColor(p?: string): string {
+  return p === 'D' ? 'var(--accent-cool)'
+    : p === 'R' ? 'var(--accent-warm)'
     : 'var(--text-muted)';
-  return (
-    <div className="rep-card">
+}
+
+function RepCard({ r, onOpen }: { r: Rep; onOpen: (r: Rep) => void }) {
+  const name = r.name?.trim() || '(name unavailable)';
+  // Only make the card clickable if there's actually more info to show.
+  const hasMore = !!(r.bio || r.phone || r.email || r.notes || r.electedDate || r.termExpires);
+  const inner = (
+    <>
       {r.photoUrl ? (
-        // External thumbnails — sized via CSS so missing/oversize doesn't break layout.
         // eslint-disable-next-line @next/next/no-img-element
         <img src={r.photoUrl} alt="" className="rep-photo" loading="lazy" />
       ) : (
@@ -23,27 +37,40 @@ function RepCard({ r }: { r: Rep }) {
       )}
       <div className="rep-body">
         <div className="rep-name">
-          {r.url ? <a href={r.url} target="_blank" rel="noopener">{name}</a> : name}
-          {r.party && <span className="rep-party" style={{ color: partyColor }}> · {r.party}</span>}
+          {name}
+          {r.party && <span className="rep-party" style={{ color: partyColor(r.party) }}> · {r.party}</span>}
         </div>
         <div className="rep-office">
           {r.office}
-          {r.district && <span className="muted"> · {r.district}</span>}
+          {r.district && !r.office.includes(r.district) && <span className="muted"> · {r.district}</span>}
         </div>
         {(r.phone || r.email) && (
           <div className="rep-contact">
-            {r.phone && <a href={`tel:${r.phone}`}>{r.phone}</a>}
+            {r.phone}
             {r.phone && r.email && <span> · </span>}
-            {r.email && <a href={`mailto:${r.email}`}>{r.email}</a>}
+            {r.email}
           </div>
         )}
         {r.notes && <div className="rep-notes muted">{r.notes}</div>}
       </div>
-    </div>
+    </>
+  );
+  if (!hasMore) {
+    return <div className="rep-card">{inner}</div>;
+  }
+  return (
+    <button type="button" className="rep-card clickable" onClick={() => onOpen(r)}>
+      {inner}
+    </button>
   );
 }
 
-function Section({ title, reps, emptyHint }: { title: string; reps: Rep[]; emptyHint?: string }) {
+function Section({ title, reps, onOpen, emptyHint }: {
+  title: string;
+  reps: Rep[];
+  onOpen: (r: Rep) => void;
+  emptyHint?: string;
+}) {
   return (
     <section className="reps-section">
       <h3 className="rep-h">{title} <span className="muted" style={{ fontWeight: 400, fontSize: '.78em' }}>({reps.length})</span></h3>
@@ -51,15 +78,65 @@ function Section({ title, reps, emptyHint }: { title: string; reps: Rep[]; empty
         <p className="muted">{emptyHint ?? 'No data.'}</p>
       ) : (
         <div className="reps-grid">
-          {reps.map((r, i) => <RepCard key={`${r.office}-${i}`} r={r} />)}
+          {reps.map((r) => <RepCard key={repSlug(r)} r={r} onOpen={onOpen} />)}
         </div>
       )}
     </section>
   );
 }
 
+function RepBioModal({ rep, onClose }: { rep: Rep; onClose: () => void }) {
+  const title = `${rep.name} — ${rep.office}`;
+  return (
+    <Modal open={true} onClose={onClose} title={title} size="md">
+      <div className="rep-bio-detail">
+        <div className="rep-bio-head">
+          {rep.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={rep.photoUrl} alt={rep.name} className="rep-bio-photo" />
+          ) : (
+            <div className="rep-bio-photo placeholder">{(rep.name?.[0] ?? '?').toUpperCase()}</div>
+          )}
+          <div className="rep-bio-meta">
+            {rep.party && <div className="rep-party" style={{ color: partyColor(rep.party) }}>{rep.party}</div>}
+            {rep.district && <div className="muted">{rep.district}</div>}
+            {rep.electedDate && <div className="muted">Elected {rep.electedDate}</div>}
+            {rep.appointedDate && <div className="muted">Appointed {rep.appointedDate}</div>}
+            {rep.termExpires && <div className="muted">Term expires {rep.termExpires}</div>}
+          </div>
+        </div>
+
+        {rep.bio && (
+          <div className="rep-bio-text">
+            {rep.bio.split(/\n\n+/).map((p, i) => <p key={i}>{p}</p>)}
+          </div>
+        )}
+
+        <div className="rep-bio-links">
+          {rep.url && (
+            <a className="event-modal-btn primary" href={rep.url} target="_blank" rel="noopener">
+              Official page →
+            </a>
+          )}
+          {rep.email && (
+            <a className="event-modal-btn" href={`mailto:${rep.email}`}>
+              Email {rep.name.split(/\s+/)[0]} →
+            </a>
+          )}
+          {rep.phone && (
+            <a className="event-modal-btn" href={`tel:${rep.phone}`}>
+              Call {rep.phone} →
+            </a>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function RepsDetail({ label, tooltip }: Props) {
   const [open, setOpen] = useUrlBool('reps');
+  const [bioSlug, setBioSlug] = useUrlString('rbio');
   const [data, setData] = useState<RepsPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [empty, setEmpty] = useState<string | null>(null);
@@ -79,6 +156,15 @@ export default function RepsDetail({ label, tooltip }: Props) {
       .finally(() => setLoading(false));
   }, [open, data, loading]);
 
+  // Resolve the deep-linked bio (`?rbio=zorn`) once data lands.
+  const bioRep = useMemo<Rep | null>(() => {
+    if (!data || !bioSlug) return null;
+    const all = [...data.city, ...data.county, ...data.stateLegislature, ...data.state, ...data.federal];
+    return all.find((r) => repSlug(r) === bioSlug) ?? null;
+  }, [data, bioSlug]);
+
+  const openBio = (r: Rep) => setBioSlug(repSlug(r));
+
   return (
     <>
       <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
@@ -91,23 +177,23 @@ export default function RepsDetail({ label, tooltip }: Props) {
         {data && (
           <>
             <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              Auto-resolved from official .gov sources (Congress.gov, OpenStates, gov.ca.gov, county BOS, City of Martinez).
-              Names without a parsed value link out to the official page.
+              Click any card for a bio &amp; contact info. Auto-resolved from official .gov sources
+              (Congress.gov, OpenStates, gov.ca.gov, county BOS, City of Martinez).
             </p>
 
-            <Section title="City — Martinez Council & Mayor" reps={data.city}
+            <Section title="City — Martinez Council & Mayor" reps={data.city} onOpen={openBio}
               emptyHint="Couldn't read the city site this cycle — try the official link." />
 
-            <Section title="County — Supervisor, District 5" reps={data.county}
+            <Section title="County — Supervisor, District 5" reps={data.county} onOpen={openBio}
               emptyHint="Couldn't read the county BOS page this cycle." />
 
-            <Section title="State Legislature — Senate Dist 9 + Assembly Dist 15" reps={data.stateLegislature}
+            <Section title="State Legislature — Senate Dist 9 + Assembly Dist 15" reps={data.stateLegislature} onOpen={openBio}
               emptyHint="OpenStates lookup empty (key missing or rate-limited)." />
 
-            <Section title="California — Statewide officers" reps={data.state}
+            <Section title="California — Statewide officers" reps={data.state} onOpen={openBio}
               emptyHint="Ballotpedia state-officials table didn't parse this cycle." />
 
-            <Section title="Federal — CA Senators + House CA-08" reps={data.federal}
+            <Section title="Federal — CA Senators + House CA-08" reps={data.federal} onOpen={openBio}
               emptyHint="Congress.gov lookup empty (GOV_API_TOKEN missing or rate-limited)." />
 
             <p className="muted" style={{ fontSize: '.72em', marginTop: 12 }}>
@@ -128,6 +214,8 @@ export default function RepsDetail({ label, tooltip }: Props) {
           </>
         )}
       </Modal>
+
+      {bioRep && <RepBioModal rep={bioRep} onClose={() => setBioSlug(null)} />}
     </>
   );
 }
