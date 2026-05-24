@@ -85,3 +85,34 @@ export function findBio(fullName: string): RepBio | null {
   const last = tokens[tokens.length - 1].toLowerCase().replace(/[^a-z]/g, '');
   return REP_BIOS[last] ?? null;
 }
+
+import type { Rep } from './reps';
+
+// Convert a RepBio + its slug into a Rep object the RepBioModal can
+// render. Used by CouncilDetail's top-strip (where we don't have the
+// cron-cached Rep list available — we render directly from REP_BIOS).
+export function bioToRep(slug: string, bio: RepBio): Rep {
+  return {
+    level: 'city',
+    name: bio.fullName,
+    office: bio.office + (bio.district ? `, ${bio.district}` : ''),
+    district: bio.district,
+    photoUrl: bio.photoFile ? `/img/${bio.photoFile}` : undefined,
+    email: bio.email,
+    url: 'https://www.cityofmartinez.org/government/mayor-and-city-council',
+    bio: bio.bio,
+    electedDate: bio.electedDate,
+    appointedDate: bio.appointedDate,
+    termExpires: bio.termExpires,
+    bioKey: slug,
+  };
+}
+
+// All council members in display order: Mayor first, then districts 1-4.
+// Used by the council popup's top-strip.
+export function councilOrdered(): Array<{ slug: string; bio: RepBio }> {
+  const order = ['zorn', 'howard', 'young', 'malhi', 'mckillop'];
+  return order
+    .map((slug) => REP_BIOS[slug] ? { slug, bio: REP_BIOS[slug] } : null)
+    .filter((x): x is { slug: string; bio: RepBio } => x !== null);
+}

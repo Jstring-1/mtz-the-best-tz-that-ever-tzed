@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal';
+import RepBioModal from './RepBioModal';
 import { useUrlBool, useUrlString } from '@/lib/useUrlState';
+import { councilOrdered, bioToRep } from '@/lib/reps-bios';
 
 interface Meeting {
   clipId: string;
@@ -37,6 +39,14 @@ export default function CouncilDetail({ label, tooltip }: { label: string; toolt
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Council member bio popup (shared URL state with RepsDetail — both
+  // modals render the same RepBioModal when ?rbio=<slug> is set).
+  const [bioSlug, setBioSlug] = useUrlString('rbio');
+  const bioRep = useMemo(() => {
+    if (!bioSlug) return null;
+    const entry = councilOrdered().find((c) => c.slug === bioSlug);
+    return entry ? bioToRep(entry.slug, entry.bio) : null;
+  }, [bioSlug]);
   // Encode the nested PDF viewer as "<clipId>.<kind>" where kind is
   // "agenda" or "minutes".
   const [pdfStr, setPdfStr] = useUrlString('cpdf');
@@ -75,6 +85,31 @@ export default function CouncilDetail({ label, tooltip }: { label: string; toolt
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Martinez City Council — meetings" size="lg">
+        {/* Council member strip — Mayor + 4 council members. Click any
+            face to open the same bio modal that RepsDetail uses. */}
+        <div className="council-strip">
+          {councilOrdered().map(({ slug, bio }) => (
+            <button
+              key={slug}
+              type="button"
+              className="council-strip-item"
+              onClick={() => setBioSlug(slug)}
+              title={`${bio.fullName} — ${bio.office}`}
+            >
+              {bio.photoFile ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`/img/${bio.photoFile}`} alt={bio.fullName} className="council-strip-photo" />
+              ) : (
+                <div className="council-strip-photo placeholder">
+                  {bio.fullName[0]}
+                </div>
+              )}
+              <div className="council-strip-name">{bio.fullName}</div>
+              <div className="council-strip-office">{bio.office}{bio.district ? ` · ${bio.district}` : ''}</div>
+            </button>
+          ))}
+        </div>
+
         {loading && <p className="muted">Loading meetings…</p>}
         {error   && <p className="muted">Couldn’t load: {error}</p>}
         {data && data.meetings.length === 0 && (
@@ -120,6 +155,8 @@ export default function CouncilDetail({ label, tooltip }: { label: string; toolt
           </p>
         )}
       </Modal>
+
+      {bioRep && <RepBioModal rep={bioRep} onClose={() => setBioSlug(null)} />}
 
       <Modal
         open={!!pdf}

@@ -1710,6 +1710,53 @@ button.rep-card.clickable:focus-visible {
 .rep-bio-text p { line-height: 1.55; margin: 0 0 10px; font-size: .92em; }
 .rep-bio-links { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* Council member strip at the top of the Council popup — small
+   clickable thumbnails that open each member's bio modal. */
+.council-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.council-strip-item {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 8px 6px;
+  font: inherit; color: inherit;
+  text-align: center;
+  cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-width: 0;
+  transition: border-color 80ms, background 80ms;
+}
+.council-strip-item:hover,
+.council-strip-item:focus-visible {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+.council-strip-photo {
+  width: 64px; height: 64px;
+  object-fit: cover;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+}
+.council-strip-photo.placeholder {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4em; color: var(--text-muted); font-weight: 600;
+}
+.council-strip-name {
+  font-size: .82em; font-weight: 600; color: var(--text);
+  overflow-wrap: anywhere;
+}
+.council-strip-office {
+  font-size: .72em; color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 /* Extracted-article body (Readability output). Constrain images,
    keep paragraph rhythm, hide ads/figure-credit junk. */
 .article-extracted img,
