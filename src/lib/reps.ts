@@ -353,10 +353,18 @@ function extractPersonAfterLabel(html: string, labelRe: RegExp, windowSize = 200
 }
 
 async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
-  // Primary: District 5's own CCC page. The H1 reads
-  //   "Supervisor <Name>, District 5"
-  // (confirmed). Fall back to Ballotpedia table if the .gov site 403s.
+  // Static-first: Scales-Preston (D5) lives in REP_BIOS keyed
+  // 'scales-preston'. If she's there, return her directly — no scrape
+  // needed, no risk of a flaky upstream blanking out the section.
   const d5Url = 'https://www.contracosta.ca.gov/781/';
+  const { REP_BIOS, bioToRep } = await import('./reps-bios');
+  const staticD5 = REP_BIOS['scales-preston'];
+  if (staticD5) {
+    diag.countySource = 'static (scales-preston from REP_BIOS)';
+    return [bioToRep('scales-preston', staticD5, 'county', d5Url)];
+  }
+
+  // Fallback (only if REP_BIOS lacks an entry) — scrape the .gov page.
   const [d5Html, ballotHtml] = await Promise.all([
     safeText(d5Url),
     safeText(BALLOTPEDIA_CCC_URL),
@@ -488,6 +496,19 @@ async function fetchViaWayback(originalUrl: string, diag: Record<string, string>
 }
 
 async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
+  // Static-first: the council roster is hand-maintained in reps-bios.ts
+  // (Mayor + 4 council members). That registry is the source of truth
+  // for names, offices, photos, bios, contact info — no scraping. When
+  // a seat changes, edit reps-bios.ts and bump REP_BIOS.
+  const { councilOrdered, bioToRep } = await import('./reps-bios');
+  const ordered = councilOrdered();
+  if (ordered.length > 0) {
+    diag.citySource = `static (${ordered.length} from REP_BIOS)`;
+    return ordered.map(({ slug, bio }) => bioToRep(slug, bio, 'city', COUNCIL_PAGE_URL));
+  }
+
+  // Fallback path retained only in case REP_BIOS is empty — we'd never
+  // hit this in practice. Below is the old Wayback scrape.
   const wb = await fetchViaWayback(COUNCIL_PAGE_URL, diag, 'cityWayback');
   if (!wb) {
     return [{ level: 'city', office: 'Mayor + Council', name: '', url: COUNCIL_PAGE_URL }];
