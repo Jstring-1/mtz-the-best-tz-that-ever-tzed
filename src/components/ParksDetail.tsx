@@ -28,31 +28,21 @@ const EBRPD_MAPS: Array<{ slug: string; label: string; file: string; note: strin
     note: 'EBRPD board-of-directors ward boundaries and member assignments (109 pages).' },
 ];
 
-// Two-level civic-strip popup:
-//   Level 1: a list of all Martinez parks (cards with thumbnail + name)
-//            plus quick-links to the three EBRPD district map PDFs.
-//   Level 2: click a card → nested modal with the park's address,
-//            description, amenities, image, and a Google Maps link.
-//   Level 2 (map): click an EBRPD map link → nested modal with the
-//            PDF embedded inline.
+// Civic-strip popup contents:
+//   Leaflet map (one pin per park) + EBRPD PDF shortcuts + a card list
+//   of every park. Cards and pins both call zoomToPark(id), which flies
+//   the Leaflet map to that pin. No per-park detail modal — clicking is
+//   purely a map-navigation gesture.
 export default function ParksDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('parks');
-  const [parkId, setParkId] = useUrlString('park');
   const [mapSlug, setMapSlug] = useUrlString('parkmap');
   // "Zoom to this park" request — the nonce makes re-clicking the same
   // park re-trigger the flyTo animation (useEffect deps would otherwise
   // see no change).
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
-  const zoomToPark = (id: string) => {
-    setParkId(null);             // close the detail modal
-    setFocus({ id, nonce: Date.now() });
-  };
+  const zoomToPark = (id: string) => setFocus({ id, nonce: Date.now() });
 
   const parks = data ?? MARTINEZ_PARKS;
-  const focused = useMemo<Park | null>(
-    () => (parkId ? parks.find((p) => p.id === parkId) ?? null : null),
-    [parkId, parks],
-  );
   const focusedMap = useMemo(
     () => (mapSlug ? EBRPD_MAPS.find((m) => m.slug === mapSlug) ?? null : null),
     [mapSlug],
@@ -64,10 +54,9 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Martinez parks" size="lg">
-        {/* Leaflet map with one pin per park — click a pin to open the
-            same nested detail modal that the cards below open. */}
+        {/* Leaflet map with one pin per park — click a pin to zoom to it. */}
         {parks.length > 0 && (
-          <ParksMap parks={parks} onSelect={setParkId} focus={focus} />
+          <ParksMap parks={parks} onSelect={zoomToPark} focus={focus} />
         )}
         {/* EBRPD district map shortcuts — embedded PDFs from /public/img/. */}
         <div className="park-map-links">
@@ -94,7 +83,8 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
                   key={p.id}
                   type="button"
                   className="rep-card clickable"
-                  onClick={() => setParkId(p.id)}
+                  onClick={() => zoomToPark(p.id)}
+                  title="Zoom to this park on the map"
                 >
                   {p.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -132,46 +122,6 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
             <div className="popup-ext-links">
               <a href={focusedMap.file} target="_blank" rel="noopener">Open PDF in new tab →</a>
               <a href={focusedMap.file} download>Download PDF →</a>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {focused && (
-        <Modal open={true} onClose={() => setParkId(null)} title={focused.name} size="md">
-          <div className="rep-bio-detail">
-            {focused.image && (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={focused.image} alt={focused.name} className="park-detail-photo" />
-              </>
-            )}
-            {focused.address && (
-              <p style={{ margin: 0 }}>
-                <strong>Address: </strong>{focused.address}
-              </p>
-            )}
-            {focused.description && (
-              <p style={{ lineHeight: 1.55, fontSize: '.92em' }}>{focused.description}</p>
-            )}
-            {focused.amenities && focused.amenities.length > 0 && (
-              <>
-                <h3 className="rep-h">Amenities</h3>
-                <ul className="park-amen-list">
-                  {focused.amenities.map((a, i) => <li key={i}>{a}</li>)}
-                </ul>
-              </>
-            )}
-            <div className="popup-ext-links">
-              {typeof focused.lat === 'number' && typeof focused.lng === 'number' && (
-                <a href="#"
-                   onClick={(e) => { e.preventDefault(); zoomToPark(focused.id); }}>
-                  Zoom to this park on the map →
-                </a>
-              )}
-              {focused.url && (
-                <a href={focused.url} target="_blank" rel="noopener">Park page on cityofmartinez.org →</a>
-              )}
             </div>
           </div>
         </Modal>
