@@ -10,25 +10,26 @@ import 'leaflet/dist/leaflet.css';
 // import the library inside useEffect because it touches `window` at
 // import time and would crash SSR.
 //
-// Markers use a small DivIcon — avoids the well-known Leaflet/webpack
-// gotcha where the default PNG marker images 404 because the bundled
-// URLs don't survive Next's build pipeline.
+// Markers use a small DivIcon (sidesteps the well-known Leaflet/
+// Webpack PNG-marker-404 gotcha). Click a pin -> calls onSelect(id)
+// directly, which opens the existing park-detail modal. We don't
+// bind Leaflet popups: their default chrome fights with the modal's
+// dark theme + wildcard word-break, and skipping them entirely is
+// simpler than CSS-overriding every default.
 export default function ParksMap({
   parks,
   onSelect,
-  selectedId,
   height = 320,
 }: {
   parks: Park[];
   onSelect: (id: string) => void;
+  /** Reserved for future "highlight this pin" behavior — currently
+   *  unused since clicking a pin opens the detail modal directly. */
   selectedId?: string | null;
   height?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<unknown>(null);
-  // Keep marker refs so we can pop one open when `selectedId` changes
-  // from outside (e.g. someone clicks a card in the list).
-  const markersRef = useRef<Map<string, unknown>>(new Map());
   const onSelectRef = useRef(onSelect);
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
 
@@ -36,9 +37,7 @@ export default function ParksMap({
     let cancelled = false;
     let map: import('leaflet').Map | null = null;
     let resizeObs: ResizeObserver | null = null;
-    // Snapshot the ref Map for cleanup so we don't read .current later
-    // (React-hooks lint: .current may change before cleanup runs).
-    const markers = markersRef.current;
+    let lastFitSize = { w: 0, h: 0 };
 
     (async () => {
       const L = (await import('leaflet')).default;
@@ -50,15 +49,16 @@ export default function ParksMap({
       );
       if (!withCoords.length) return;
 
-      // Fit all pins immediately so the first paint already shows the
-      // full park set — even if the container hasn't reached its final
-      // size yet, the ResizeObserver below will re-fit once it has.
+      // Pad bounds slightly so the outermost pins don't sit on the
+      // edge. No maxZoom cap — the cap caused the map to lock at the
+      // initial (small-container) zoom and leave outer pins off-screen
+      // when the modal expanded.
       const bounds = L.latLngBounds(withCoords.map((p) => [p.lat, p.lng]));
       map = L.map(containerRef.current, {
         scrollWheelZoom: false,
         zoomSnap: 0.25,
       });
-      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
+      map.fitBounds(bounds, { padding: [24, 24] });
       mapRef.current = map;
 
       // OSM tiles — free, no API key, attribution required.
@@ -72,41 +72,33 @@ export default function ParksMap({
         html: '<span class="park-pin-dot"></span>',
         iconSize: [18, 18],
         iconAnchor: [9, 9],
-        popupAnchor: [0, -8],
       });
 
       for (const p of withCoords) {
         const marker = L.marker([p.lat, p.lng], { icon: pinIcon, title: p.name }).addTo(map);
-        const popupHtml =
-          `<div class="park-pop">
-             <button type="button" class="park-pop-btn" data-park-id="${p.id}">${escapeHtml(p.name)}</button>
-             ${p.address ? `<div class="park-pop-addr">${escapeHtml(p.address)}</div>` : ''}
-           </div>`;
-        marker.bindPopup(popupHtml);
-        marker.on('popupopen', (e) => {
-          const root = (e.popup.getElement() as HTMLElement | null);
-          const btn = root?.querySelector<HTMLButtonElement>(`button[data-park-id="${p.id}"]`);
-          btn?.addEventListener('click', () => onSelectRef.current(p.id), { once: true });
-        });
-        markers.set(p.id, marker);
+        // Click pin -> route through onSelect, which the parent uses to
+        // open the existing park-detail modal. No Leaflet popup in
+        // between, so no popup chrome to style.
+        marker.on('click', () => onSelectRef.current(p.id));
       }
 
-      // The modal animates in, so the container's final size isn't
-      // known when L.map() runs — Leaflet caches the (smaller) initial
-      // size and only fetches tiles for that area, leaving the rest of
-      // the panel gray. We invalidateSize() on every observed resize
-      // so window-resize + modal-open both get covered, but only call
-      // fitBounds the FIRST time we see a real size — otherwise every
-      // popup auto-pan animation would retrigger fitBounds and the map
-      // would jump around on click.
+      // Re-fit on container resize. The modal animates in, so the
+      // initial fitBounds runs against a smaller-than-final container
+      // and can leave outer pins off-screen. We compare against the
+      // last fit size so popup-triggered resizes (there shouldn't be
+      // any now that popups are gone, but defense in depth) don't
+      // re-trigger fitBounds for trivial deltas.
       if (containerRef.current) {
-        let didInitialFit = false;
-        resizeObs = new ResizeObserver(() => {
+        resizeObs = new ResizeObserver((entries) => {
           if (!map) return;
           map.invalidateSize();
-          if (!didInitialFit) {
-            map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
-            didInitialFit = true;
+          const cr = entries[0]?.contentRect;
+          if (!cr) return;
+          const dw = Math.abs(cr.width - lastFitSize.w);
+          const dh = Math.abs(cr.height - lastFitSize.h);
+          if (dw > 8 || dh > 8) {
+            map.fitBounds(bounds, { padding: [24, 24] });
+            lastFitSize = { w: cr.width, h: cr.height };
           }
         });
         resizeObs.observe(containerRef.current);
@@ -116,19 +108,10 @@ export default function ParksMap({
     return () => {
       cancelled = true;
       if (resizeObs) resizeObs.disconnect();
-      markers.clear();
       if (map) map.remove();
       mapRef.current = null;
     };
   }, [parks]);
-
-  // External selection → pop the matching marker (no-op if not on map yet).
-  useEffect(() => {
-    if (!selectedId) return;
-    const m = markersRef.current.get(selectedId) as
-      | { openPopup: () => void } | undefined;
-    m?.openPopup();
-  }, [selectedId]);
 
   return (
     <div
@@ -138,13 +121,4 @@ export default function ParksMap({
       aria-label="Map of Martinez parks"
     />
   );
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    c === '&' ? '&amp;'
-    : c === '<' ? '&lt;'
-    : c === '>' ? '&gt;'
-    : c === '"' ? '&quot;'
-    : '&#39;');
 }

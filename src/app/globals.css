@@ -2278,37 +2278,10 @@ button.rep-card.clickable:focus-visible {
 /* The map-link is the one exception — short token like "↗ map" that
    we explicitly do NOT want to break across two lines. */
 .detail-modal-content .map-link { white-space: nowrap !important; }
-/* Leaflet popups — unscoped because the only place we use Leaflet is
-   inside the parks modal, and the modal's wildcard word-break rule
-   and dark theme would otherwise destroy the popup's chrome. We force
-   the upstream defaults back on every popup wrapper, regardless of
-   where in the DOM it sits. */
-.leaflet-popup-content-wrapper,
-.leaflet-popup-content-wrapper * {
-  word-break: normal !important;
-  overflow-wrap: normal !important;
-  white-space: normal !important;
-}
-.leaflet-popup-content {
-  width: auto !important;
-  min-width: 160px !important;
-  max-width: 240px !important;
-  margin: 10px 14px !important;
-  line-height: 1.4 !important;
-}
-.leaflet-popup-content-wrapper {
-  background: #fff !important;
-  color: #222 !important;
-  border-radius: 6px !important;
-  box-shadow: 0 3px 14px rgba(0,0,0,.4) !important;
-  padding: 1px !important;
-}
-.leaflet-popup-tip {
-  background: #fff !important;
-  box-shadow: 0 3px 14px rgba(0,0,0,.4) !important;
-}
-.leaflet-popup-close-button { color: #555 !important; }
-.park-pop-addr { color: #555 !important; }
+/* Pin marker hint cursor — clicking a pin opens the park detail
+   modal directly (no Leaflet popup in between, so no popup chrome
+   styling needed). */
+.park-pin { cursor: pointer; }
 .detail-modal-close {
   position: absolute; top: 6px; right: 10px;
   background: transparent; border: 0; color: var(--text-muted);
