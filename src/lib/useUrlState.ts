@@ -29,15 +29,24 @@ function writeParam(key: string, value: string | null): void {
   window.dispatchEvent(new CustomEvent('urlstate', { detail: { key } }));
 }
 
-/** Plain string param. null = absent from URL. */
+/** Plain string param. null = absent from URL.
+ *
+ *  Initial state is the caller-provided `initial` so server + client
+ *  first renders match (no hydration mismatch). The URL is read inside
+ *  useEffect, which triggers a second render that reflects ?key=... if
+ *  present. Tradeoff: any modal whose open state lives in the URL
+ *  flashes closed for one frame on page load. Worth it — the previous
+ *  read-URL-in-useState approach caused React error #418 when the
+ *  page was loaded with the modal-open param already in the URL. */
 export function useUrlString(
   key: string,
   initial: string | null = null,
 ): [string | null, (v: string | null) => void] {
-  const [value, setValue] = useState<string | null>(() => readParam(key) ?? initial);
+  const [value, setValue] = useState<string | null>(initial);
 
   useEffect(() => {
     const sync = () => setValue(readParam(key) ?? initial);
+    sync(); // pull initial URL value once mounted
     window.addEventListener('popstate', sync);
     window.addEventListener('urlstate', sync as EventListener);
     return () => {
