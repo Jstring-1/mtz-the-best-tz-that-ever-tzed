@@ -76,6 +76,43 @@ export const REP_BIOS: Record<string, RepBio> = {
       'Debbie was elected to the Martinez City Council in 2014 and served as Vice Mayor in 2017, 2021, and 2024. A fifth-generation Martinez resident and graduate of Alhambra High School, Debbie is proud to serve the community she has long called home. She is a working professional, mother of twin daughters, and previously served as a 4-H community leader. Debbie brings more than 40 years of experience in forensic science. She serves as the Sheriff\'s Chief of Forensic Services, overseeing a nationally accredited crime laboratory that provides countywide forensic services to 24 law enforcement agencies and more than one million county residents.\n\nHer academic credentials include an Executive Master of Public Administration from Golden Gate University in San Francisco, bachelor\'s degrees in chemistry and environmental studies from the University of California, Santa Barbara, and a Certificate in Forensic Science Laboratory Management from the University of California, Davis. Outside of her professional and public service roles, Debbie enjoys hiking, playing bocce, and attending movies and live theater with her family.',
   },
 
+  // CA State Senator — SD-9 (covers Martinez).
+  grayson: {
+    fullName: 'Tim Grayson',
+    office: 'State Senator',
+    district: 'SD-9',
+    bio:
+`Tim Grayson was previously elected to serve in the California Assembly in November 2016 and to represent the 15th Assembly District, which encompassed portions of Contra Costa County. He is the son of a Teamster father and his mother was a public transit worker. He is the first in his family to earn a college degree. In 2010, Grayson was elected to serve on the Concord City Council, winning reelection in 2014 and serving on the Council until his election to the Assembly. He also served as Concord's Mayor from 2014-2015.
+
+As a co-founder of the Contra Costa Family Justice Center, Grayson has a long and proven history of advocating for victims of domestic violence, human trafficking, and child and elder abuse. Since his election to the Assembly, Grayson has secured $20 million in state funding for Family Justice Centers throughout California.
+
+Championing the beliefs that higher education should be both accessible and affordable, then-Assemblymember Grayson authored laws to ensure that qualified California students are not denied admission at UC institutions in favor of less qualified out-of-state students (AB 1674) and to require greater transparency in UC cost reporting (AB 1655). Grayson also introduced legislation to bring $7 billion in funding for new higher education campus construction.
+
+To help protect the state against boom and bust economic cycles, Grayson was at the forefront of creating a new budget reserve. He fought to create the Budget Deficit Savings Account and helped secure an initial deposit of $1.75 billion.
+
+Grayson continues to serve as the Concord Police Department's Critical Response Chaplain, a position he has held since 2007. He also has maintained a license as a general building contractor since 1997.
+
+A long-time East Bay resident, Tim lives in Concord where he raised his two kids with his wife of more than 35 years, Tammy.`,
+  },
+
+  // CA Assembly Member — AD-15 (covers Martinez). Last-name key drops
+  // accents (findBio's [^a-z] filter), so "Ávila Farías" → "farias".
+  farias: {
+    fullName: 'Anamarie Ávila Farías',
+    office: 'Assembly Member',
+    district: 'AD-15',
+    bio:
+`Anamarie Ávila Farías proudly represents California's 15th Assembly District, which includes parts of Contra Costa County and the East Bay. A lifelong public servant and advocate for working families, Ávila Farías brings decades of experience in affordable housing, economic development, and educational equity to her role in the State Assembly.
+
+As the granddaughter of Mexican immigrants who came to the United States through the Bracero Program, Ávila Farías's personal story reflects the resilience and contributions of immigrant communities. Raised by a single mother after her father's passing, she overcame significant socioeconomic challenges, inspiring her lifelong commitment to addressing poverty and inequities.
+
+Ávila Farías's leadership spans local, county, and state levels. She made history in 2012 as the first Latina elected to the Martinez City Council and later served on the Contra Costa County Board of Education. Her accomplishments include launching affordable housing programs, championing accessory dwelling units (ADUs) for multi-generational housing, and creating green housing developments. She also spearheaded workforce initiatives, such as pre-apprenticeship programs for at-risk and incarcerated youth.
+
+Appointed by both Governor Brown and Governor Newsom to the California Housing Finance Agency Board, Ávila Farías has been a leading voice for housing equity, creating programs like the Building Black Wealth campaign to increase Black homeownership and an ADU grant program to expand housing opportunities.
+
+A proud third-generation Contra Costa County resident, Ávila Farías earned her bachelor's and master's degrees from the University of San Francisco, becoming one of the first in her family to earn an advanced degree. She lives in Martinez with her husband, an architect, and their two children.`,
+  },
+
   // Contra Costa County — District 5 Supervisor.
   'scales-preston': {
     fullName: 'Shanelle Scales-Preston',

@@ -250,6 +250,7 @@ async function stateLegislature(diag: Record<string, string>): Promise<Rep[]> {
   ]);
   const people = [...(senJ?.results ?? []), ...(asmJ?.results ?? [])];
   if (!people.length) diag.stateLeg = 'no legislators returned for SD-9 / AD-15';
+  const { findBio } = await import('./reps-bios');
   return people.map<Rep>((p): Rep => {
     const cls = p.current_role?.org_classification;
     const district = p.current_role?.district ?? '';
@@ -258,7 +259,7 @@ async function stateLegislature(diag: Record<string, string>): Promise<Rep[]> {
     const officialLink = p.links?.find((l) => /official|home/i.test(l.note ?? ''))?.url
       ?? p.links?.[0]?.url
       ?? `https://openstates.org/person/${p.id}`;
-    return {
+    const base: Rep = {
       level: 'state-leg',
       office: officeTag,
       name: p.name ?? '',
@@ -269,6 +270,19 @@ async function stateLegislature(diag: Record<string, string>): Promise<Rep[]> {
       phone: p.offices?.[0]?.voice,
       photoUrl: p.image,
     };
+    // Enrich with hand-curated bio if there's a last-name match in the
+    // REP_BIOS registry (handles accents — findBio strips them).
+    const bio = base.name ? findBio(base.name) : null;
+    if (bio) {
+      return {
+        ...base,
+        bio: bio.bio,
+        electedDate: bio.electedDate ?? base.electedDate,
+        photoUrl: bio.photoFile ? `/img/${bio.photoFile}` : base.photoUrl,
+        bioKey: base.name.toLowerCase().split(/\s+/).pop()?.replace(/[^a-z]/g, '') ?? base.name.toLowerCase().replace(/[^a-z]/g, ''),
+      };
+    }
+    return base;
   });
 }
 
