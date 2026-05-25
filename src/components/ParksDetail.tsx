@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 import type { Park } from '@/lib/types';
@@ -39,6 +39,14 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('parks');
   const [parkId, setParkId] = useUrlString('park');
   const [mapSlug, setMapSlug] = useUrlString('parkmap');
+  // "Zoom to this park" request — the nonce makes re-clicking the same
+  // park re-trigger the flyTo animation (useEffect deps would otherwise
+  // see no change).
+  const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
+  const zoomToPark = (id: string) => {
+    setParkId(null);             // close the detail modal
+    setFocus({ id, nonce: Date.now() });
+  };
 
   const parks = data ?? MARTINEZ_PARKS;
   const focused = useMemo<Park | null>(
@@ -59,7 +67,7 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
         {/* Leaflet map with one pin per park — click a pin to open the
             same nested detail modal that the cards below open. */}
         {parks.length > 0 && (
-          <ParksMap parks={parks} onSelect={setParkId} selectedId={parkId} />
+          <ParksMap parks={parks} onSelect={setParkId} focus={focus} />
         )}
         {/* EBRPD district map shortcuts — embedded PDFs from /public/img/. */}
         <div className="park-map-links">
@@ -141,9 +149,6 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
             {focused.address && (
               <p style={{ margin: 0 }}>
                 <strong>Address: </strong>{focused.address}
-                {' '}<a className="map-link"
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(focused.address)}`}
-                  target="_blank" rel="noopener">↗ map</a>
               </p>
             )}
             {focused.description && (
@@ -158,14 +163,14 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
               </>
             )}
             <div className="popup-ext-links">
+              {typeof focused.lat === 'number' && typeof focused.lng === 'number' && (
+                <a href="#"
+                   onClick={(e) => { e.preventDefault(); zoomToPark(focused.id); }}>
+                  Zoom to this park on the map →
+                </a>
+              )}
               {focused.url && (
                 <a href={focused.url} target="_blank" rel="noopener">Park page on cityofmartinez.org →</a>
-              )}
-              {focused.address && (
-                <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(focused.address)}`}
-                   target="_blank" rel="noopener">
-                  Open in Google Maps →
-                </a>
               )}
             </div>
           </div>

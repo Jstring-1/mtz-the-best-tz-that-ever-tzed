@@ -19,17 +19,18 @@ import 'leaflet/dist/leaflet.css';
 export default function ParksMap({
   parks,
   onSelect,
+  focus,
   height = 320,
 }: {
   parks: Park[];
   onSelect: (id: string) => void;
-  /** Reserved for future "highlight this pin" behavior — currently
-   *  unused since clicking a pin opens the detail modal directly. */
-  selectedId?: string | null;
+  /** "Zoom to this park" request from the parent. The `nonce` makes
+   *  re-clicking the same park re-trigger the flyTo animation. */
+  focus?: { id: string; nonce: number } | null;
   height?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<unknown>(null);
+  const mapRef = useRef<import('leaflet').Map | null>(null);
   const onSelectRef = useRef(onSelect);
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
 
@@ -112,6 +113,17 @@ export default function ParksMap({
       mapRef.current = null;
     };
   }, [parks]);
+
+  // Parent requests "zoom to this park" by changing `focus`. The nonce
+  // ensures useEffect re-runs even when the same park is clicked twice.
+  useEffect(() => {
+    if (!focus) return;
+    const m = mapRef.current;
+    if (!m) return;
+    const p = parks.find((x) => x.id === focus.id);
+    if (!p || typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
+    m.flyTo([p.lat, p.lng], 17, { duration: 0.7 });
+  }, [focus, parks]);
 
   return (
     <div
