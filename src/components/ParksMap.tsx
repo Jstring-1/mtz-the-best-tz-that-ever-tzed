@@ -50,17 +50,15 @@ export default function ParksMap({
       );
       if (!withCoords.length) return;
 
-      // Defer the initial fitBounds until ResizeObserver fires below —
-      // the modal animates in, so right now the container is still
-      // sized for its pre-animation state. Use a sane fallback center
-      // (Martinez) so the first paint isn't blank.
+      // Fit all pins immediately so the first paint already shows the
+      // full park set — even if the container hasn't reached its final
+      // size yet, the ResizeObserver below will re-fit once it has.
       const bounds = L.latLngBounds(withCoords.map((p) => [p.lat, p.lng]));
       map = L.map(containerRef.current, {
         scrollWheelZoom: false,
         zoomSnap: 0.25,
-        center: [38.0194, -122.1341],
-        zoom: 13,
       });
+      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
       mapRef.current = map;
 
       // OSM tiles — free, no API key, attribution required.
