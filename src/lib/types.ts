@@ -129,6 +129,11 @@ export interface Park {
   description?: string;
   amenities?: string[];
   image?: string;
+  // Hand-geocoded lat/lng (parks-data.ts). Used to drop pins on the
+  // Leaflet map in ParksDetail. Optional so scraped-Park rows still
+  // typecheck; ParksMap silently skips entries missing coords.
+  lat?: number;
+  lng?: number;
 }
 
 // Unified shape for scraped local-venue events. Stored under the

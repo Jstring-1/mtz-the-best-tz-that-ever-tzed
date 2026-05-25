@@ -5,6 +5,7 @@ import Modal from './Modal';
 import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 import type { Park } from '@/lib/types';
 import { MARTINEZ_PARKS } from '@/lib/parks-data';
+import ParksMap from './ParksMap';
 
 interface Props {
   label: string;
@@ -55,6 +56,11 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Martinez parks" size="lg">
+        {/* Leaflet map with one pin per park — click a pin to open the
+            same nested detail modal that the cards below open. */}
+        {parks.length > 0 && (
+          <ParksMap parks={parks} onSelect={setParkId} selectedId={parkId} />
+        )}
         {/* EBRPD district map shortcuts — embedded PDFs from /public/img/. */}
         <div className="park-map-links">
           {EBRPD_MAPS.map((m) => (

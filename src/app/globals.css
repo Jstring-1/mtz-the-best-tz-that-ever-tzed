@@ -1798,6 +1798,37 @@ button.rep-card.clickable:focus-visible {
   border-bottom: 1px solid var(--border-soft);
 }
 
+/* Leaflet map shown at the top of the Parks popup. Borders match the
+   PDF viewer below so the two embedded surfaces feel like a set. */
+.parks-map {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+}
+.parks-map .leaflet-container { background: var(--bg-elev); }
+/* Custom DivIcon pin — small dodger-blue dot with a white ring so it
+   reads on both the OSM grays and on green park polygons. */
+.park-pin { background: transparent; border: 0; }
+.park-pin-dot {
+  display: block;
+  width: 14px; height: 14px;
+  margin: 2px;
+  border-radius: 50%;
+  background: var(--dodger, #1e90ff);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.4);
+}
+/* Popup body inside Leaflet — the name is a button so a click both
+   selects the park (URL state) and triggers the nested detail modal. */
+.park-pop { min-width: 140px; font-size: .92em; }
+.park-pop-btn {
+  background: none; border: 0; padding: 0; margin: 0;
+  color: var(--accent, #1e90ff);
+  font: inherit; font-weight: 600;
+  cursor: pointer; text-align: left;
+}
+.park-pop-btn:hover { text-decoration: underline; }
+.park-pop-addr { margin-top: 2px; color: var(--muted, #888); font-size: .9em; }
+
 /* Inline PDF viewer for EBRPD district maps */
 .park-pdf-wrap { display: flex; flex-direction: column; min-width: 0; }
 .park-pdf-frame {
