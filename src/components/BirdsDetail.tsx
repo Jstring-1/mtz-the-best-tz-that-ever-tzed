@@ -61,22 +61,30 @@ export default function BirdsDetail({ label, tooltip, data }: Props) {
               {unique.length} unique species recently reported on eBird within the local radius.
               Click any species for a Wikipedia summary, last-seen location, and date.
             </p>
-            <ul className="recall-list">
+            <ul className="recall-list bird-list">
               {unique.map((b) => {
                 const slug = slugify(b.common_name);
                 return (
-                  <li key={b.id} className="recall-item">
+                  <li key={b.id} className="recall-item bird-item">
                     <button
                       type="button"
-                      className="recall-head"
+                      className="recall-head bird-head"
                       onClick={() => setFocusSlug(slug)}
                     >
-                      <span className="recall-title">{b.common_name}</span>
-                      <span className="meta">
-                        {b.sci_name && <span className="recall-src" style={{ fontStyle: 'italic' }}>{b.sci_name}</span>}
-                        {b.observed_at && <span> · {fmtDate(b.observed_at)}</span>}
-                        {b.place && <span> · {b.place}</span>}
-                        {b.cnt != null && b.cnt > 1 && <span> · {b.cnt} seen</span>}
+                      {b.wiki_thumbnail ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={b.wiki_thumbnail} alt="" className="bird-thumb" loading="lazy" />
+                      ) : (
+                        <span className="bird-thumb placeholder" aria-hidden="true">🐦</span>
+                      )}
+                      <span className="bird-head-text">
+                        <span className="recall-title">{b.common_name}</span>
+                        <span className="meta">
+                          {b.sci_name && <span className="recall-src" style={{ fontStyle: 'italic' }}>{b.sci_name}</span>}
+                          {b.observed_at && <span> · {fmtDate(b.observed_at)}</span>}
+                          {b.place && <span> · {b.place}</span>}
+                          {b.cnt != null && b.cnt > 1 && <span> · {b.cnt} seen</span>}
+                        </span>
                       </span>
                     </button>
                   </li>
