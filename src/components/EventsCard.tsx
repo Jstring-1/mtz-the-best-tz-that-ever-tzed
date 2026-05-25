@@ -71,8 +71,7 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
 
   return (
     <section className="card-section events-card">
-      <h2>
-        <span className="event-tabs" role="tablist" aria-label="Event scope">
+      <div className="event-tabs" role="tablist" aria-label="Event scope">
           <button
             type="button"
             role="tab"
@@ -94,10 +93,9 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
             className={`event-tab ${tab === 'municipal' ? 'on' : ''}`}
             onClick={() => switchTab('municipal')}
           >Municipal <span className="count">{municipal.length}</span></button>
-        </span>
-      </h2>
+      </div>
       {tab === 'regional' && (
-        <span className="event-tabs reg-filter" role="tablist" aria-label="Regional category">
+        <div className="event-tabs reg-filter" role="tablist" aria-label="Regional category">
           {EVENT_FILTERS.map((f) => (
             <button
               key={f}
@@ -110,7 +108,7 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
               {f[0].toUpperCase() + f.slice(1)} <span className="count">{regCount(f)}</span>
             </button>
           ))}
-        </span>
+        </div>
       )}
       {list.length === 0 ? (
         <p className="empty">

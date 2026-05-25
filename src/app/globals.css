@@ -1493,10 +1493,11 @@ main { padding-top: var(--top-stack-h); display: block; }
 .bird-row .name { font-weight: 600; }
 .bird-row .sub  { font-size: .82em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Events */
+/* Events / Pets filter chip row — left-aligned at the top of the
+   card, matches the news-tabs layout one-for-one. */
 .event-tabs {
-  display: inline-flex; gap: 4px;
-  margin-left: auto;
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin: 0 0 8px;
 }
 .event-tab {
   background: transparent;
@@ -1505,6 +1506,9 @@ main { padding-top: var(--top-stack-h); display: block; }
   border-radius: 3px;
   padding: 2px 8px;
   font: inherit;
+  /* Explicit normal weight so the count digits don't render bold
+     when this chip happens to be inside a bold parent (e.g. h2). */
+  font-weight: 400;
   font-size: .72em;
   cursor: pointer;
   text-transform: lowercase;
@@ -1604,6 +1608,8 @@ main { padding-top: var(--top-stack-h); display: block; }
   border-radius: 3px;
   padding: 2px 8px;
   font: inherit;
+  /* Match .event-tab — normal weight regardless of parent bold. */
+  font-weight: 400;
   font-size: .72em;
   cursor: pointer;
   text-transform: lowercase;

@@ -69,8 +69,7 @@ export default function PetsCard({ pets }: { pets: Pet[] }) {
 
   return (
     <section className="card-section pets-card">
-      <h2>
-        <span className="event-tabs" role="tablist">
+      <div className="event-tabs" role="tablist">
           <button type="button" className={`event-tab ${tab === 'all' ? 'on' : ''}`} onClick={() => switchTab('all')}>
             All <span className="count">{pets.length}</span>
           </button>
@@ -80,8 +79,7 @@ export default function PetsCard({ pets }: { pets: Pet[] }) {
           <button type="button" className={`event-tab ${tab === 'cat' ? 'on' : ''}`} onClick={() => switchTab('cat')}>
             Cats <span className="count">{cats}</span>
           </button>
-        </span>
-      </h2>
+      </div>
       {visible.length === 0 ? (
         <p className="empty">No pets cached yet.</p>
       ) : (
