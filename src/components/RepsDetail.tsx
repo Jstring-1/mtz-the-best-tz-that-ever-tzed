@@ -46,13 +46,6 @@ function RepCard({ r, onOpen }: { r: Rep; onOpen: (r: Rep) => void }) {
           {r.office}
           {r.district && !r.office.includes(r.district) && <span className="muted"> · {r.district}</span>}
         </div>
-        {(r.phone || r.email) && (
-          <div className="rep-contact">
-            {r.phone}
-            {r.phone && r.email && <span> · </span>}
-            {r.email}
-          </div>
-        )}
         {r.notes && <div className="rep-notes muted">{r.notes}</div>}
       </div>
     </>

@@ -1680,9 +1680,13 @@ main { padding-top: var(--top-stack-h); display: block; }
 .rep-contact a:hover { text-decoration: underline; }
 .rep-notes { font-size: .78em; margin-top: 4px; }
 
-/* Clickable rep cards open a nested bio modal. */
+/* Clickable rep cards open a nested bio modal. font:inherit doesn't
+   reset `color` — browser default button color is system black, so
+   we have to set color: inherit explicitly or the card text becomes
+   unreadable on the dark theme. */
 button.rep-card.clickable {
   font: inherit;
+  color: inherit;
   text-align: left;
   cursor: pointer;
   width: 100%;
