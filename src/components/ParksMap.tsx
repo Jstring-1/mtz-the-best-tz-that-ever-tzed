@@ -35,6 +35,7 @@ export default function ParksMap({
   useEffect(() => {
     let cancelled = false;
     let map: import('leaflet').Map | null = null;
+    let resizeObs: ResizeObserver | null = null;
     // Snapshot the ref Map for cleanup so we don't read .current later
     // (React-hooks lint: .current may change before cleanup runs).
     const markers = markersRef.current;
@@ -88,10 +89,27 @@ export default function ParksMap({
         });
         markers.set(p.id, marker);
       }
+
+      // The modal animates in, so the container's final size isn't
+      // known when L.map() runs — Leaflet caches the (smaller) initial
+      // size and only fetches tiles for that area, leaving the rest of
+      // the panel gray. invalidateSize() forces a recompute; we run it
+      // on every container resize so window-resize + modal-open both
+      // get covered. The fitBounds call after invalidate keeps all pins
+      // framed once the real size is known.
+      if (containerRef.current) {
+        resizeObs = new ResizeObserver(() => {
+          if (!map) return;
+          map.invalidateSize();
+          map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
+        });
+        resizeObs.observe(containerRef.current);
+      }
     })();
 
     return () => {
       cancelled = true;
+      if (resizeObs) resizeObs.disconnect();
       markers.clear();
       if (map) map.remove();
       mapRef.current = null;
