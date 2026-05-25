@@ -333,7 +333,9 @@ async function ebird(json: Record<string, unknown>) {
     // Backfill Wikipedia summaries for any new species so the UI can
     // serve them without an on-click fetch. Doesn't block on failure.
     try {
-      const r = await backfillBirdWikis(rows.map((b) => b.common_name));
+      const r = await backfillBirdWikis(
+        rows.map((b) => ({ commonName: b.common_name, sciName: b.sci_name ?? null })),
+      );
       if (process.env.MTZ_DEBUG === '1' || r.failed > 0) {
         console.log(`[cron] bird_wiki: fetched ${r.fetched}, skipped ${r.skipped}, failed ${r.failed}`);
       }

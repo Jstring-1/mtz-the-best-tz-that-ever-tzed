@@ -271,40 +271,107 @@ export async function listRecentBirds(limit = 60): Promise<StoredBird[]> {
   `;
 }
 
+interface WikiSummaryResp {
+  type?: string;            // 'standard' | 'disambiguation' | 'no-extract' etc.
+  description?: string;
+  extract?: string;
+  thumbnail?: { source?: string };
+  content_urls?: { desktop?: { page?: string } };
+}
+
+// Wikipedia article lookup for one term. Returns null on 404, disambig
+// page, or empty extract.
+async function wikiLookup(term: string): Promise<WikiSummaryResp | null> {
+  try {
+    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`, {
+      headers: { 'User-Agent': 'mtz-city/1.0 (bird wiki backfill)' },
+    });
+    if (!r.ok) return null;
+    const j = await r.json() as WikiSummaryResp;
+    // Skip disambiguation pages — they don't have a useful extract.
+    if (j.type && /disambig/i.test(j.type)) return null;
+    if (!j.extract) return null;
+    return j;
+  } catch { return null; }
+}
+
+// Bird-ness sanity check: extract should mention bird-shaped terms.
+// Catches "Redhead" → Wikipedia's "red hair" article (which mentions
+// hair / human / ancestry, not feathers / plumage / bird).
+const BIRD_TERMS_RE = /\b(bird|species|genus|family|wing|feather|plumage|beak|bill|nest|migrat|fledg|hatch|aviary|ornithol|passerine|raptor|waterfowl|songbird|shorebird|duck|goose|hawk|owl|sparrow|warbler|finch|gull|tern|heron|egret|grebe|wren|swallow|woodpecker|hummingbird|crow|jay|flycatcher|kingbird|kingfisher|crane|sandpiper|plover|pelican|cormorant|grouse|quail|swift|rail|coot|loon|swan)\b/i;
+function looksLikeBirdArticle(j: WikiSummaryResp): boolean {
+  const text = `${j.description ?? ''} ${j.extract ?? ''}`;
+  return BIRD_TERMS_RE.test(text);
+}
+
 // Backfill Wikipedia summaries for any species we haven't seen yet
 // (or last fetched > 90 days ago). Called from the eBird cron after
 // the sightings upsert. Rate-limited at 200ms per call.
-export async function backfillBirdWikis(commonNames: string[]): Promise<{ fetched: number; skipped: number; failed: number }> {
+//
+// Lookup strategy per species — first hit that passes the bird sanity
+// check wins:
+//   1. Scientific name (always unambiguous; Wikipedia handles redirects)
+//   2. "<Common name> (bird)" disambiguator (e.g. "Redhead (bird)")
+//   3. Plain common name (last resort)
+export async function backfillBirdWikis(
+  rows: Array<{ commonName: string; sciName: string | null }>,
+): Promise<{ fetched: number; skipped: number; failed: number }> {
   await ensureTables();
-  const unique = Array.from(new Set(commonNames.filter(Boolean)));
-  if (!unique.length) return { fetched: 0, skipped: 0, failed: 0 };
+  // De-dupe by common_name.
+  const byName = new Map<string, string | null>();
+  for (const r of rows) {
+    if (!r.commonName) continue;
+    if (!byName.has(r.commonName)) byName.set(r.commonName, r.sciName ?? null);
+  }
+  if (!byName.size) return { fetched: 0, skipped: 0, failed: 0 };
 
-  // Pull the set of species already cached recently.
+  const allNames = Array.from(byName.keys());
+
+  // Purge any previously-cached rows whose extract doesn't actually
+  // describe a bird (e.g. "Redhead" → red-hair article). Their
+  // common_names get re-queued and tried again with the better lookup
+  // strategy below.
+  const stale = await sql<{ common_name: string; extract: string | null }[]>`
+    SELECT common_name, extract FROM bird_wiki
+    WHERE common_name = ANY(${allNames})
+  `;
+  const badNames = stale
+    .filter((r) => !r.extract || !BIRD_TERMS_RE.test(`${r.extract}`))
+    .map((r) => r.common_name);
+  if (badNames.length) {
+    await sql`DELETE FROM bird_wiki WHERE common_name = ANY(${badNames})`;
+  }
+
+  // Pull the set of species already cached recently (after the purge).
   const cached = await sql<{ common_name: string }[]>`
     SELECT common_name
     FROM bird_wiki
-    WHERE common_name = ANY(${unique})
+    WHERE common_name = ANY(${allNames})
       AND fetched_at > NOW() - INTERVAL '90 days'
   `;
   const have = new Set(cached.map((r) => r.common_name));
-  const todo = unique.filter((n) => !have.has(n));
+  const todo = allNames.filter((n) => !have.has(n));
 
   let fetched = 0, failed = 0;
   for (const name of todo) {
+    const sci = byName.get(name);
+    // Strategy: try sci name → "Name (bird)" → plain name. First hit
+    // that passes the bird sanity check is what we cache.
+    const attempts = [sci, `${name} (bird)`, name].filter((s): s is string => !!s);
+    let hit: WikiSummaryResp | null = null;
+    for (const term of attempts) {
+      const j = await wikiLookup(term);
+      if (j && looksLikeBirdArticle(j)) { hit = j; break; }
+      // Tiny pause between attempts to be polite.
+      await new Promise((res) => setTimeout(res, 100));
+    }
+    if (!hit) { failed++; continue; }
+
     try {
-      const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`, {
-        headers: { 'User-Agent': 'mtz-city/1.0 (bird wiki backfill)' },
-      });
-      if (!r.ok) { failed++; continue; }
-      const j = await r.json() as {
-        description?: string; extract?: string;
-        thumbnail?: { source?: string };
-        content_urls?: { desktop?: { page?: string } };
-      };
       await sql`
         INSERT INTO bird_wiki (common_name, description, extract, thumbnail_url, content_url, fetched_at)
-        VALUES (${name}, ${j.description ?? null}, ${j.extract ?? null},
-                ${j.thumbnail?.source ?? null}, ${j.content_urls?.desktop?.page ?? null}, NOW())
+        VALUES (${name}, ${hit.description ?? null}, ${hit.extract ?? null},
+                ${hit.thumbnail?.source ?? null}, ${hit.content_urls?.desktop?.page ?? null}, NOW())
         ON CONFLICT (common_name) DO UPDATE SET
           description   = EXCLUDED.description,
           extract       = EXCLUDED.extract,
@@ -315,8 +382,7 @@ export async function backfillBirdWikis(commonNames: string[]): Promise<{ fetche
       fetched++;
     } catch { failed++; }
     // Politeness pause — Wikipedia REST has generous limits but we're
-    // not in a hurry. 200ms × 60 species = 12s, still fine inside one
-    // cron tick.
+    // not in a hurry.
     await new Promise((res) => setTimeout(res, 200));
   }
   return { fetched, skipped: have.size, failed };
