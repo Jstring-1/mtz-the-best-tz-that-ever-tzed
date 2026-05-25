@@ -57,10 +57,6 @@ export default function BirdsDetail({ label, tooltip, data }: Props) {
           <p className="muted">No sightings cached. Run /admin → 1h.</p>
         ) : (
           <>
-            <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              {unique.length} unique species recently reported on eBird within the local radius.
-              Click any species for a Wikipedia summary, last-seen location, and date.
-            </p>
             <ul className="recall-list bird-list">
               {unique.map((b) => {
                 const slug = slugify(b.common_name);

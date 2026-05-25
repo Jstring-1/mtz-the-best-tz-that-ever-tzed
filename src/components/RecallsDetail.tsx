@@ -62,12 +62,6 @@ export default function RecallsDetail({ label, tooltip, data, scrapedAt }: Props
           <p className="muted">Cache empty — run /admin → 4h.</p>
         ) : (
           <>
-            <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              Most-recent recalls from FDA (food, drugs, medical devices) and
-              CPSC (consumer products). Sorted newest first; click a row to
-              read the reason.
-            </p>
-
             <div className="news-tabs">
               {FILTERS.map((t) => (
                 <button

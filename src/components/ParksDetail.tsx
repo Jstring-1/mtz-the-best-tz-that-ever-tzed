@@ -74,10 +74,6 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
           <p className="muted">No parks registered.</p>
         ) : (
           <>
-            <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              {parks.length} Martinez parks. Click any card for address, amenities,
-              and a map link.
-            </p>
             <div className="reps-grid">
               {parks.map((p) => (
                 <button

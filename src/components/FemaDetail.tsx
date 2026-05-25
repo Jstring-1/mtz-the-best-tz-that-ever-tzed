@@ -38,10 +38,6 @@ export default function FemaDetail({ label, tooltip, data }: Props) {
           <p className="muted">No active declarations cached. Run /admin → 4h.</p>
         ) : (
           <>
-            <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              {data.length} open declaration{data.length === 1 ? '' : 's'} (incidentEndDate is null).
-              Click a row for details.
-            </p>
             <ul className="recall-list">
               {data.map((d, i) => {
                 const expanded = openIdx === i;

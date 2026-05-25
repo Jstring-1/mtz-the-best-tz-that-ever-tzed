@@ -117,10 +117,6 @@ export default function CouncilDetail({ label, tooltip }: { label: string; toolt
         )}
         {data && data.meetings.length > 0 && (
           <>
-            <p className="muted" style={{ fontSize: '.85em', marginBottom: 10 }}>
-              {data.meetings.length} meetings from the city's Granicus feed.
-              Click <b>Agenda</b> or <b>Minutes</b> to read the PDF in-page.
-            </p>
             <ul className="council-meetings">
               {data.meetings.map((m) => (
                 <li key={m.clipId}>

@@ -177,11 +177,6 @@ export default function BillsDetail({ label, tooltip }: Props) {
 
         {data && (
           <>
-            <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              Federal bills from CCC-area members of Congress (the {data.congress}th) plus current-session
-              California legislature bills mentioning &ldquo;Contra Costa&rdquo;.
-            </p>
-
             <div className="news-tabs">
               {TABS.map((t) => (
                 <button

@@ -61,10 +61,6 @@ export default function EonetDetail({ label, tooltip, data }: Props) {
           <p className="muted">No open events cached. Run /admin → 4h.</p>
         ) : (
           <>
-            <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              Active natural events tracked by NASA Earth Observatory — wildfires,
-              storms, volcanoes, sea/lake ice. Click a row for details.
-            </p>
             <ul className="recall-list">
               {data.map((e, i) => {
                 const expanded = openIdx === i;
