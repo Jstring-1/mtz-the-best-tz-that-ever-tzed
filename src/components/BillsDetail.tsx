@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal';
 import BillDetail from './BillDetail';
 import { useUrlBool, useUrlEnum, useUrlString } from '@/lib/useUrlState';
-import type { AffectingBillsPayload, BillRow, MemberBills } from '@/lib/bills';
+import type { AffectingBillsPayload, BillRow } from '@/lib/bills';
 
 type Tab = 'federal' | 'state';
 const TABS: Tab[] = ['federal', 'state'];
@@ -63,55 +63,6 @@ function BillRowItem({ b, onOpenFed }: {
         </div>
       )}
     </li>
-  );
-}
-
-function MemberSection({ m, onOpenFed }: {
-  m: MemberBills;
-  onOpenFed: (ref: { congress: number; type: string; number: string }) => void;
-}) {
-  // Merge sponsored + cosponsored with a tag so we can show them in one
-  // list sorted by most-recent action.
-  const merged = useMemo(() => {
-    const arr: Array<BillRow & { kind: 'Sp' | 'Co' }> = [
-      ...m.sponsored.map((b) => ({ ...b, kind: 'Sp' as const })),
-      ...m.cosponsored.map((b) => ({ ...b, kind: 'Co' as const })),
-    ];
-    // De-dupe: if the same bill appears in both buckets, keep sponsored.
-    const dedup = new Map<string, typeof arr[number]>();
-    for (const b of arr) {
-      const k = b.number.replace(/\s+/g, '');
-      if (!dedup.has(k) || (dedup.get(k)!.kind === 'Co' && b.kind === 'Sp')) dedup.set(k, b);
-    }
-    return [...dedup.values()].sort((a, b) => billDate(b).localeCompare(billDate(a)));
-  }, [m]);
-
-  return (
-    <div className="bills-member">
-      <h3 className="rep-h">
-        <a href={m.url} target="_blank" rel="noopener" style={{ color: 'var(--accent)' }}>
-          {m.name}
-        </a>{' '}
-        <span className="muted" style={{ fontWeight: 400 }}>· {m.role}{m.party ? ` · ${m.party}` : ''}</span>
-        <span className="muted" style={{ fontWeight: 400, fontSize: '.8em', marginLeft: 8 }}>
-          ({merged.length})
-        </span>
-      </h3>
-      {merged.length === 0 ? (
-        <p className="muted">No recent bills.</p>
-      ) : (
-        <ul className="rep-list">
-          {merged.map((b, i) => (
-            <li key={`m-${m.bioguideId}-${i}`} style={{ position: 'relative' }}>
-              <span className={`kind kind-${b.kind.toLowerCase()}`} style={{
-                position: 'absolute', left: -22, top: 4, fontSize: '.7em', color: 'var(--text-muted)',
-              }}>{b.kind}</span>
-              <BillRowItem b={b} onOpenFed={onOpenFed} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }
 
@@ -193,16 +144,59 @@ export default function BillsDetail({ label, tooltip }: Props) {
 
             {tab === 'federal' && (
               <div className="bills-federal">
-                {data.federalMembers.length === 0 ? (
-                  <p className="muted">No federal data cached.</p>
-                ) : data.federalMembers.map((m) => (
-                  <MemberSection key={m.bioguideId} m={m} onOpenFed={setBillRef} />
-                ))}
-                <p className="muted" style={{ fontSize: '.75em', marginTop: 8 }}>
-                  <span className="kind kind-sp">Sp</span> = primary sponsor.{' '}
-                  <span className="kind kind-co">Co</span> = cosponsor. Most bills never reach a floor
-                  vote — look for the &ldquo;voted&rdquo; tag.
+                {(() => {
+                  // Flatten all members' sponsored + cosponsored into one
+                  // chronological list. Already pre-filtered to bills
+                  // with floor action by bills.ts.
+                  const flat: Array<BillRow & { kind: 'Sp' | 'Co'; member: string }> = [];
+                  for (const m of data.federalMembers) {
+                    for (const b of m.sponsored)   flat.push({ ...b, kind: 'Sp', member: m.name });
+                    for (const b of m.cosponsored) flat.push({ ...b, kind: 'Co', member: m.name });
+                  }
+                  // De-dupe by bill # (keep sponsored over cosponsored).
+                  const dedup = new Map<string, typeof flat[number]>();
+                  for (const b of flat) {
+                    const k = b.number.replace(/\s+/g, '');
+                    const prev = dedup.get(k);
+                    if (!prev || (prev.kind === 'Co' && b.kind === 'Sp')) dedup.set(k, b);
+                  }
+                  const sorted = [...dedup.values()].sort((a, b) =>
+                    billDate(b).localeCompare(billDate(a)),
+                  );
+                  if (sorted.length === 0) {
+                    return <p className="muted">No federal bills with floor action cached.</p>;
+                  }
+                  return (
+                    <ul className="rep-list">
+                      {sorted.map((b, i) => (
+                        <li key={`fed-${i}`} style={{ position: 'relative' }}>
+                          <span className={`kind kind-${b.kind.toLowerCase()}`} style={{
+                            position: 'absolute', left: -22, top: 4, fontSize: '.7em', color: 'var(--text-muted)',
+                          }}>{b.kind}</span>
+                          <BillRowItem b={b} onOpenFed={setBillRef} />
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+                <p className="muted" style={{ fontSize: '.75em', marginTop: 12 }}>
+                  Only bills with real floor action shown (Passed / Agreed to / Failed /
+                  Became Law / Reported out of committee).{' '}
+                  <span className="kind kind-sp">Sp</span> = primary sponsor;{' '}
+                  <span className="kind kind-co">Co</span> = cosponsor.
                 </p>
+                <details style={{ marginTop: 6 }}>
+                  <summary className="muted" style={{ fontSize: '.75em', cursor: 'pointer' }}>
+                    What do the bill prefixes mean? (HR, S, HRES…)
+                  </summary>
+                  <dl className="bill-prefix-key">
+                    <dt>HR</dt><dd>House Bill — becomes law if Senate concurs and the President signs.</dd>
+                    <dt>S</dt><dd>Senate Bill — same path, originated in the Senate.</dd>
+                    <dt>HJRES / SJRES</dt><dd>Joint Resolution — used interchangeably with bills; also the form for constitutional amendments.</dd>
+                    <dt>HCONRES / SCONRES</dt><dd>Concurrent Resolution — passes both chambers but isn&rsquo;t law (Congress&rsquo;s internal/expressive measures).</dd>
+                    <dt>HRES / SRES</dt><dd>Simple Resolution — single chamber only; rules, internal procedure, or expressing the sense of that chamber.</dd>
+                  </dl>
+                </details>
               </div>
             )}
 
@@ -210,7 +204,8 @@ export default function BillsDetail({ label, tooltip }: Props) {
               <div className="bills-state">
                 <p className="muted" style={{ fontSize: '.78em' }}>
                   California {data.stateSession ? `(${data.stateSession.replace(/(\d{4})(\d{4})/, '$1–$2')} session) ` : ''}
-                  bills with &ldquo;Contra Costa&rdquo; in the text. Source: OpenStates → leginfo.legislature.ca.gov.
+                  bills sponsored by Martinez&rsquo;s state legislators (SD-9 Grayson + AD-15 Farías).
+                  Newest action first.
                 </p>
                 {data.stateBills.length === 0 ? (
                   <p className="muted">No matching state bills.</p>

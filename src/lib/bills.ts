@@ -61,14 +61,23 @@ export interface AffectingBillsPayload {
   stateSession: string;
 }
 
-// Federal members whose districts include Contra Costa County. If a
-// reapportionment changes the seat, edit this list.
+// Federal members representing Martinez. Per the user's spec the
+// House district is CA-08 (Garamendi). Plus both CA Senators.
 const FEDERAL_MEMBERS: Array<{ bioguideId: string; name: string; party: string; role: string }> = [
-  { bioguideId: 'D000623', name: 'Mark DeSaulnier', party: 'D', role: 'Rep. CA-10 (Martinez)' },
-  { bioguideId: 'G000559', name: 'John Garamendi',  party: 'D', role: 'Rep. CA-08 (East CCC)' },
+  { bioguideId: 'G000559', name: 'John Garamendi',  party: 'D', role: 'Rep. CA-08' },
   { bioguideId: 'P000145', name: 'Alex Padilla',    party: 'D', role: 'Senator (CA)' },
   { bioguideId: 'S001150', name: 'Adam Schiff',     party: 'D', role: 'Senator (CA)' },
 ];
+
+// A bill is "active" if its latest action shows real floor movement
+// rather than just "Referred to Committee on X". This dramatically
+// cuts the noise — 200 sponsored bills mostly never move, but the
+// dozen-or-so with action are the ones worth reading.
+const ACTIVE_ACTION_RE =
+  /\b(passed|agreed\s+to|failed|became\s+(?:public\s+)?law|enacted|signed|reported|conference|cloture|vetoed|invoked|considered|on the floor|by the yeas and nays|on motion to)\b/i;
+function billHasFloorAction(b: BillRow): boolean {
+  return ACTIVE_ACTION_RE.test(b.latestAction ?? '');
+}
 
 async function safeJson<T = unknown>(url: string, init?: RequestInit, tag = 'bills', timeoutMs = 12000): Promise<T | null> {
   const ctrl = new AbortController();
@@ -148,25 +157,31 @@ function mapCongressBill(b: CongressBillItem, sponsor: string): BillRow {
 async function fetchMember(m: typeof FEDERAL_MEMBERS[number]): Promise<MemberBills | null> {
   if (!CONGRESS_KEY) return null;
   const base = `https://api.congress.gov/v3/member/${m.bioguideId}`;
-  // Pull 25 each — Congress.gov returns most-recent-first by default.
+  // Pull 50 of each so the post-filter pool stays useful. Congress.gov
+  // returns most-recent-first by default.
   const [spJson, csJson] = await Promise.all([
     safeJson<CongressLegResp>(
-      `${base}/sponsored-legislation?api_key=${CONGRESS_KEY}&format=json&limit=25`,
+      `${base}/sponsored-legislation?api_key=${CONGRESS_KEY}&format=json&limit=50`,
       undefined, `member-${m.bioguideId}-sp`,
     ),
     safeJson<CongressLegResp>(
-      `${base}/cosponsored-legislation?api_key=${CONGRESS_KEY}&format=json&limit=25`,
+      `${base}/cosponsored-legislation?api_key=${CONGRESS_KEY}&format=json&limit=50`,
       undefined, `member-${m.bioguideId}-co`,
     ),
   ]);
+  // Filter to bills with real floor action — drops "Referred to
+  // Committee" noise so what's left is what the rep actually moved or
+  // voted on at the floor level.
+  const sponsoredAll   = (spJson?.sponsoredLegislation   ?? []).map((b) => mapCongressBill(b, m.name));
+  const cosponsoredAll = (csJson?.cosponsoredLegislation ?? []).map((b) => mapCongressBill(b, m.name));
   return {
     bioguideId: m.bioguideId,
     name: m.name,
     party: m.party,
     role: m.role,
     url: `https://www.congress.gov/member/${m.bioguideId}`,
-    sponsored:   (spJson?.sponsoredLegislation   ?? []).map((b) => mapCongressBill(b, m.name)),
-    cosponsored: (csJson?.cosponsoredLegislation ?? []).map((b) => mapCongressBill(b, m.name)),
+    sponsored:   sponsoredAll.filter(billHasFloorAction),
+    cosponsored: cosponsoredAll.filter(billHasFloorAction),
   };
 }
 
@@ -224,21 +239,36 @@ function mapOsBill(b: OsBill): BillRow {
 
 async function fetchStateBills(): Promise<{ bills: BillRow[]; session: string }> {
   if (!OPENSTATES_KEY) return { bills: [], session: '' };
-  // OpenStates supports `q` as a full-text query across bill text +
-  // metadata. We sort by most-recent action to surface what's moving.
-  // include `sponsorships` so we can attribute the bill.
-  const url =
-    `https://v3.openstates.org/bills?jurisdiction=ca` +
-    `&q=Contra+Costa` +
-    `&per_page=20` +
-    `&sort=latest_action_dsc` +
-    `&include=sponsorships&include=sources`;
-  const j = await safeJson<OsBillsResp>(url, {
-    headers: { 'X-API-Key': OPENSTATES_KEY },
-  }, 'openstates');
-  const results = j?.results ?? [];
-  const bills = results.map(mapOsBill);
-  return { bills, session: results[0]?.session ?? '' };
+  // Earlier we did a text search for "Contra Costa" — almost no
+  // current-session CA bills mention the county by name, so the section
+  // was always empty. Switch to bills SPONSORED by Martinez's state
+  // legislators (SD-9 Grayson + AD-15 Farías). That's the closest
+  // approximation to "bills affecting CCC" given the available data.
+  const sponsors = ['Tim Grayson', 'Anamarie Avila Farias'];
+  const headers = { 'X-API-Key': OPENSTATES_KEY };
+  const responses = await Promise.all(
+    sponsors.map((name) => safeJson<OsBillsResp>(
+      `https://v3.openstates.org/bills?jurisdiction=ca` +
+      `&sponsor.name=${encodeURIComponent(name)}` +
+      `&per_page=25&sort=latest_action_dsc` +
+      `&include=sponsorships&include=sources`,
+      { headers }, `openstates-${name}`,
+    )),
+  );
+  const allResults = responses.flatMap((j) => j?.results ?? []);
+  // Dedupe by session + identifier (in case both sponsored the same bill).
+  const seen = new Set<string>();
+  const unique: OsBill[] = [];
+  for (const r of allResults) {
+    const k = `${r.session}-${r.identifier}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    unique.push(r);
+  }
+  // Newest action first.
+  unique.sort((a, b) => (b.latest_action_date ?? '').localeCompare(a.latest_action_date ?? ''));
+  const bills = unique.map(mapOsBill);
+  return { bills, session: unique[0]?.session ?? '' };
 }
 
 // ---- Top-level fetch ---------------------------------------------------
