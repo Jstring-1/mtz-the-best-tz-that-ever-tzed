@@ -110,52 +110,66 @@ export default async function CivicStrip() {
     return num ? `${num}%` : it.value;
   };
 
+  // Helpers — look up each gov_local items[] entry by key, render the
+  // matching detail component. Returning null when the cache is empty
+  // (cron hasn't run yet) keeps the strip from blowing up.
+  const byKey = (key: string): GovStripItem | undefined => items.find((it) => it.key === key);
+  const valHtmlFor = (it: GovStripItem): string =>
+    `<span class="civic-strip-val ${it.color ?? ''}">${displayValue(it)}</span>`;
+
+  const fundingChip = () => {
+    const it = byKey('grants');
+    return it ? (
+      <GrantsDetail tooltip={it.tooltip} label={valHtmlFor(it)}
+        rows={grants} sources={fundingSources} data={funding} />
+    ) : null;
+  };
+  const billsChip = () => {
+    const it = byKey('rep');
+    return it ? <BillsDetail tooltip={it.tooltip} label={valHtmlFor(it)} /> : null;
+  };
+  const crimeChip = () => {
+    const it = byKey('crime');
+    return it ? <CrimeDetail tooltip={it.tooltip} label={valHtmlFor(it)} /> : null;
+  };
+  const unempChip = () => {
+    const it = byKey('unemp');
+    return it ? <UnempDetail tooltip={it.tooltip} label={valHtmlFor(it)} data={unempData} /> : null;
+  };
+  const gasChip = () => {
+    const it = byKey('gas');
+    return it ? <GasDetail tooltip={it.tooltip} label={valHtmlFor(it)} data={gasData} /> : null;
+  };
+
+  // Civic-strip ordering (user-specified):
+  //   Parks · Birds · Council · Code · Funding · Bills · Reps · Crime
+  //   · Economy · Recalls · FEMA · EONET · Unemployment · Gas
   return (
     <section className="civic-strip" aria-label="Civic indicators">
-      {items.map((it) => {
-        const shown = displayValue(it);
-        const valHtml = `<span class="civic-strip-val ${it.color ?? ''}">${shown}</span>`;
-        if (it.key === 'rep')    return <BillsDetail key={it.key} tooltip={it.tooltip} label={valHtml} />;
-        if (it.key === 'grants') return (
-          <GrantsDetail
-            key={it.key}
-            tooltip={it.tooltip}
-            label={valHtml}
-            rows={grants}
-            sources={fundingSources}
-            data={funding}
-          />
-        );
-        if (it.key === 'crime')  return <CrimeDetail key={it.key} tooltip={it.tooltip} label={valHtml} />;
-        if (it.key === 'unemp')  return <UnempDetail key={it.key} tooltip={it.tooltip} label={valHtml} data={unempData} />;
-        if (it.key === 'gas')    return <GasDetail   key={it.key} tooltip={it.tooltip} label={valHtml} data={gasData}   />;
-        // Any other static items — non-interactive text with tooltip.
-        const inner = <span className={`civic-strip-val ${it.color ?? ''}`}>{shown}</span>;
-        return (
-          <span key={it.key} className="civic-strip-item" title={it.tooltip}>
-            {it.href ? <a href={it.href} target="_blank" rel="noopener">{inner}</a> : inner}
-          </span>
-        );
-      })}
-      <RecallsDetail
-        tooltip={recallsTooltip}
-        label={recallsLabelHtml}
-        data={recallsList}
-        scrapedAt={national?.scrapedAt}
-      />
+      <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
+      <BirdsDetail   tooltip={birdsTooltip}   label={birdsLabelHtml} data={birds} />
+      <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
+      <CodeDetail    tooltip={codeTooltip}    label={codeLabelHtml} />
+      {fundingChip()}
+      {billsChip()}
+      <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
+      {crimeChip()}
       <EconomyDetail
         tooltip={economyTooltip}
         label={economyLabelHtml}
         data={economyData}
         stocks={stocks as Parameters<typeof EconomyDetail>[0]['stocks']}
       />
+      <RecallsDetail
+        tooltip={recallsTooltip}
+        label={recallsLabelHtml}
+        data={recallsList}
+        scrapedAt={national?.scrapedAt}
+      />
       <FemaDetail    tooltip={femaTooltip}    label={femaLabelHtml}    data={femaList} />
       <EonetDetail   tooltip={eonetTooltip}   label={eonetLabelHtml}   data={eonetList} />
-      <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
-      <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
-      <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
-      <CodeDetail    tooltip={codeTooltip}    label={codeLabelHtml} />
-      <BirdsDetail   tooltip={birdsTooltip}   label={birdsLabelHtml} data={birds} />
+      {unempChip()}
+      {gasChip()}
     </section>
   );
 }
