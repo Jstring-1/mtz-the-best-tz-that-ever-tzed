@@ -79,7 +79,7 @@ function Section({ title, reps, onOpen, emptyHint, headerExtra }: {
   return (
     <section className="reps-section">
       <h3 className="rep-h">
-        {title} <span className="muted" style={{ fontWeight: 400, fontSize: '.78em' }}>({reps.length})</span>
+        {title}
         {headerExtra && <span className="rep-h-extra" style={{ marginLeft: 8 }}>{headerExtra}</span>}
       </h3>
       {reps.length === 0 ? (
@@ -96,9 +96,10 @@ function Section({ title, reps, onOpen, emptyHint, headerExtra }: {
 export default function RepsDetail({ label, tooltip }: Props) {
   const [open, setOpen] = useUrlBool('reps');
   const [bioSlug, setBioSlug] = useUrlString('rbio');
-  // Map viewer for the CCC District 5 boundary image (img/district5map.jpg).
-  // URL-state'd so a link to ?reps=1&d5map=1 opens straight into it.
+  // Map viewers — CCC District 5 boundary image and Martinez city
+  // council district map. URL-state'd so deep links open straight in.
   const [d5MapOpen, setD5MapOpen] = useUrlBool('d5map');
+  const [cityMapOpen, setCityMapOpen] = useUrlBool('citymap');
   const [data, setData] = useState<RepsPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [empty, setEmpty] = useState<string | null>(null);
@@ -132,18 +133,23 @@ export default function RepsDetail({ label, tooltip }: Props) {
       <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Your elected reps — Martinez" size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title="Reps" size="lg">
         {loading && <p className="muted">Loading…</p>}
         {empty && <p className="muted">{empty}</p>}
         {error && <p className="muted">Couldn’t load: {error}</p>}
         {data && (
           <>
-            <p className="muted" style={{ fontSize: '.82em', marginTop: 0 }}>
-              Click any card for a bio &amp; contact info. Auto-resolved from official .gov sources
-              (Congress.gov, OpenStates, gov.ca.gov, county BOS, City of Martinez).
-            </p>
-
             <Section title="City — Martinez Council & Mayor" reps={data.city} onOpen={openBio}
+              headerExtra={
+                <button
+                  type="button"
+                  className="rep-h-link"
+                  onClick={() => setCityMapOpen(true)}
+                  title="Martinez council-district map"
+                >
+                  map →
+                </button>
+              }
               emptyHint="Couldn't read the city site this cycle — try the official link." />
 
             <Section title="County — Supervisor, District 5" reps={data.county} onOpen={openBio}
@@ -192,11 +198,17 @@ export default function RepsDetail({ label, tooltip }: Props) {
       <Modal open={d5MapOpen} onClose={() => setD5MapOpen(false)} title="CCC Board of Supervisors — District 5" size="lg">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/img/district5map.jpg" alt="Contra Costa County District 5 boundary map" className="d5-map-img" />
-        <p style={{ marginTop: 10 }}>
-          <a className="event-modal-btn" href="/img/district5map.jpg" target="_blank" rel="noopener">
-            Open full-size in new tab →
-          </a>
-        </p>
+        <div className="popup-ext-links">
+          <a href="/img/district5map.jpg" target="_blank" rel="noopener">Open full-size in new tab →</a>
+        </div>
+      </Modal>
+
+      <Modal open={cityMapOpen} onClose={() => setCityMapOpen(false)} title="Martinez — council district map" size="lg">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/img/martinez-district-map.png" alt="Martinez city-council district boundaries" className="d5-map-img" />
+        <div className="popup-ext-links">
+          <a href="/img/martinez-district-map.png" target="_blank" rel="noopener">Open full-size in new tab →</a>
+        </div>
       </Modal>
     </>
   );
