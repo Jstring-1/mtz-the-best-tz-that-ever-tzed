@@ -2298,6 +2298,23 @@ button.rep-card.clickable:focus-visible {
   min-width: 160px !important;
   max-width: 240px !important;
 }
+/* Restore Leaflet's default white popup bubble — the modal's dark
+   theme was bleeding through and leaving popup text floating with no
+   background. Match the upstream chrome (rounded white box + the
+   little tip below it). */
+.detail-modal-content .leaflet-popup-content-wrapper {
+  background: #fff !important;
+  color: #222 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 3px 14px rgba(0,0,0,.4) !important;
+  padding: 1px !important;
+}
+.detail-modal-content .leaflet-popup-tip {
+  background: #fff !important;
+  box-shadow: 0 3px 14px rgba(0,0,0,.4) !important;
+}
+.detail-modal-content .leaflet-popup-close-button { color: #555 !important; }
+.detail-modal-content .park-pop-addr { color: #555 !important; }
 .detail-modal-close {
   position: absolute; top: 6px; right: 10px;
   background: transparent; border: 0; color: var(--text-muted);
