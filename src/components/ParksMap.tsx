@@ -50,14 +50,17 @@ export default function ParksMap({
       );
       if (!withCoords.length) return;
 
-      // Fit bounds around all pins; min-zoom so we don't get an
-      // unusable street-level view if all pins are very close.
+      // Defer the initial fitBounds until ResizeObserver fires below —
+      // the modal animates in, so right now the container is still
+      // sized for its pre-animation state. Use a sane fallback center
+      // (Martinez) so the first paint isn't blank.
       const bounds = L.latLngBounds(withCoords.map((p) => [p.lat, p.lng]));
       map = L.map(containerRef.current, {
         scrollWheelZoom: false,
         zoomSnap: 0.25,
+        center: [38.0194, -122.1341],
+        zoom: 13,
       });
-      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
       mapRef.current = map;
 
       // OSM tiles — free, no API key, attribution required.
@@ -93,15 +96,20 @@ export default function ParksMap({
       // The modal animates in, so the container's final size isn't
       // known when L.map() runs — Leaflet caches the (smaller) initial
       // size and only fetches tiles for that area, leaving the rest of
-      // the panel gray. invalidateSize() forces a recompute; we run it
-      // on every container resize so window-resize + modal-open both
-      // get covered. The fitBounds call after invalidate keeps all pins
-      // framed once the real size is known.
+      // the panel gray. We invalidateSize() on every observed resize
+      // so window-resize + modal-open both get covered, but only call
+      // fitBounds the FIRST time we see a real size — otherwise every
+      // popup auto-pan animation would retrigger fitBounds and the map
+      // would jump around on click.
       if (containerRef.current) {
+        let didInitialFit = false;
         resizeObs = new ResizeObserver(() => {
           if (!map) return;
           map.invalidateSize();
-          map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
+          if (!didInitialFit) {
+            map.fitBounds(bounds, { padding: [24, 24], maxZoom: 14 });
+            didInitialFit = true;
+          }
         });
         resizeObs.observe(containerRef.current);
       }
