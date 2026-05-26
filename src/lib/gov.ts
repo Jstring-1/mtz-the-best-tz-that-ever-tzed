@@ -935,8 +935,18 @@ export interface GovNationalPayload {
   economy: {
     debt: { total: string; date: string } | null;
     yields: Array<{ maturity: string; rate: string }>;
+    // U.S. + CA + Contra Costa + SF Bay Area MSA unemployment rates,
+    // BLS LAUS series. Each may be null if BLS returned nothing.
     unemployment: { value: string; period: string } | null;
+    unemploymentCA: { value: string; period: string } | null;
+    unemploymentCC: { value: string; period: string } | null;
+    unemploymentBA: { value: string; period: string } | null;
+    // U.S. CPI YoY (monthly) + SF Bay Area CPI YoY (bimonthly).
     cpiYoY: { value: string; period: string } | null;
+    cpiBA: { value: string; period: string } | null;
+    // Contra Costa demographics (Census ACS 5-year, annual vintage).
+    ccMedianIncome: { value: string; year: string } | null;
+    ccMedianHomeValue: { value: string; year: string } | null;
   };
   recalls: RecallRow[];
   health: { recentDrugRecalls: number; topDrugRecalls: RecallRow[] };
@@ -981,29 +991,99 @@ async function treasuryYields(): Promise<Array<{ maturity: string; rate: string 
   return out;
 }
 
-// ---- BLS national unemployment + CPI ---------------------------------
+// ---- BLS national + regional unemployment + CPI ----------------------
 
-// Batched: one BLS call returns national unemployment + CPI series.
+// Batched: one BLS call returns U.S. + CA + Contra Costa + SF Bay Area
+// unemployment series PLUS U.S. CPI + Bay Area CPI series. BLS lets us
+// pass up to 50 series in one request, so all six fit comfortably.
+//
+//   LNS14000000           U.S. civilian unemployment (national, SA)
+//   LASST060000000000003  California statewide (LAUS, NSA)
+//   LAUCN060130000000003  Contra Costa County (LAUS, NSA)
+//   LAUMT064186000000003  SF-Oakland-Hayward MSA (LAUS MSA, NSA)
+//   CUUR0000SA0           U.S. CPI-U, all items (monthly)
+//   CUURS49BSA0           SF-Oakland-Hayward CPI-U, all items (bimonthly)
 async function blsNationalSnapshot() {
-  const r = await blsSeries(['LNS14000000', 'CUUR0000SA0']);
+  const r = await blsSeries([
+    'LNS14000000',
+    'LASST060000000000003',
+    'LAUCN060130000000003',
+    'LAUMT064186000000003',
+    'CUUR0000SA0',
+    'CUURS49BSA0',
+  ]);
   const series = r?.Results?.series ?? [];
   const byId = new Map(series.map((s) => [s.seriesID, s.data ?? []]));
-  const unempData = byId.get('LNS14000000') ?? [];
-  const cpiData   = byId.get('CUUR0000SA0') ?? [];
-  let unemp: { value: string; period: string } | null = null;
-  let cpi:   { value: string; period: string } | null = null;
-  if (unempData.length) {
-    const row = unempData[0];
-    unemp = { value: `${row.value}%`, period: `${row.periodName} ${row.year}` };
-  }
-  if (cpiData.length >= 13) {
-    const latest = cpiData[0], yearAgo = cpiData[12];
+
+  const mkPctPoint = (id: string): { value: string; period: string } | null => {
+    const rows = byId.get(id) ?? [];
+    if (!rows.length) return null;
+    const row = rows[0];
+    return { value: `${row.value}%`, period: `${row.periodName} ${row.year}` };
+  };
+  // CPI YoY: need 13 monthly readings to compute year-over-year. SF
+  // Bay Area is bimonthly (Jan/Mar/May/...) so we need ~7 readings to
+  // span a year — same comparison, just every other index.
+  const mkCpiYoY = (id: string, lookbackSteps: number): { value: string; period: string } | null => {
+    const rows = byId.get(id) ?? [];
+    if (rows.length <= lookbackSteps) return null;
+    const latest = rows[0], yearAgo = rows[lookbackSteps];
     const a = Number(latest.value), b = Number(yearAgo.value);
-    if (isFinite(a) && isFinite(b) && b !== 0) {
-      cpi = { value: `${(((a - b) / b) * 100).toFixed(1)}%`, period: `${latest.periodName} ${latest.year}` };
-    }
+    if (!isFinite(a) || !isFinite(b) || b === 0) return null;
+    return {
+      value: `${(((a - b) / b) * 100).toFixed(1)}%`,
+      period: `${latest.periodName} ${latest.year}`,
+    };
+  };
+
+  return {
+    unemp:   mkPctPoint('LNS14000000'),
+    unempCA: mkPctPoint('LASST060000000000003'),
+    unempCC: mkPctPoint('LAUCN060130000000003'),
+    unempBA: mkPctPoint('LAUMT064186000000003'),
+    cpi:     mkCpiYoY('CUUR0000SA0', 12),
+    cpiBA:   mkCpiYoY('CUURS49BSA0', 6),
+  };
+}
+
+// ---- Census ACS — Contra Costa County demographics -------------------
+
+// Census ACS 5-year endpoint. Unauthenticated reads are capped at 500
+// requests / 24h / IP — way more than the 4h cron's 6/day, so no
+// CENSUS_API_KEY is required. We pull the most-recent 5-year vintage
+// available (Census publishes vintage N around Dec of year N+1, so a
+// safe default is to ask for last year — fall back two years if 404).
+//
+//   B19013_001E  median household income (past 12 months, in current $)
+//   B25077_001E  median home value (owner-occupied)
+async function censusContraCosta(): Promise<{
+  income: { value: string; year: string } | null;
+  homeValue: { value: string; year: string } | null;
+} | null> {
+  const fmtUsd = (n: number): string => {
+    if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+    if (n >= 1e3) return `$${Math.round(n / 1e3)}k`;
+    return `$${n.toLocaleString()}`;
+  };
+  // Try the most-recent vintage we expect to exist; on miss, walk
+  // back one year. ACS 5-year for vintage Y is released ~Dec of Y+1.
+  const thisYr = new Date().getUTCFullYear();
+  for (const vintage of [thisYr - 2, thisYr - 3, thisYr - 4]) {
+    const url = `https://api.census.gov/data/${vintage}/acs/acs5` +
+      `?get=NAME,B19013_001E,B25077_001E&for=county:013&in=state:06`;
+    const j = await safeJson<unknown[][]>(url, undefined, 'census');
+    if (!Array.isArray(j) || j.length < 2) continue;
+    // Row 0 = headers, row 1 = data: [NAME, income, home, state, county]
+    const row = j[1];
+    const inc = Number(row?.[1]);
+    const hv  = Number(row?.[2]);
+    return {
+      income: isFinite(inc) && inc > 0 ? { value: fmtUsd(inc), year: String(vintage) } : null,
+      homeValue: isFinite(hv) && hv > 0 ? { value: fmtUsd(hv), year: String(vintage) } : null,
+    };
   }
-  return { unemp, cpi };
+  if (!lastFail['census']) lastFail['census'] = 'no ACS vintage returned data';
+  return null;
 }
 
 // ---- FDA / CPSC recalls ----------------------------------------------
@@ -1117,13 +1197,14 @@ async function eonetActive(): Promise<EonetRow[]> {
 
 export async function fetchGovNational(): Promise<GovNationalPayload> {
   const [
-    debt, yields, blsBatch,
+    debt, yields, blsBatch, census,
     fdaFood, fdaDrug, fdaDevice, cpsc,
     fema, eonet,
   ] = await Promise.allSettled([
     treasuryDebt(),
     treasuryYields(),
     blsNationalSnapshot(),
+    censusContraCosta(),
     fdaRecalls('food'),
     fdaRecalls('drug'),
     fdaRecalls('device'),
@@ -1133,7 +1214,11 @@ export async function fetchGovNational(): Promise<GovNationalPayload> {
   ]);
   const v = <T>(p: PromiseSettledResult<T>, d: T): T => (p.status === 'fulfilled' ? p.value : d);
 
-  const blsBatched = v(blsBatch, { unemp: null, cpi: null });
+  const blsBatched = v(blsBatch, {
+    unemp: null, unempCA: null, unempCC: null, unempBA: null,
+    cpi: null, cpiBA: null,
+  });
+  const ccDemographics = v(census, { income: null, homeValue: null }) ?? { income: null, homeValue: null };
   const drugRecalls = v(fdaDrug, []);
   const allRecalls = [
     ...v(fdaFood, []), ...drugRecalls, ...v(fdaDevice, []), ...v(cpsc, []),
@@ -1144,8 +1229,14 @@ export async function fetchGovNational(): Promise<GovNationalPayload> {
     economy: {
       debt: v(debt, null),
       yields: v(yields, []),
-      unemployment: blsBatched.unemp,
+      unemployment:   blsBatched.unemp,
+      unemploymentCA: blsBatched.unempCA,
+      unemploymentCC: blsBatched.unempCC,
+      unemploymentBA: blsBatched.unempBA,
       cpiYoY: blsBatched.cpi,
+      cpiBA:  blsBatched.cpiBA,
+      ccMedianIncome:    ccDemographics.income,
+      ccMedianHomeValue: ccDemographics.homeValue,
     },
     recalls: allRecalls.slice(0, 30),
     health: {

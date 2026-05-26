@@ -197,8 +197,72 @@ export default function EconomyDetail({ label, tooltip, data, stocks }: Props) {
               </section>
             )}
 
+            {/* Local-first ordering: county/state/Bay Area before national.
+                Each panel is null-safe — sections that have no data simply
+                render nothing rather than littering "—" placeholders. */}
+            {(data?.unemploymentCC || data?.unemploymentCA || data?.unemploymentBA
+              || data?.cpiBA || data?.ccMedianIncome || data?.ccMedianHomeValue) && (
+              <section style={{ marginTop: 18 }}>
+                <h3 className="rep-h">Local indicators — Contra Costa &amp; Bay Area</h3>
+                <dl className="econ-kv">
+                  {data.unemploymentCC && (
+                    <>
+                      <dt>Contra Costa unemployment</dt>
+                      <dd className="big">{data.unemploymentCC.value}</dd>
+                      <dt>period</dt>
+                      <dd className="muted">{data.unemploymentCC.period}</dd>
+                    </>
+                  )}
+                  {data.unemploymentBA && (
+                    <>
+                      <dt>SF Bay Area unemployment</dt>
+                      <dd className="big">{data.unemploymentBA.value}</dd>
+                      <dt>period</dt>
+                      <dd className="muted">{data.unemploymentBA.period}</dd>
+                    </>
+                  )}
+                  {data.unemploymentCA && (
+                    <>
+                      <dt>California unemployment</dt>
+                      <dd className="big">{data.unemploymentCA.value}</dd>
+                      <dt>period</dt>
+                      <dd className="muted">{data.unemploymentCA.period}</dd>
+                    </>
+                  )}
+                  {data.cpiBA && (
+                    <>
+                      <dt>SF Bay Area CPI YoY</dt>
+                      <dd className="big">{data.cpiBA.value}</dd>
+                      <dt>period</dt>
+                      <dd className="muted">{data.cpiBA.period}</dd>
+                    </>
+                  )}
+                  {data.ccMedianIncome && (
+                    <>
+                      <dt>CCC median household income</dt>
+                      <dd className="big">{data.ccMedianIncome.value}</dd>
+                      <dt>ACS 5-yr</dt>
+                      <dd className="muted">{data.ccMedianIncome.year}</dd>
+                    </>
+                  )}
+                  {data.ccMedianHomeValue && (
+                    <>
+                      <dt>CCC median home value</dt>
+                      <dd className="big">{data.ccMedianHomeValue.value}</dd>
+                      <dt>ACS 5-yr</dt>
+                      <dd className="muted">{data.ccMedianHomeValue.year}</dd>
+                    </>
+                  )}
+                </dl>
+                <p className="muted" style={{ fontSize: '.72em', marginTop: 4 }}>
+                  Sources: BLS LAUS (unemployment), BLS CPI-U (Bay Area inflation),
+                  U.S. Census ACS 5-year (income + home value).
+                </p>
+              </section>
+            )}
+
             <section style={{ marginTop: 18 }}>
-              <h3 className="rep-h">Macro headlines</h3>
+              <h3 className="rep-h">Macro headlines — U.S.</h3>
               <dl className="econ-kv">
                 <dt>Federal debt</dt>
                 <dd className="big">{data?.debt?.total ?? '—'}</dd>
@@ -210,7 +274,7 @@ export default function EconomyDetail({ label, tooltip, data, stocks }: Props) {
                 <dt>period</dt>
                 <dd className="muted">{data?.unemployment?.period ?? '—'}</dd>
 
-                <dt>CPI year-over-year</dt>
+                <dt>U.S. CPI year-over-year</dt>
                 <dd className="big">{data?.cpiYoY?.value ?? '—'}</dd>
                 <dt>period</dt>
                 <dd className="muted">{data?.cpiYoY?.period ?? '—'}</dd>
