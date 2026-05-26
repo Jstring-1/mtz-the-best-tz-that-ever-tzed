@@ -62,7 +62,7 @@ export default function PlacesDetail({ label, tooltip, data }: Props) {
       <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Places — Martinez area (Foursquare)" size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title="Places — Martinez area" size="lg">
         {data.length === 0 ? (
           <p className="muted">No places cached. Run /admin → 12h.</p>
         ) : (
@@ -119,16 +119,13 @@ export default function PlacesDetail({ label, tooltip, data }: Props) {
                             </a>
                           </p>
                         )}
-                        <div className="popup-ext-links">
-                          <a href={`https://foursquare.com/v/${encodeURIComponent(p.fsq_id)}`} target="_blank" rel="noopener">
-                            View on Foursquare →
-                          </a>
-                          {hasCoords && (
+                        {hasCoords && (
+                          <div className="popup-ext-links">
                             <a href={`https://www.google.com/maps/?q=${p.lat},${p.lon}`} target="_blank" rel="noopener">
                               Open in Google Maps →
                             </a>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </li>
