@@ -20,12 +20,20 @@ interface Props {
 // <iframe> (no proxy needed). When a map is selected, the nested modal
 // opens with the PDF embedded for in-page reading.
 const EBRPD_MAPS: Array<{ slug: string; label: string; file: string; note: string }> = [
+  // District-wide EBRPD references
   { slug: 'district',     label: 'EBRPD — District Map',         file: '/img/eastbayparksdistrictmap.pdf',
     note: 'Overview map of all East Bay Regional Park District parks (21 pages).' },
   { slug: 'parksbycity',  label: 'EBRPD — Parks by City',        file: '/img/eastbayparksdistrictparksbycity.pdf',
     note: 'Per-city listing of every EBRPD park, with addresses and amenities (90 pages).' },
   { slug: 'wardmap',      label: 'EBRPD — Ward Map',             file: '/img/eastbayparkswardmap.pdf',
     note: 'EBRPD board-of-directors ward boundaries and member assignments (109 pages).' },
+  // Briones Regional Park — bundled park-specific docs
+  { slug: 'briones-brochure', label: 'Briones — Park Brochure',  file: '/img/parks/briones-map-brochure.pdf',
+    note: 'Official EBRPD brochure for Briones Regional Park.' },
+  { slug: 'briones-trailmap', label: 'Briones — Trail Map',      file: '/img/parks/briones-trail-map.pdf',
+    note: 'Full trail map for Briones Regional Park.' },
+  { slug: 'briones-hike',     label: 'Briones — Hike Notes',     file: '/img/parks/briones-hike.pdf',
+    note: 'Hike description / notes for Briones.' },
 ];
 
 // Civic-strip popup contents:
