@@ -30,7 +30,10 @@ export default function TrainsDetail({ label, tooltip, data }: Props) {
 
   const arriving = data?.arriving ?? [];
   const departed = data?.departed ?? [];
-  const rows = tab === 'arriving' ? arriving : departed;
+  // railrat lists arriving descending (far-future at top, soonest at
+  // bottom) — flip so the next imminent arrival is on top.
+  const arrivingDisplay = [...arriving].reverse();
+  const rows = tab === 'arriving' ? arrivingDisplay : departed;
 
   return (
     <>
@@ -47,15 +50,6 @@ export default function TrainsDetail({ label, tooltip, data }: Props) {
                 TransitDocs — live MTZ map →
               </a>
             </div>
-            <div className="trains-meta">
-              <span>
-                <strong>{arriving.length}</strong> arriving · <strong>{departed.length}</strong> departed
-              </span>
-              {data.lastUpdated && (
-                <span className="muted"> · upstream: {data.lastUpdated}</span>
-              )}
-            </div>
-
             <div className="news-tabs" role="tablist">
               {TABS.map((t) => (
                 <button
