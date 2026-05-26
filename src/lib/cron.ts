@@ -12,7 +12,7 @@ import {
   upsertNoaaHourly,
 } from './cache';
 
-export type Bucket = '1m' | '2m' | '5m' | '15m' | '1h' | '4h' | '12h' | 'all';
+export type Bucket = '1m' | '2m' | '5m' | '15m' | '1h' | '4h' | '12h' | '1d' | 'all';
 export const BUCKETS: Bucket[] = ['1m', '2m', '5m', '15m', '1h', '4h', '12h', 'all'];
 
 const NOAA_LOCAL_CODES = new Set([
@@ -362,15 +362,8 @@ function slugId(s: string): string {
   return s.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase().slice(0, 100);
 }
 
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function startsWithCity(addy: string, city: string): boolean {
-  if (!city) return false;
-  const re = new RegExp(`^\\s*${escapeRegex(city)}\\s*,`, 'i');
-  return re.test(addy);
-}
+// escapeRegex + startsWithCity removed alongside foursquarePlaces —
+// both were only used by the FSQ region filter.
 
 async function localEvents(json: Record<string, unknown>) {
   const { scrapeAllLocalEvents } = await import('./scrape-events');
@@ -450,22 +443,9 @@ async function councilVotes(json: Record<string, unknown>) {
   json['gov_council_votes'] = await scrapeCouncilVotes();
 }
 
-async function localParks(json: Record<string, unknown>) {
-  const { scrapeAllParks } = await import('./scrape-parks');
-  const parks = await scrapeAllParks();
-  json['local_parks'] = parks;
-  // Mirror into the structured parks table.
-  const { upsertParks } = await import('./store');
-  await upsertParks(parks.map((p) => ({
-    id: p.id,
-    name: p.name,
-    url: p.url ?? null,
-    address: p.address ?? null,
-    description: p.description ?? null,
-    amenities: p.amenities ?? null,
-    image: p.image ?? null,
-  })));
-}
+// localParks() removed — replaced by the static MARTINEZ_PARKS
+// registry in src/lib/parks-data.ts. The Wayback Machine scrape
+// targeted Akamai-blocked cityofmartinez.org and was unreliable.
 
 async function purgeStores() {
   const { purgeOldRows } = await import('./store');
@@ -489,20 +469,9 @@ async function shelterPets(json: Record<string, unknown>) {
   if (process.env.MTZ_DEBUG === '1') console.log(`[cron] shelter_pets: upserted ${pets.length}, purged ${purged}`);
 }
 
-async function weatherStory(misc: Record<string, string>) {
-  const html = await fetchText('https://www.weather.gov/mtr/');
-  for (let n = 0; n <= 9; n++) {
-    misc[`WeatherStory${n}.png`] = new RegExp(`WeatherStory${n}\\.png`).test(html) ? 'true' : 'false';
-  }
-  const after = html.split('<div id="wfomap_rtcol_bot">');
-  if (after.length < 2) return;
-  const before = after[1].split('</table>');
-  let xx = before[0] + '</table>';
-  xx = xx.replace(/width="150" /g, '').replace(/[\t\n\r]/g, '');
-  xx = xx.replace(/<img src="\/\/forecast\.weather\.gov\/wwamap\/gif\/spacer\.gif"[^>]*>/g, '');
-  xx = xx.replace(/ width="2"|width="125"|width="20"| valign="top"/g, '');
-  misc['NOAA_key'] = xx;
-}
+// weatherStory() removed — the NWS-MTR forecast-office HTML scrape
+// powered a card that the user explicitly removed ("if there's no
+// data delete it"). Nothing in the UI consumed it.
 
 async function newsFeeds() {
   const loc = getLocation();
@@ -611,16 +580,8 @@ function stripTags(s: string, allow: string[]): string {
   return s.replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, (m, tag) => allowed.has(String(tag).toLowerCase()) ? m : '');
 }
 
-async function noaaWaterRss(xmlBag: Record<string, string>) {
-  const urls: Record<string, string> = {
-    NOAA_w_d_st: 'https://water.weather.gov/ahps2/rss/obs/albc1.rss',
-    NOAA_w_mrna: 'https://water.weather.gov/ahps2/rss/obs/nezc1.rss',
-    NOAA_w_tbl_hrly: 'https://forecast.weather.gov/MapClick.php?lat=38.0117&lon=-122.1372&FcstType=digitalDWML',
-  };
-  for (const [k, url] of Object.entries(urls)) {
-    try { xmlBag[k] = await fetchText(url); } catch { /* skip */ }
-  }
-}
+// noaaWaterRss() removed — no UI consumed NOAA_w_d_st / NOAA_w_mrna /
+// NOAA_w_tbl_hrly. The WeatherDetail popup is OpenWeather-only now.
 
 // Stocks: every 5 minutes, all day, every day.
 // Provider: Yahoo Finance's public chart endpoint — no API key, supports
@@ -719,70 +680,10 @@ async function twelvedataStocks(json: Record<string, unknown>) {
   json['12D_stocks'] = map;
 }
 
-async function foursquarePlaces(json: Record<string, unknown>) {
-  // Foursquare retired the legacy v3 OAuth-style API in 2024.  Service API keys
-  // require the new endpoint, "Bearer" auth prefix, and X-Places-Api-Version header.
-  // Reference: github.com/foursquare/foursquare-places-mcp (official MCP sample).
-  const loc = getLocation();
-  const qs = `ll=${loc.lat},${loc.lon}&radius=${loc.foursquareRadiusM}&categories=${loc.foursquareCategories}&exclude_all_chains=true&sort=RATING&limit=50`;
-  const headers = {
-    Authorization: `Bearer ${process.env.FOURSQUARE_KEY ?? ''}`,
-    'X-Places-Api-Version': '2025-02-05',
-    Accept: 'application/json',
-  };
-  const text = await fetchText(`https://places-api.foursquare.com/places/search?${qs}`, { headers });
-  json.four_sq = text;
-  type FsqPlace = {
-    fsq_place_id?: string;        // new API
-    fsq_id?: string;              // legacy fallback
-    name?: string;
-    location?: { formatted_address?: string; address?: string };
-    categories?: Array<{ name?: string; icon?: { prefix?: string; suffix?: string } }>;
-    distance?: number;
-  };
-  type FsqResp = { results?: FsqPlace[] };
-  let parsed: FsqResp;
-  try { parsed = JSON.parse(text) as FsqResp; } catch { return; }
-  if (!parsed.results) return;
-  const places = [];
-  for (const v of parsed.results) {
-    const id = v.fsq_place_id ?? v.fsq_id;
-    if (!id) continue;
-    const addy = v.location?.formatted_address ?? v.location?.address ?? '';
-    // Foursquare's radius spills into Benicia across the bridge. Skip
-    // anything whose address is in Benicia — we want Martinez only.
-    if (/\bBenicia\b/i.test(addy)) continue;
-    // Drop regional / generic entries like "The Bay Area" whose address
-    // is JUST "<City>, CA[, 94553]" — no street, no cross-street, no
-    // landmark. Real venues at corners or inside parks ("Castro St &
-    // Susana Park, Martinez, CA") have something before the first
-    // comma that isn't the city itself, so they pass.
-    if (startsWithCity(addy, loc.short)) continue;
-    let cats = '', images = '';
-    for (const c of v.categories ?? []) {
-      cats += `${c.name ?? ''}, `;
-      images += `${c.icon?.prefix ?? ''}${c.icon?.suffix ?? ''}, `;
-    }
-    places.push({
-      fsq_id: id,
-      name: v.name ?? 'No Name Given',
-      addy,
-      cats,
-      dist: v.distance ?? null,
-      images,
-    });
-  }
-  if (places.length) await upsertPlaces(places);
-  // Housekeeping: drop any previously-stored Benicia rows. The Foursquare
-  // upsert is keyed on fsq_id so old out-of-area rows linger forever
-  // otherwise; this matches the filter above.
-  await sql`DELETE FROM places WHERE addy ILIKE '%benicia%'`;
-  // And the regional / no-street entries (e.g. "The Bay Area") whose
-  // address is just "<City>, ...". Real venues have a street, a
-  // cross-street, or a landmark before the first comma.
-  const cityPattern = `^[[:space:]]*${escapeRegex(loc.short)}[[:space:]]*,`;
-  await sql`DELETE FROM places WHERE addy ~* ${cityPattern}`;
-}
+// foursquarePlaces() removed — the Places civic-bar item is fed by
+// osmPlaces() (OSM Overpass against MARTINEZ_POLY_STR). Foursquare's
+// post-2024 API requires a Service Key + new headers and the `four_sq`
+// apis_json cache was never read by any UI.
 
 // Curated Places list. We no longer sweep every POI — instead we look
 // up this hand-picked set by name in OpenStreetMap (Overpass) to pull
@@ -1107,54 +1008,73 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('twelvedata_stocks',  () => twelvedataStocks(json),  ok, errors, timings);
   }
 
-  if (bucket === '15m' || all) {
-    await safe('noaa_buoys', () => noaaBuoys(json), ok, errors, timings);
-  }
+  // 15m bucket dropped — its only job (noaa_buoys) moved to 1h since
+  // buoys refresh every ~30-60min upstream.
 
   if (bucket === '1h' || all) {
-    await safe('noaa_forecast',       () => noaaForecast(json),       ok, errors, timings);
+    // Slimmer 1h tier: only data that genuinely changes hourly. The
+    // weather forecasts + USGS + eBird were all moved to 4h because
+    // their upstream cadence is 4-6h or better.
     await safe('noaa_hourly',         () => noaaHourly(json),         ok, errors, timings);
-    await safe('noaa_aviation',       () => noaaAviation(json),       ok, errors, timings);
-    await safe('weatherapi_marine',   () => weatherapiMarine(json),   ok, errors, timings);
-    await safe('weatherapi_forecast', () => weatherapiForecast(json), ok, errors, timings);
-    await safe('usgs_quakes',         () => usgsQuakes(json),         ok, errors, timings);
-    await safe('ebird',               () => ebird(json),              ok, errors, timings);
+    await safe('noaa_buoys',          () => noaaBuoys(json),          ok, errors, timings);
   }
 
   if (bucket === '4h' || all) {
     // Parallelize: each job writes to its own apis_json key, so there's
     // no contention. Total time = max(jobs), not sum — keeps us well
     // under Railway's ~90s HTTP proxy timeout.
-    // Dropped: noaa_water_rss + weather_story — no UI consumed them
-    // (the WeatherDetail popup is OpenWeather-only now).
+    //
+    // Moved IN from 1h: noaa_forecast / noaa_aviation /
+    //   weatherapi_marine / weatherapi_forecast / usgs_quakes / ebird.
+    //   Upstream sources publish every 4-6h or sporadically.
+    // Moved OUT to 12h: gov_national / outbreaks / affecting_bills /
+    //   rep_votes. Federal data, disease feeds, and bill action all
+    //   batch daily at most.
     await Promise.all([
-      safe('news_feeds',      () => newsFeeds(),                ok, errors, timings),
-      safe('news_aggregated', () => aggregatedNews(json),       ok, errors, timings),
-      safe('affecting_bills', () => affectingBills(json),       ok, errors, timings),
-      safe('local_events',    () => localEvents(json),          ok, errors, timings),
-      safe('shelter_pets',    () => shelterPets(json),          ok, errors, timings),
-      safe('gov_national',    () => govNational(json),          ok, errors, timings),
-      safe('outbreaks',       () => outbreaks(json),            ok, errors, timings),
-      safe('rep_votes',       () => repVotes(json),             ok, errors, timings),
-      safe('council_votes',   () => councilVotes(json),         ok, errors, timings),
+      safe('news_feeds',         () => newsFeeds(),                ok, errors, timings),
+      safe('news_aggregated',    () => aggregatedNews(json),       ok, errors, timings),
+      safe('local_events',       () => localEvents(json),          ok, errors, timings),
+      safe('shelter_pets',       () => shelterPets(json),          ok, errors, timings),
+      safe('noaa_forecast',      () => noaaForecast(json),         ok, errors, timings),
+      safe('noaa_aviation',      () => noaaAviation(json),         ok, errors, timings),
+      safe('weatherapi_marine',  () => weatherapiMarine(json),     ok, errors, timings),
+      safe('weatherapi_forecast',() => weatherapiForecast(json),   ok, errors, timings),
+      safe('usgs_quakes',        () => usgsQuakes(json),           ok, errors, timings),
+      safe('ebird',              () => ebird(json),                ok, errors, timings),
     ]);
   }
 
   if (bucket === '12h' || all) {
     // Parallelize for the same reason as 4h — distinct keys, no
     // contention. Run purge_stores LAST since it's a delete pass.
+    //
+    // Moved IN from 4h: gov_national / outbreaks / affecting_bills /
+    //   rep_votes. Their upstreams are daily-batched at best.
     await Promise.all([
       safe('osm_places',          () => osmPlaces(json),          ok, errors, timings),
       safe('ticketmaster_events', () => ticketmasterEvents(json), ok, errors, timings),
-      // local_parks cron job removed — see src/lib/parks-data.ts for
-      // the static registry that replaced it.
       safe('gov_local',           () => govLocal(json),           ok, errors, timings),
-      safe('ccrmc_data',          () => ccrmcData(json),          ok, errors, timings),
-      safe('ccc_comp',            () => cccCompensation(json),    ok, errors, timings),
-      safe('reps_data',           () => repsData(json),           ok, errors, timings),
-      safe('crime_data',          () => crimeData(json),          ok, errors, timings),
+      safe('gov_national',        () => govNational(json),        ok, errors, timings),
+      safe('outbreaks',           () => outbreaks(json),          ok, errors, timings),
+      safe('affecting_bills',     () => affectingBills(json),     ok, errors, timings),
+      safe('rep_votes',           () => repVotes(json),           ok, errors, timings),
     ]);
     await safe('purge_stores',    () => purgeStores(),            ok, errors, timings);
+  }
+
+  if (bucket === '1d' || all) {
+    // Daily tier — slow-moving registries + data the upstream only
+    // refreshes monthly to annually. Council votes batch after weekly
+    // meetings; CCRMC quality is monthly; FBI CDE crime is monthly;
+    // CCC compensation is annual; reps data changes when elected
+    // officials change (rare).
+    await Promise.all([
+      safe('council_votes', () => councilVotes(json),     ok, errors, timings),
+      safe('ccrmc_data',    () => ccrmcData(json),        ok, errors, timings),
+      safe('ccc_comp',      () => cccCompensation(json),  ok, errors, timings),
+      safe('reps_data',     () => repsData(json),         ok, errors, timings),
+      safe('crime_data',    () => crimeData(json),        ok, errors, timings),
+    ]);
   }
 
   if (Object.keys(json).length)    await upsertJsonMany(json);

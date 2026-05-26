@@ -10,10 +10,10 @@ const BUCKETS = [
   { id: '1m',  desc: 'weatherapi_current' },
   { id: '2m',  desc: 'purpleair' },
   { id: '5m',  desc: 'noaa_alerts · twelvedata_stocks' },
-  { id: '15m', desc: 'noaa_buoys' },
-  { id: '1h',  desc: 'noaa_forecast · noaa_hourly · noaa_aviation · weatherapi_marine · weatherapi_forecast · usgs_quakes · ebird' },
-  { id: '4h',  desc: 'news_feeds · news_aggregated · affecting_bills · local_events · shelter_pets · gov_national · outbreaks · rep_votes · council_votes' },
-  { id: '12h', desc: 'osm_places · ticketmaster_events · gov_local · ccrmc_data · ccc_comp · reps_data · crime_data · purge_stores' },
+  { id: '1h',  desc: 'noaa_hourly · noaa_buoys' },
+  { id: '4h',  desc: 'news_feeds · news_aggregated · local_events · shelter_pets · noaa_forecast · noaa_aviation · weatherapi_marine · weatherapi_forecast · usgs_quakes · ebird' },
+  { id: '12h', desc: 'osm_places · ticketmaster_events · gov_local · gov_national · outbreaks · affecting_bills · rep_votes · purge_stores' },
+  { id: '1d',  desc: 'council_votes · ccrmc_data · ccc_comp · reps_data · crime_data' },
   { id: 'all', desc: 'Every bucket sequentially (manual / cold start)' },
 ];
 
