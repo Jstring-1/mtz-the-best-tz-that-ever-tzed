@@ -318,6 +318,28 @@ main { padding-top: var(--top-stack-h); display: block; }
 .civic-strip-val.dodger { color: var(--accent-cool); }
 .civic-strip-sub { color: var(--text-muted); font-weight: 400; }
 
+/* --- Mobile: top strips must scroll horizontally to surface everything.
+   On desktop, justify-content: space-between / center fits all items on
+   one row. On phones the same rule cuts content off because the flex
+   alignment doesn't play well with overflow:auto -- scroll starts at a
+   centered position and the leftmost items end up invisible. Forcing
+   flex-start on small screens makes scroll origin = column 0 so users
+   can swipe through every item. */
+@media (max-width: 720px) {
+  .wx-strip,
+  .wx-row-2,
+  .civic-strip,
+  .gov-strip {
+    justify-content: flex-start;
+    padding: 0 12px;
+    gap: 18px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  /* Slightly larger gap on civic so the chips stay tappable. */
+  .civic-strip { gap: 22px; }
+}
+
 /* Civic / gov data scroller — same horizontal-scroll style as the
    forecast row, sits directly below it. Populated by the 12h cron
    (gov_local). */
