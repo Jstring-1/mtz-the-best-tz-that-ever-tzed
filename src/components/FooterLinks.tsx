@@ -184,6 +184,12 @@ function SourcesBody() {
         <li><strong>Contra Costa Animal Services / 24petconnect</strong> — adoptable pets feed.</li>
         <li><strong>Ticketmaster Discovery API</strong> — regional events.</li>
         <li><strong>Local venue scrapes</strong> — Del Cielo, Five Suns, etc., for the &ldquo;Local&rdquo; events tab.</li>
+        <li>
+          <strong>railrat.net</strong> — scraped MTZ arrivals/departures (powering the Trains civic-bar item). Hobby
+          tracker that aggregates Amtrak&rsquo;s{' '}
+          <a href="https://www.amtrak.com/track-your-train.html" target="_blank" rel="noopener">Track Your Train Map</a>.
+          mtz.city is not affiliated with railrat.net or Amtrak.
+        </li>
       </ul>
 
       <h3>News</h3>

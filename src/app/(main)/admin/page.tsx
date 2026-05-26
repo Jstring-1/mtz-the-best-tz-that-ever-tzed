@@ -10,6 +10,7 @@ const BUCKETS = [
   { id: '1m',  desc: 'weatherapi_current' },
   { id: '2m',  desc: 'purpleair' },
   { id: '5m',  desc: 'noaa_alerts · twelvedata_stocks' },
+  { id: '15m', desc: 'trains_mtz' },
   { id: '1h',  desc: 'noaa_hourly · noaa_buoys' },
   { id: '4h',  desc: 'news_feeds · news_aggregated · local_events · shelter_pets · noaa_forecast · noaa_aviation · weatherapi_marine · weatherapi_forecast · usgs_quakes · ebird' },
   { id: '12h', desc: 'osm_places · ticketmaster_events · gov_local · gov_national · outbreaks · affecting_bills · rep_votes · purge_stores' },

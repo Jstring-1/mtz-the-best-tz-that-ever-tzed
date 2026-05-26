@@ -2639,3 +2639,36 @@ button.econ-index.clickable.active {
 }
 .bills-federal .kind-sp { color: var(--accent);       border-color: var(--accent); }
 .bills-federal .kind-co { color: var(--accent-cool);  border-color: var(--accent-cool); }
+
+/* ---- Trains popup (TrainsDetail) ---------------------------------- */
+.trains-meta {
+  margin: 4px 0 10px;
+  font-size: .9em;
+  color: var(--text-muted);
+}
+.train-time {
+  font-family: var(--mono, monospace);
+  font-weight: 600;
+  color: var(--accent);
+  margin-right: 4px;
+}
+.train-name {
+  font-weight: 600;
+}
+.train-status {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--mono, monospace);
+  font-size: .8em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.train-status.on    { color: var(--accent-green, #4caf50); border-color: var(--accent-green, #4caf50); }
+.train-status.early { color: var(--accent-cool,  #4fc3f7); border-color: var(--accent-cool,  #4fc3f7); }
+.train-status.late  { color: #d4a017; border-color: #d4a017; }
+.train-status.warn  { color: #e34234; border-color: #e34234; }
+

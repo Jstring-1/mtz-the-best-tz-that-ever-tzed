@@ -21,6 +21,8 @@ import OutbreaksDetail from './OutbreaksDetail';
 import type { OutbreaksPayload } from '@/lib/outbreaks';
 import CchDetail from './CchDetail';
 import type { CchPayload } from '@/lib/cch';
+import TrainsDetail from './TrainsDetail';
+import type { TrainsPayload } from '@/lib/trains';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -37,8 +39,9 @@ export default async function CivicStrip() {
   let places: PlaceRow[] = [];
   let outbreaks: OutbreaksPayload | null = null;
   let cch: CchPayload | null = null;
+  let trains: TrainsPayload | null = null;
   try {
-    [payload, council, national, stocks, birds, quakes, places, outbreaks, cch] = await Promise.all([
+    [payload, council, national, stocks, birds, quakes, places, outbreaks, cch, trains] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
@@ -54,6 +57,8 @@ export default async function CivicStrip() {
       getJson<OutbreaksPayload>('outbreaks').catch(() => null),
       // Contra Costa Health — CCRMC scorecards + CCHS reference links.
       getJson<CchPayload>('cch_health').catch(() => null),
+      // Amtrak MTZ train arrivals + departures (railrat.net scrape).
+      getJson<TrainsPayload>('trains_mtz').catch(() => null),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -130,6 +135,11 @@ export default async function CivicStrip() {
   const cchTooltip = cch?.general?.overallRating
     ? `CCRMC CMS overall rating: ${cch.general.overallRating}/5 ★. Click for scorecards + CCHS docs.`
     : 'Contra Costa Health — CCRMC scorecards (CMS Hospital Compare) + reference docs.';
+  // Amtrak — MTZ arrivals + departures (railrat.net, refreshed 15min).
+  const trainsLabelHtml = `<span class="civic-strip-val dodger">Trains</span>`;
+  const trainsTooltip = trains
+    ? `Amtrak MTZ — ${trains.arriving.length} arriving, ${trains.departed.length} departed${trains.lastUpdated ? ` (upstream ${trains.lastUpdated})` : ''}.`
+    : 'Amtrak — Martinez arrivals & departures. Cache empty. Run /admin → 15m.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -158,15 +168,17 @@ export default async function CivicStrip() {
   };
 
   // Civic-strip ordering (user-specified):
-  //   Parks · Places · Birds · Council · Code · Funding · Bills · Reps · Crime
-  //   · CCH · Economy · Recalls · Outbreaks · FEMA · EONET · Quakes
-  // CCH sits next to Crime in the local civic-services cluster.
-  // Unemployment + Gas were removed from the strip — both live inside
-  // the Economy popup now.
+  //   Parks · Places · Trains · Birds · Council · Code · Funding · Bills ·
+  //   Reps · Crime · CCH · Economy · Recalls · Outbreaks · FEMA · EONET · Quakes
+  // Trains sits next to Places — both are "what's around right now"
+  // local items. CCH stays next to Crime in the local civic-services
+  // cluster. Unemployment + Gas were removed from the strip — both
+  // live inside the Economy popup now.
   return (
     <section className="civic-strip" aria-label="Civic indicators">
       <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
       <PlacesDetail  tooltip={placesTooltip}  label={placesLabelHtml} data={places} />
+      <TrainsDetail  tooltip={trainsTooltip}  label={trainsLabelHtml}  data={trains} />
       <BirdsDetail   tooltip={birdsTooltip}   label={birdsLabelHtml} data={birds} />
       <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
       <CodeDetail    tooltip={codeTooltip}    label={codeLabelHtml} />

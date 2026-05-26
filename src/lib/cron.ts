@@ -13,7 +13,7 @@ import {
 } from './cache';
 
 export type Bucket = '1m' | '2m' | '5m' | '15m' | '1h' | '4h' | '12h' | '1d' | 'all';
-export const BUCKETS: Bucket[] = ['1m', '2m', '5m', '1h', '4h', '12h', '1d', 'all'];
+export const BUCKETS: Bucket[] = ['1m', '2m', '5m', '15m', '1h', '4h', '12h', '1d', 'all'];
 
 const NOAA_LOCAL_CODES = new Set([
   'CAC001','CAC013','CAC033','CAC041','CAC055','CAC067','CAC075','CAC077',
@@ -425,6 +425,22 @@ async function outbreaks(json: Record<string, unknown>) {
 async function cchHealth(json: Record<string, unknown>) {
   const { fetchCch } = await import('./cch');
   json['cch_health'] = await fetchCch();
+}
+
+// Amtrak MTZ train status — scraped from railrat.net (hobby site that
+// pulls Amtrak's Track Your Train Map). 15m cadence is gentle on the
+// upstream and plenty fresh for status that updates over many minutes.
+async function trainsMtz(json: Record<string, unknown>) {
+  const { fetchTrains } = await import('./trains');
+  const payload = await fetchTrains();
+  // Only overwrite the cache when we got a usable response. A failed
+  // scrape (HTTP error, network blip) shouldn't blank a healthy cache.
+  if (payload.httpStatus === 200 && !payload.error) {
+    json['trains_mtz'] = payload;
+  } else if (payload.error) {
+    // Preserve the last good cache; just surface the failure in logs.
+    console.warn(`[trains_mtz] scrape failed: ${payload.error} (HTTP ${payload.httpStatus})`);
+  }
 }
 
 async function ccrmcData(json: Record<string, unknown>) {
@@ -1013,8 +1029,12 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('twelvedata_stocks',  () => twelvedataStocks(json),  ok, errors, timings);
   }
 
-  // 15m bucket dropped — its only job (noaa_buoys) moved to 1h since
-  // buoys refresh every ~30-60min upstream.
+  if (bucket === '15m' || all) {
+    // Amtrak train status — railrat.net is a small hobby tracker; 15m
+    // is a polite cadence and matches how often Amtrak's underlying
+    // feed materially changes anyway.
+    await safe('trains_mtz', () => trainsMtz(json), ok, errors, timings);
+  }
 
   if (bucket === '1h' || all) {
     // Slimmer 1h tier: only data that genuinely changes hourly. The

@@ -17,7 +17,7 @@ export async function register() {
     { name: '1m',  ms: 60_000 },
     { name: '2m',  ms: 120_000 },
     { name: '5m',  ms: 300_000 },
-    // 15m bucket dropped — its only job (noaa_buoys) moved to 1h.
+    { name: '15m', ms: 900_000 },
     { name: '1h',  ms: 3_600_000 },
     { name: '4h',  ms: 14_400_000 },
     { name: '12h', ms: 43_200_000 },
