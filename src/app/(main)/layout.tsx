@@ -3,6 +3,8 @@ import WeatherStrip from '@/components/WeatherStrip';
 import HourlyStrip from '@/components/HourlyStrip';
 import ForecastStrip from '@/components/ForecastStrip';
 import CivicStrip from '@/components/CivicStrip';
+import FooterLinks from '@/components/FooterLinks';
+import { BUILD_STAMP } from '@/lib/build-info';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -23,7 +25,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <CivicStrip />
       <main>{children}</main>
       <footer className="site-ftr">
-        {loc.siteName} · {loc.name}
+        <span className="ftr-left">{loc.siteName} · {loc.name}</span>
+        <span className="ftr-right">
+          <span className="ftr-build" title="Build timestamp (Pacific time)">{BUILD_STAMP}</span>
+          <span className="ftr-sep" aria-hidden>·</span>
+          <FooterLinks />
+        </span>
       </footer>
     </>
   );

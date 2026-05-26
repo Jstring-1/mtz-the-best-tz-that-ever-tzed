@@ -1133,14 +1133,48 @@ main { padding-top: var(--top-stack-h); display: block; }
 /* --- Site footer ------------------------------------------------------- */
 
 .site-ftr {
-  height: var(--ftr-h);
-  line-height: var(--ftr-h);
-  padding: 0 12px;
+  min-height: var(--ftr-h);
+  padding: 0 14px;
   font-size: .7em;
   color: var(--text-muted);
-  text-align: center;
   font-family: var(--mono);
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;       /* mobile: legal links wrap to new row below */
+  border-top: 1px solid var(--border);
+}
+.site-ftr .ftr-left,
+.site-ftr .ftr-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.site-ftr .ftr-build { color: var(--text-fade); font-variant-numeric: tabular-nums; }
+.site-ftr .ftr-sep   { color: var(--border); }
+.site-ftr .ftr-link {
+  background: transparent; border: 0; padding: 0;
+  font: inherit; color: var(--text-muted); cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+.site-ftr .ftr-link:hover { color: var(--text); text-decoration-color: var(--text); }
+
+/* Privacy / Terms / Sources popup body — readable prose width,
+   restrained list styles. */
+.legalese { font-size: .95em; line-height: 1.55; }
+.legalese p { margin: .8em 0; }
+.legalese h3 { font-size: .92em; color: var(--accent); margin: 1.4em 0 .4em; }
+.legalese ul { padding-left: 20px; margin: .4em 0 .8em; }
+.legalese li { margin-bottom: 4px; }
+.legalese code {
+  font-size: .9em;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+  padding: 0 4px;
 }
 
 
