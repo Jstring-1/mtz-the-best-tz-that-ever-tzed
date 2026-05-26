@@ -23,6 +23,9 @@ interface Props {
   tooltip?: string;
   data: GovNationalPayload['economy'] | null;
   stocks?: Record<string, StockQuote> | null;
+  /** California weekly retail regular gas price (EIA) — pulled from
+   *  gov_local.extras.gas. Optional so callers in tests can omit. */
+  gas?: { value: string; period: string } | null;
 }
 
 // Display order + friendly names for the major macro indexes we cache.
@@ -144,7 +147,7 @@ function IndexDrawer({ q, label, hint }: { q: StockQuote; label: string; hint: s
   );
 }
 
-export default function EconomyDetail({ label, tooltip, data, stocks }: Props) {
+export default function EconomyDetail({ label, tooltip, data, stocks, gas }: Props) {
   const [open, setOpen] = useUrlBool('econ');
   // Which index card has its drawer expanded (click-to-toggle).
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
@@ -200,66 +203,83 @@ export default function EconomyDetail({ label, tooltip, data, stocks }: Props) {
             {/* Local-first ordering: county/state/Bay Area before national.
                 Each panel is null-safe — sections that have no data simply
                 render nothing rather than littering "—" placeholders. */}
-            {(data?.unemploymentCC || data?.unemploymentCA || data?.unemploymentBA
-              || data?.cpiBA || data?.ccMedianIncome || data?.ccMedianHomeValue) && (
-              <section style={{ marginTop: 18 }}>
-                <h3 className="rep-h">Local indicators — Contra Costa &amp; Bay Area</h3>
-                <dl className="econ-kv">
-                  {data.unemploymentCC && (
-                    <>
-                      <dt>Contra Costa unemployment</dt>
-                      <dd className="big">{data.unemploymentCC.value}</dd>
-                      <dt>period</dt>
-                      <dd className="muted">{data.unemploymentCC.period}</dd>
-                    </>
-                  )}
-                  {data.unemploymentBA && (
-                    <>
-                      <dt>SF Bay Area unemployment</dt>
-                      <dd className="big">{data.unemploymentBA.value}</dd>
-                      <dt>period</dt>
-                      <dd className="muted">{data.unemploymentBA.period}</dd>
-                    </>
-                  )}
-                  {data.unemploymentCA && (
-                    <>
-                      <dt>California unemployment</dt>
-                      <dd className="big">{data.unemploymentCA.value}</dd>
-                      <dt>period</dt>
-                      <dd className="muted">{data.unemploymentCA.period}</dd>
-                    </>
-                  )}
-                  {data.cpiBA && (
-                    <>
-                      <dt>SF Bay Area CPI YoY</dt>
-                      <dd className="big">{data.cpiBA.value}</dd>
-                      <dt>period</dt>
-                      <dd className="muted">{data.cpiBA.period}</dd>
-                    </>
-                  )}
-                  {data.ccMedianIncome && (
-                    <>
-                      <dt>CCC median household income</dt>
-                      <dd className="big">{data.ccMedianIncome.value}</dd>
-                      <dt>ACS 5-yr</dt>
-                      <dd className="muted">{data.ccMedianIncome.year}</dd>
-                    </>
-                  )}
-                  {data.ccMedianHomeValue && (
-                    <>
-                      <dt>CCC median home value</dt>
-                      <dd className="big">{data.ccMedianHomeValue.value}</dd>
-                      <dt>ACS 5-yr</dt>
-                      <dd className="muted">{data.ccMedianHomeValue.year}</dd>
-                    </>
-                  )}
-                </dl>
-                <p className="muted" style={{ fontSize: '.72em', marginTop: 4 }}>
-                  Sources: BLS LAUS (unemployment), BLS CPI-U (Bay Area inflation),
-                  U.S. Census ACS 5-year (income + home value).
-                </p>
-              </section>
-            )}
+            {(() => {
+              // Hoist null-checks into an IIFE so the body can address
+              // `econ` directly (TS narrows once at the guard).
+              const econ = data;
+              const hasLocal = !!(econ?.unemploymentCC || econ?.unemploymentCA
+                || econ?.unemploymentBA || econ?.cpiBA
+                || econ?.ccMedianIncome || econ?.ccMedianHomeValue || gas);
+              if (!hasLocal) return null;
+              return (
+                <section style={{ marginTop: 18 }}>
+                  <h3 className="rep-h">Local indicators — Contra Costa &amp; Bay Area</h3>
+                  <dl className="econ-kv">
+                    {gas && (
+                      <>
+                        <dt>California gas (weekly avg, regular)</dt>
+                        <dd className="big">{gas.value}</dd>
+                        <dt>week of</dt>
+                        <dd className="muted">{gas.period}</dd>
+                      </>
+                    )}
+                    {econ?.unemploymentCC && (
+                      <>
+                        <dt>Contra Costa unemployment</dt>
+                        <dd className="big">{econ.unemploymentCC.value}</dd>
+                        <dt>period</dt>
+                        <dd className="muted">{econ.unemploymentCC.period}</dd>
+                      </>
+                    )}
+                    {econ?.unemploymentBA && (
+                      <>
+                        <dt>SF Bay Area unemployment</dt>
+                        <dd className="big">{econ.unemploymentBA.value}</dd>
+                        <dt>period</dt>
+                        <dd className="muted">{econ.unemploymentBA.period}</dd>
+                      </>
+                    )}
+                    {econ?.unemploymentCA && (
+                      <>
+                        <dt>California unemployment</dt>
+                        <dd className="big">{econ.unemploymentCA.value}</dd>
+                        <dt>period</dt>
+                        <dd className="muted">{econ.unemploymentCA.period}</dd>
+                      </>
+                    )}
+                    {econ?.cpiBA && (
+                      <>
+                        <dt>SF Bay Area CPI YoY</dt>
+                        <dd className="big">{econ.cpiBA.value}</dd>
+                        <dt>period</dt>
+                        <dd className="muted">{econ.cpiBA.period}</dd>
+                      </>
+                    )}
+                    {econ?.ccMedianIncome && (
+                      <>
+                        <dt>CCC median household income</dt>
+                        <dd className="big">{econ.ccMedianIncome.value}</dd>
+                        <dt>ACS 5-yr</dt>
+                        <dd className="muted">{econ.ccMedianIncome.year}</dd>
+                      </>
+                    )}
+                    {econ?.ccMedianHomeValue && (
+                      <>
+                        <dt>CCC median home value</dt>
+                        <dd className="big">{econ.ccMedianHomeValue.value}</dd>
+                        <dt>ACS 5-yr</dt>
+                        <dd className="muted">{econ.ccMedianHomeValue.year}</dd>
+                      </>
+                    )}
+                  </dl>
+                  <p className="muted" style={{ fontSize: '.72em', marginTop: 4 }}>
+                    Sources: BLS LAUS (unemployment), BLS CPI-U (Bay Area inflation),
+                    U.S. Census ACS 5-year (income + home value),
+                    EIA weekly retail gas (California regular).
+                  </p>
+                </section>
+              );
+            })()}
 
             <section style={{ marginTop: 18 }}>
               <h3 className="rep-h">Macro headlines — U.S.</h3>

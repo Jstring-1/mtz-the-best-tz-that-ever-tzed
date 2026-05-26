@@ -1875,13 +1875,16 @@ button.rep-card.clickable:focus-visible {
   line-height: 1.5;
 }
 .bill-prefix-key dt {
-  font-weight: 700;
   font-family: var(--mono, ui-monospace, monospace);
   color: var(--accent);
   padding-top: 2px;
+  text-align: right;
+  white-space: nowrap;
 }
 .bill-prefix-key dd { margin: 0; color: var(--text-muted); }
-.bill-prefix-key dd strong { color: var(--text); font-weight: 600; }
+/* Drop the strong emphasis on prefix definitions — user prefers the
+   text rendering at normal weight throughout. */
+.bill-prefix-key dd strong { color: var(--text); font-weight: 400; }
 
 /* Bills modal header block — legend + collapsible prefix key + cached
    timestamp. Sits above the tabs so the reader can decode badges /
@@ -1897,9 +1900,15 @@ button.rep-card.clickable:focus-visible {
   cursor: pointer;
   font-size: .82em;
   list-style: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  width: max-content;
 }
+.bills-prefix-details > summary:hover { color: var(--text); }
 .bills-prefix-details > summary::-webkit-details-marker { display: none; }
-.bills-prefix-details > summary::before { content: '▸ '; color: var(--text-muted); }
+.bills-prefix-details > summary::before { content: '▸ '; color: var(--text-muted); text-decoration: none; }
 .bills-prefix-details[open] > summary::before { content: '▾ '; }
 .bills-cached { margin: 8px 0 0; font-size: .72em; }
 

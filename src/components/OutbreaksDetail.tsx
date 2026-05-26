@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool, useUrlEnum } from '@/lib/useUrlState';
-import type { OutbreaksPayload, OutbreakSnapshot } from '@/lib/outbreaks';
+import type { OutbreaksPayload, OutbreakItem, OutbreakSnapshot } from '@/lib/outbreaks';
 
 interface Props {
   label: string;
@@ -11,14 +11,32 @@ interface Props {
   data: OutbreaksPayload | null;
 }
 
-type Tab = 'snapshot' | 'food' | 'flu' | 'who';
-const TABS: Tab[] = ['snapshot', 'food', 'flu', 'who'];
+type Tab = 'all' | 'snapshot' | 'food' | 'flu' | 'who';
+const TABS: Tab[] = ['all', 'snapshot', 'food', 'flu', 'who'];
 const TAB_LABEL: Record<Tab, string> = {
+  all: 'All events',
   snapshot: 'Snapshot',
   food: 'Food',
   flu: 'Flu',
   who: 'WHO',
 };
+const SOURCE_LABEL: Record<string, string> = {
+  NORS: 'CDC NORS',
+  WHO: 'WHO DON',
+};
+
+// Build a normalized key for cross-source dedupe: lowercased,
+// alphanumeric-only, dropping connector words. NORS + WHO DON rarely
+// describe the same incident with identical wording, but when they do
+// (e.g. both list the same Salmonella outbreak), we collapse to one.
+function dedupKey(it: OutbreakItem): string {
+  return (it.title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\b(the|a|an|of|in|on|and|or|outbreak|disease)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 // Civic-strip Outbreaks popup. Tabs across four data layers:
 //   Snapshot — disease.sh (global / US / CA COVID counts)
@@ -29,10 +47,36 @@ const TAB_LABEL: Record<Tab, string> = {
 // doesn't blank the popup.
 export default function OutbreaksDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('outbreaks');
-  const [tab, setTab] = useUrlEnum<Tab>('otab', TABS, 'snapshot');
+  const [tab, setTab] = useUrlEnum<Tab>('otab', TABS, 'all');
   const [openItem, setOpenItem] = useState<string | null>(null);
 
+  // Merge NORS + WHO DON into a single deduplicated chronological event
+  // list. Snapshot + Flu are aggregate stats, not events, so they're
+  // intentionally NOT merged in — they show in their own tabs.
+  const allEvents = useMemo<OutbreakItem[]>(() => {
+    if (!data) return [];
+    const merged: OutbreakItem[] = [
+      ...data.cdcFood.map((r) => ({ ...r, category: r.category || 'NORS' })),
+      ...data.whoDon.map((r) => ({ ...r, category: r.category || 'WHO' })),
+    ];
+    // Dedupe — keep whichever variant has the longer body (more detail).
+    const byKey = new Map<string, OutbreakItem>();
+    for (const it of merged) {
+      const k = dedupKey(it);
+      if (!k) continue;
+      const prev = byKey.get(k);
+      if (!prev) { byKey.set(k, it); continue; }
+      const prevLen = prev.body?.length ?? 0;
+      const curLen = it.body?.length ?? 0;
+      if (curLen > prevLen) byKey.set(k, it);
+    }
+    // Sort newest first. Mix of full ISO dates and "YYYY-MM" + "YYYY"
+    // strings — string-compare-desc happens to work for all three.
+    return [...byKey.values()].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [data]);
+
   const counts = {
+    all: allEvents.length,
     snapshot: [data?.snapshots?.global, data?.snapshots?.unitedStates, data?.snapshots?.california].filter(Boolean).length,
     food: data?.cdcFood?.length ?? 0,
     flu: data?.flu?.length ?? 0,
@@ -72,6 +116,56 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                 </button>
               ))}
             </div>
+
+            {tab === 'all' && (
+              <section>
+                {allEvents.length === 0 ? (
+                  <p className="muted">No event records cached — CDC NORS + WHO DON were both empty.</p>
+                ) : (
+                  <ul className="recall-list">
+                    {allEvents.map((row) => {
+                      const expanded = openItem === row.id;
+                      const src = row.category && SOURCE_LABEL[row.category]
+                        ? SOURCE_LABEL[row.category]
+                        : (row.category ?? '');
+                      return (
+                        <li key={row.id} className="recall-item">
+                          <button
+                            type="button"
+                            className="recall-head"
+                            onClick={() => setOpenItem(expanded ? null : row.id)}
+                          >
+                            <span className="recall-title">{row.title}</span>
+                            <span className="meta">
+                              {src && <span className="recall-src">{src}</span>}
+                              {row.region && <span> · {row.region}</span>}
+                              {row.date && <span> · {row.date}</span>}
+                            </span>
+                          </button>
+                          {expanded && (
+                            <div className="recall-reason">
+                              {row.body && <p style={{ margin: 0 }}>{row.body}</p>}
+                              {row.url && (
+                                <div className="popup-ext-links">
+                                  <a href={row.url} target="_blank" rel="noopener">
+                                    {row.category === 'WHO' ? 'Full DON post →' : 'CDC NORS dashboard →'}
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <p className="muted" style={{ fontSize: '.72em', marginTop: 8 }}>
+                  Unified, deduplicated event feed combining CDC NORS foodborne
+                  records and WHO Disease Outbreak News. Snapshot + Flu tabs
+                  carry aggregate stats and don&rsquo;t merge in here.
+                </p>
+              </section>
+            )}
 
             {tab === 'snapshot' && (
               <section className="outbreak-snapshot">

@@ -8,8 +8,6 @@ import GrantsDetail from './GrantsDetail';
 import CrimeDetail from './CrimeDetail';
 import CouncilDetail from './CouncilDetail';
 import RepsDetail from './RepsDetail';
-import UnempDetail from './UnempDetail';
-import GasDetail from './GasDetail';
 import RecallsDetail from './RecallsDetail';
 import EconomyDetail from './EconomyDetail';
 import FemaDetail from './FemaDetail';
@@ -60,7 +58,9 @@ export default async function CivicStrip() {
   const grants = payload?.extras?.grants ?? [];
   const funding = payload?.extras?.funding ?? {};
   const fundingSources = payload?.extras?.fundingSources ?? [];
-  const unempData = payload?.extras?.unemp ?? null;
+  // Gas price flows into the Economy popup now (Unemployment lives
+  // there too, sourced from gov_national). Both used to be civic-bar
+  // chips of their own; both were redundant with the Economy popup.
   const gasData = payload?.extras?.gas ?? null;
 
   // Council slot — value-only label. Count + date moved to the tooltip
@@ -124,27 +124,12 @@ export default async function CivicStrip() {
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
 
-  // Defensive normalization: across cron generations the unemployment
-  // value has shipped in multiple shapes — "CC 4.4/CA 5.1/US 3.8",
-  // "CC 4.4%/CA 5.1%/US 3.8%", "4.4%%" (double %), and "4.4%". Strip
-  // any "CC ..." prefix, find the first numeric run, and append exactly
-  // one "%" so the strip always reads "4.4%" no matter what's cached.
-  const displayValue = (it: GovStripItem): string => {
-    if (it.key !== 'unemp') return it.value;
-    if (it.value === '—') return it.value;
-    // Prefer the CC number when present; otherwise the first number in
-    // the string (covers the new short-format shape).
-    const ccMatch = it.value.match(/CC\s*([\d.]+)/i);
-    const num = ccMatch ? ccMatch[1] : it.value.match(/[\d.]+/)?.[0];
-    return num ? `${num}%` : it.value;
-  };
-
   // Helpers — look up each gov_local items[] entry by key, render the
   // matching detail component. Returning null when the cache is empty
   // (cron hasn't run yet) keeps the strip from blowing up.
   const byKey = (key: string): GovStripItem | undefined => items.find((it) => it.key === key);
   const valHtmlFor = (it: GovStripItem): string =>
-    `<span class="civic-strip-val ${it.color ?? ''}">${displayValue(it)}</span>`;
+    `<span class="civic-strip-val ${it.color ?? ''}">${it.value}</span>`;
 
   const fundingChip = () => {
     const it = byKey('grants');
@@ -161,18 +146,12 @@ export default async function CivicStrip() {
     const it = byKey('crime');
     return it ? <CrimeDetail tooltip={it.tooltip} label={valHtmlFor(it)} /> : null;
   };
-  const unempChip = () => {
-    const it = byKey('unemp');
-    return it ? <UnempDetail tooltip={it.tooltip} label={valHtmlFor(it)} data={unempData} /> : null;
-  };
-  const gasChip = () => {
-    const it = byKey('gas');
-    return it ? <GasDetail tooltip={it.tooltip} label={valHtmlFor(it)} data={gasData} /> : null;
-  };
 
   // Civic-strip ordering (user-specified):
   //   Parks · Places · Birds · Council · Code · Funding · Bills · Reps · Crime
-  //   · Economy · Recalls · Outbreaks · FEMA · EONET · Quakes · Unemployment · Gas
+  //   · Economy · Recalls · Outbreaks · FEMA · EONET · Quakes
+  // Unemployment + Gas were removed from the strip — both live inside
+  // the Economy popup now.
   return (
     <section className="civic-strip" aria-label="Civic indicators">
       <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
@@ -189,6 +168,7 @@ export default async function CivicStrip() {
         label={economyLabelHtml}
         data={economyData}
         stocks={stocks as Parameters<typeof EconomyDetail>[0]['stocks']}
+        gas={gasData}
       />
       <RecallsDetail
         tooltip={recallsTooltip}
@@ -200,8 +180,6 @@ export default async function CivicStrip() {
       <FemaDetail    tooltip={femaTooltip}    label={femaLabelHtml}    data={femaList} />
       <EonetDetail   tooltip={eonetTooltip}   label={eonetLabelHtml}   data={eonetList} />
       <QuakesDetail  tooltip={quakesTooltip}  label={quakesLabelHtml}  data={quakes} />
-      {unempChip()}
-      {gasChip()}
     </section>
   );
 }
