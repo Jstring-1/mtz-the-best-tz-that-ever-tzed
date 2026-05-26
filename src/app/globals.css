@@ -2672,6 +2672,25 @@ button.econ-index.clickable.active {
 .train-status.late  { color: #d4a017; border-color: #d4a017; }
 .train-status.warn  { color: #e34234; border-color: #e34234; }
 
+/* Relative-time pill — "in 4 min", "5 min ago", "now". Updates every
+   30s client-side so the times stay fresh between scrapes. */
+.train-relative {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: .8em;
+  font-family: var(--mono, monospace);
+  color: var(--text-muted);
+  vertical-align: 1px;
+}
+.train-relative.imminent { color: var(--accent-green, #4caf50); font-weight: 600; }
+.train-relative.now      { color: var(--accent-green, #4caf50); font-weight: 700; }
+.train-relative.soon     { color: var(--text-muted); }
+.train-relative.past     { color: var(--text-faint, var(--text-muted)); opacity: 0.75; }
+/* Trains whose ETA is already in the past — railrat hasn't moved them
+   to "Departed" yet, but they almost certainly have. Demote visually. */
+.train-stale { opacity: 0.55; }
+.train-stale .train-time { color: var(--text-muted); }
+
 /* Rich per-train detail panel (origin→dest, current position, progress) */
 .train-detail-panel {
   margin-top: 8px;

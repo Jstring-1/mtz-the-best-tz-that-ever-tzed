@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool, useUrlEnum } from '@/lib/useUrlState';
 import type { TrainsPayload, TrainEntry, TrainDetail, TrainStop } from '@/lib/trains';
@@ -27,12 +27,22 @@ export default function TrainsDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('trains');
   const [tab, setTab] = useUrlEnum<Tab>('ttab', TABS, 'arriving');
   const [openKey, setOpenKey] = useState<string | null>(null);
+  // Live wall-clock tick so "in 4 min" / "5 min ago" stays current
+  // between 15-min scrape refreshes. Only ticks while the modal is open.
+  const now = useNowTick(open ? 30_000 : null);
 
   const arriving = data?.arriving ?? [];
   const departed = data?.departed ?? [];
   // railrat lists arriving descending (far-future at top, soonest at
-  // bottom) — flip so the next imminent arrival is on top.
-  const arrivingDisplay = [...arriving].reverse();
+  // bottom) — flip so the next imminent arrival is on top, then demote
+  // any whose estimated time is already >2 min in the past (the train
+  // has effectively passed but we haven't re-scraped yet).
+  const arrivingDisplay = (() => {
+    const reversed = [...arriving].reverse();
+    const fresh = reversed.filter((e) => !isPast(e.scheduledAt, now, 2));
+    const stale = reversed.filter((e) =>  isPast(e.scheduledAt, now, 2));
+    return [...fresh, ...stale];
+  })();
   const rows = tab === 'arriving' ? arrivingDisplay : departed;
 
   return (
@@ -76,8 +86,10 @@ export default function TrainsDetail({ label, tooltip, data }: Props) {
                 {rows.map((e, i) => {
                   const key = `${tab}-${i}-${e.trainNumber}-${e.time}`;
                   const expanded = openKey === key;
+                  const relative = relativeLabel(e.scheduledAt, now);
+                  const stale = tab === 'arriving' && isPast(e.scheduledAt, now, 2);
                   return (
-                    <li key={key} className="recall-item">
+                    <li key={key} className={`recall-item${stale ? ' train-stale' : ''}`}>
                       <button
                         type="button"
                         className="recall-head"
@@ -85,6 +97,9 @@ export default function TrainsDetail({ label, tooltip, data }: Props) {
                       >
                         <span className="recall-title">
                           <span className="train-time">{e.time}</span>
+                          {relative && (
+                            <span className={`train-relative ${relative.tone}`}>{relative.label}</span>
+                          )}
                           {' '}
                           <span className="train-name">{e.trainName}</span>
                           {' '}
@@ -193,6 +208,52 @@ function ProgressRow({ stop }: { stop: TrainStop }) {
       </span>
     </li>
   );
+}
+
+// Tick the wall clock every `interval` ms so relative-time labels
+// stay current between 15-min scrape refreshes. Pass `null` to pause
+// (e.g. when the modal is closed) and avoid a background timer.
+function useNowTick(interval: number | null): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (interval == null) return;
+    setNow(Date.now()); // refresh on mount / re-open
+    const id = setInterval(() => setNow(Date.now()), interval);
+    return () => clearInterval(id);
+  }, [interval]);
+  return now;
+}
+
+// Build a short relative-time label ("in 4 min" / "5 min ago" / "now")
+// from an ISO timestamp + current wall-clock time. Returns null if we
+// don't have a usable timestamp.
+function relativeLabel(iso: string | null, now: number): { label: string; tone: string } | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  const diffMin = Math.round((t - now) / 60000);
+  if (diffMin === 0) return { label: 'now', tone: 'now' };
+  if (diffMin > 0) {
+    if (diffMin >= 90) {
+      const h = Math.floor(diffMin / 60), m = diffMin % 60;
+      return { label: `in ${h}h${m ? ` ${m}m` : ''}`, tone: 'soon' };
+    }
+    return { label: `in ${diffMin} min`, tone: diffMin <= 15 ? 'imminent' : 'soon' };
+  }
+  const past = -diffMin;
+  if (past >= 90) {
+    const h = Math.floor(past / 60), m = past % 60;
+    return { label: `${h}h${m ? ` ${m}m` : ''} ago`, tone: 'past' };
+  }
+  return { label: `${past} min ago`, tone: 'past' };
+}
+
+// True if `iso` is at least `graceMin` minutes in the past from `now`.
+function isPast(iso: string | null, now: number, graceMin: number): boolean {
+  if (!iso) return false;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return false;
+  return t < now - graceMin * 60000;
 }
 
 function StatusBadge({ entry }: { entry: TrainEntry }) {
