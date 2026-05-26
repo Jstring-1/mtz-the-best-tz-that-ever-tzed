@@ -1913,6 +1913,20 @@ button.rep-card.clickable:focus-visible {
   margin-right: 2px;
 }
 
+/* Outbreaks snapshot tab — three Global/US/CA cards stacked. Each
+   reuses .econ-kv inside for the data rows but gets its own header. */
+.outbreak-snapshot { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.outbreak-snap-card {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+.outbreak-snap-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 4px;
+}
+
 /* Stacked text links at the bottom of a popup — replaces the chunky
    yellow event-modal-btn buttons that used to crowd popup footers.
    One link per line, accent color, hover underlines. */

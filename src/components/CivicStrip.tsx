@@ -19,6 +19,8 @@ import PlacesDetail from './PlacesDetail';
 import CodeDetail from './CodeDetail';
 import BirdsDetail from './BirdsDetail';
 import QuakesDetail from './QuakesDetail';
+import OutbreaksDetail from './OutbreaksDetail';
+import type { OutbreaksPayload } from '@/lib/outbreaks';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -33,8 +35,9 @@ export default async function CivicStrip() {
   let birds: StoredBird[] = [];
   let quakes: StoredQuake[] = [];
   let places: PlaceRow[] = [];
+  let outbreaks: OutbreaksPayload | null = null;
   try {
-    [payload, council, national, stocks, birds, quakes, places] = await Promise.all([
+    [payload, council, national, stocks, birds, quakes, places, outbreaks] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
@@ -46,6 +49,8 @@ export default async function CivicStrip() {
       listRecentQuakes(40).catch(() => []),
       // Foursquare-fed places table, nearest-first.
       getPlaces().catch(() => []),
+      // Disease surveillance bundle (disease.sh / CDC NORS / Delphi / WHO DON).
+      getJson<OutbreaksPayload>('outbreaks').catch(() => null),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -110,6 +115,11 @@ export default async function CivicStrip() {
   const placesTooltip = places.length
     ? `${places.length} cached Foursquare places near Martinez — click for map + list.`
     : 'Places — cache empty. Run /admin → 12h.';
+  // Disease surveillance — disease.sh + CDC + Delphi + WHO DON layered.
+  const outbreaksLabelHtml = `<span class="civic-strip-val red">Outbreaks</span>`;
+  const outbreaksTooltip = outbreaks
+    ? `Disease surveillance: ${outbreaks.cdcFood.length} CDC NORS rows, ${outbreaks.flu.length} flu signals, ${outbreaks.whoDon.length} WHO DON items.`
+    : 'Outbreaks — cache empty. Run /admin → 4h.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -162,7 +172,7 @@ export default async function CivicStrip() {
 
   // Civic-strip ordering (user-specified):
   //   Parks · Places · Birds · Council · Code · Funding · Bills · Reps · Crime
-  //   · Economy · Recalls · FEMA · EONET · Quakes · Unemployment · Gas
+  //   · Economy · Recalls · Outbreaks · FEMA · EONET · Quakes · Unemployment · Gas
   return (
     <section className="civic-strip" aria-label="Civic indicators">
       <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
@@ -186,6 +196,7 @@ export default async function CivicStrip() {
         data={recallsList}
         scrapedAt={national?.scrapedAt}
       />
+      <OutbreaksDetail tooltip={outbreaksTooltip} label={outbreaksLabelHtml} data={outbreaks} />
       <FemaDetail    tooltip={femaTooltip}    label={femaLabelHtml}    data={femaList} />
       <EonetDetail   tooltip={eonetTooltip}   label={eonetLabelHtml}   data={eonetList} />
       <QuakesDetail  tooltip={quakesTooltip}  label={quakesLabelHtml}  data={quakes} />
