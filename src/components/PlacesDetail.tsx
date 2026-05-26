@@ -73,6 +73,7 @@ export default function PlacesDetail({ label, tooltip, data }: Props) {
                 onSelect={onPinClick}
                 focus={focus}
                 flyZoom={17}
+                maxFitZoom={15}
                 pinColor="#c084fc"
                 ariaLabel="Map of cached Martinez places"
               />

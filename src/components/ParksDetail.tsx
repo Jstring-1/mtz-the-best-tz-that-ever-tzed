@@ -67,6 +67,8 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
             points={points}
             onSelect={zoomToPark}
             focus={focus}
+            flyZoom={16}
+            maxFitZoom={14}
             ariaLabel="Map of Martinez parks"
           />
         )}

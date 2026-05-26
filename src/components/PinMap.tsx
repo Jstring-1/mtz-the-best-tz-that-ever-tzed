@@ -27,6 +27,7 @@ export default function PinMap({
   focus,
   height = 320,
   flyZoom = 17,
+  maxFitZoom,
   ariaLabel = 'Map',
   // Color of the pin dot — falls back to dodger blue. Pass any CSS
   // color (named, hex, or var(--token)) to theme the markers per use.
@@ -39,6 +40,10 @@ export default function PinMap({
   focus?: { id: string; nonce: number } | null;
   height?: number;
   flyZoom?: number;
+  /** Cap on fitBounds zoom — keeps clustered pins from zooming all
+   *  the way to street level. Use 14 for a city, 7 for regional, 4
+   *  for continental, etc. Omit for no cap. */
+  maxFitZoom?: number;
   ariaLabel?: string;
   pinColor?: string;
 }) {
@@ -58,16 +63,18 @@ export default function PinMap({
       if (cancelled || !containerRef.current) return;
       if (!points.length) return;
 
-      // Fit-bounds with no maxZoom cap — the cap caused the map to
-      // lock at the initial (small-container) zoom and leave outer
-      // pins off-screen when the modal expanded.
+      // Fit-bounds with a per-caller maxZoom cap so a single quake
+      // doesn't zoom to street level. Without a cap, two close points
+      // would auto-zoom way in and lose all regional context.
       const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
+      const fitOpts: import('leaflet').FitBoundsOptions = { padding: [24, 24] };
+      if (typeof maxFitZoom === 'number') fitOpts.maxZoom = maxFitZoom;
       map = L.map(containerRef.current, {
         scrollWheelZoom: false,
         zoomSnap: 0.25,
         worldCopyJump: true, // useful for global-scale maps (EONET)
       });
-      map.fitBounds(bounds, { padding: [24, 24] });
+      map.fitBounds(bounds, fitOpts);
       mapRef.current = map;
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -96,7 +103,7 @@ export default function PinMap({
           const dw = Math.abs(cr.width - lastFitSize.w);
           const dh = Math.abs(cr.height - lastFitSize.h);
           if (dw > 8 || dh > 8) {
-            map.fitBounds(bounds, { padding: [24, 24] });
+            map.fitBounds(bounds, fitOpts);
             lastFitSize = { w: cr.width, h: cr.height };
           }
         });
@@ -110,7 +117,7 @@ export default function PinMap({
       if (map) map.remove();
       mapRef.current = null;
     };
-  }, [points, pinColor]);
+  }, [points, pinColor, maxFitZoom]);
 
   // Parent requests "fly to this id". The nonce ensures useEffect
   // re-runs even when the same id is clicked twice.

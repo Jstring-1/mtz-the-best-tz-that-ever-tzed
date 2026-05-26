@@ -72,6 +72,7 @@ export default function QuakesDetail({ label, tooltip, data }: Props) {
                 onSelect={onPinClick}
                 focus={focus}
                 flyZoom={8}
+                maxFitZoom={6}
                 pinColor="#e34234"
                 ariaLabel="Map of recent California earthquakes"
               />

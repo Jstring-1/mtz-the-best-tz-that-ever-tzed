@@ -96,6 +96,7 @@ export default function EonetDetail({ label, tooltip, data }: Props) {
                 onSelect={onPinClick}
                 focus={focus}
                 flyZoom={5}
+                maxFitZoom={3}
                 pinColor="#e34234"
                 ariaLabel="Map of active NASA EONET events"
               />

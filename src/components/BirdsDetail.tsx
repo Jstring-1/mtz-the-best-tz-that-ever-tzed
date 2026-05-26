@@ -85,7 +85,8 @@ export default function BirdsDetail({ label, tooltip, data }: Props) {
                 points={points}
                 onSelect={setFocusSlug}
                 focus={focus}
-                flyZoom={13}
+                flyZoom={14}
+                maxFitZoom={12}
                 pinColor="#4ea2d9"
                 ariaLabel="Map of recent bird sightings"
               />
