@@ -135,9 +135,6 @@ export default function PlacesDetail({ label, tooltip, data }: Props) {
                 );
               })}
             </ul>
-            <div className="popup-ext-links">
-              <a href="https://foursquare.com/explore?ll=37.974,-122.130&q=Martinez" target="_blank" rel="noopener">Foursquare — explore Martinez →</a>
-            </div>
           </>
         )}
       </Modal>
