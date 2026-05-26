@@ -1,19 +1,20 @@
 import { getAllJsonTimestamps, getRowCounts } from '@/lib/cache';
-import { relativeFromIso } from '@/lib/time';
-import AdminButtons from './AdminButtons';
+import AdminPanel from './AdminPanel';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Each bucket's `desc` lists EXACTLY the jobs in src/lib/cron.ts so the
+// admin UI doesn't drift from reality. Order matches the cron file.
 const BUCKETS = [
-  { id: '1m',  desc: 'WeatherAPI current, OpenWeather (every 1 minute — needs external pinger)' },
-  { id: '2m',  desc: 'PurpleAir AQ (every 2 minutes — needs external pinger)' },
-  { id: '5m',  desc: 'NOAA alerts, stocks (every 5 minutes)' },
-  { id: '15m', desc: 'NOAA buoys (every 15 minutes)' },
-  { id: '1h',  desc: 'NOAA forecast/hourly/aviation, WeatherAPI marine/forecast, USGS earthquakes, eBird (every hour)' },
-  { id: '4h',  desc: 'News RSS, NOAA water RSS, NOAA WeatherStory imagery, local-venue event scrape, gov national data (every 4 hours)' },
-  { id: '12h', desc: 'OpenStreetMap places, Ticketmaster events, City of Martinez parks, gov data strip (every 12 hours)' },
-  { id: 'all', desc: 'Run every bucket sequentially (manual / cold start)' },
+  { id: '1m',  desc: 'weatherapi_current' },
+  { id: '2m',  desc: 'purpleair' },
+  { id: '5m',  desc: 'noaa_alerts · twelvedata_stocks' },
+  { id: '15m', desc: 'noaa_buoys' },
+  { id: '1h',  desc: 'noaa_forecast · noaa_hourly · noaa_aviation · weatherapi_marine · weatherapi_forecast · usgs_quakes · ebird' },
+  { id: '4h',  desc: 'news_feeds · news_aggregated · affecting_bills · local_events · shelter_pets · gov_national · outbreaks · rep_votes · council_votes' },
+  { id: '12h', desc: 'osm_places · ticketmaster_events · gov_local · ccrmc_data · ccc_comp · reps_data · crime_data · purge_stores' },
+  { id: 'all', desc: 'Every bucket sequentially (manual / cold start)' },
 ];
 
 export default async function AdminPage() {
@@ -25,34 +26,7 @@ export default async function AdminPage() {
   return (
     <div className="page admin">
       <h1>Admin</h1>
-      <p className="muted">Manually trigger background refresh buckets. In production these tick automatically via the inline scheduler (src/instrumentation.ts); pages render purely from cached DB rows.</p>
-
-      <h2>Cron buckets</h2>
-      <AdminButtons buckets={BUCKETS} />
-
-      <h2>Last updated (apis_json)</h2>
-      {Object.keys(timestamps).length === 0 ? (
-        <p className="fade">No data cached yet.</p>
-      ) : (
-        <table className="kv-table">
-          <thead><tr><th>id</th><th>updated at</th></tr></thead>
-          <tbody>
-            {Object.entries(timestamps).map(([id, ts]) => (
-              <tr key={id}><td className="k" style={{ color: 'gold' }}>{id}</td><td className="v">{relativeFromIso(ts)} <span className="muted" style={{ fontSize: '.8em' }}>({ts})</span></td></tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      <h2>Row counts</h2>
-      <table className="kv-table">
-        <thead><tr><th>table</th><th>rows</th></tr></thead>
-        <tbody>
-          {Object.entries(counts).map(([t, c]) => (
-            <tr key={t}><td className="k" style={{ color: 'gold' }}>{t}</td><td className="v">{c < 0 ? '—' : c}</td></tr>
-          ))}
-        </tbody>
-      </table>
+      <AdminPanel buckets={BUCKETS} timestamps={timestamps} counts={counts} />
     </div>
   );
 }

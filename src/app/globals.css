@@ -1047,30 +1047,65 @@ main { padding-top: var(--top-stack-h); display: block; }
 
 /* --- Admin ------------------------------------------------------------- */
 
+.admin h1 { margin: 0 0 12px; }
+.admin h2 { margin: 16px 0 6px; font-size: 1em; color: var(--text-muted); }
 .admin .bucket {
-  display: flex; align-items: center; gap: 14px;
-  padding: 10px; margin: 8px 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 10px; margin: 3px 0;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  font-size: .9em;
 }
-.admin .bucket b { min-width: 60px; color: var(--accent); font-family: var(--mono); }
-.admin .bucket span { flex: 1; color: #bbb; font-size: .9em; }
+.admin .bucket b {
+  min-width: 44px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: .92em;
+}
+.admin .bucket span {
+  flex: 1;
+  color: #bbb;
+  font-size: .85em;
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .admin .bucket button {
   background: #1a3a1a; color: #d0ffd0;
   border: 1px solid #2c5e2c;
-  padding: 6px 14px; border-radius: 4px;
-  font-family: var(--mono); font-size: .9em;
+  padding: 4px 12px; border-radius: 4px;
+  font-family: var(--mono); font-size: .85em;
+  cursor: pointer;
 }
 .admin .bucket button:hover { background: #2c5e2c; }
 .admin .bucket button:disabled { opacity: .5; cursor: wait; }
 .admin .out {
   background: #0a0a0a; border: 1px solid var(--border);
-  padding: 12px; min-height: 80px;
-  font-family: var(--mono); font-size: .85em;
+  padding: 10px 12px;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--mono); font-size: .82em; line-height: 1.45;
   color: #d0ffd0; border-radius: 4px;
   white-space: pre-wrap;
+  margin: 0;
 }
+.admin .clear-log {
+  background: transparent; color: var(--text-muted);
+  border: 0; padding: 4px 0; margin-top: 4px;
+  font-size: .78em; cursor: pointer;
+  text-decoration: underline;
+}
+.admin .clear-log:hover { color: var(--text); }
+.admin .kv-table { margin-bottom: 4px; }
+.admin .kv-table th { padding: 2px 10px; }
+.admin .kv-table td { padding: 2px 10px; }
+.admin .sort-th {
+  background: transparent; border: 0; padding: 0;
+  font: inherit; color: tan; cursor: pointer;
+  font-weight: 500;
+}
+.admin .sort-th:hover { color: gold; }
 
 
 /* --- Site footer ------------------------------------------------------- */

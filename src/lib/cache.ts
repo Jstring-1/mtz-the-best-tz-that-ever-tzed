@@ -174,11 +174,19 @@ export async function upsertFeeds(items: FeedRow[]): Promise<void> {
 }
 
 export async function upsertNoaaHourly(rows: { ts: string; json: string }[]): Promise<void> {
-  // Drop rows older than 4 hours; ts is text but the values are ISO-ish so cast safely
+  // Drop rows older than 4 hours. `ts` is stored as TEXT but the values
+  // are unix epoch seconds (e.g. "1777921200"), so `ts::timestamp` was
+  // crashing every cleanup with "date/time field value out of range".
+  // Convert via to_timestamp(epoch) and guard against any legacy ISO
+  // rows by limiting to pure-digit strings.
   try {
-    await sql`DELETE FROM noaa_hrly WHERE ts::timestamp < (NOW() - INTERVAL '4 hours')`;
-  } catch {
-    // legacy rows may not be castable; skip cleanup
+    await sql`
+      DELETE FROM noaa_hrly
+      WHERE ts ~ '^[0-9]+$'
+        AND to_timestamp(ts::bigint) < NOW() - INTERVAL '4 hours'
+    `;
+  } catch (e) {
+    console.warn('[cache] noaa_hrly purge failed:', e instanceof Error ? e.message : e);
   }
   for (const r of rows) {
     await sql`
