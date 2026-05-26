@@ -2457,9 +2457,18 @@ button.econ-index.clickable.active {
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px 22px 20px;
+  /* Zero padding-top so position:sticky children (.pin-map) pin
+     flush against the header divider — any padding-top here would
+     create a gap where scrolled content shows through above the
+     sticky element. Non-sticky first children get their own margin
+     below to restore breathing room. */
+  padding: 0 22px 20px;
   min-height: 0;
 }
+/* Spacing for non-sticky first children (most popups don't have a
+   map; this gives their first element a 12px gap from the header
+   divider). The :not selector skips the sticky map. */
+.detail-modal-body > *:first-child:not(.pin-map) { margin-top: 12px; }
 /* min-width: 0 on every descendant unblocks flex/grid shrinking so 1fr
    tracks can actually shrink below content size. The wrap props are
    inherited but we re-state for spans/links etc. that weren't getting
