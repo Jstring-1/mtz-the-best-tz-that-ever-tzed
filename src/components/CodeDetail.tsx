@@ -25,6 +25,9 @@ export default function CodeDetail({ label, tooltip }: Props) {
             className="park-pdf-frame"
             loading="lazy"
           />
+          <p className="pdf-search-hint muted">
+            Tip: click into the PDF and press <kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘</kbd>+<kbd>F</kbd> on Mac) to search the full 68 pages.
+          </p>
           <div className="popup-ext-links">
             <a href={CODE_PDF} target="_blank" rel="noopener">Open PDF in new tab →</a>
             <a href={CODE_PDF} download>Download PDF →</a>

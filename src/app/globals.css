@@ -1862,6 +1862,24 @@ button.rep-card.clickable:focus-visible {
   box-shadow: 0 1px 2px rgba(0,0,0,.4);
 }
 
+/* "Press Ctrl+F to search" hint shown under embedded PDF iframes. */
+.pdf-search-hint {
+  font-size: .8em;
+  margin: 8px 0 4px;
+}
+.pdf-search-hint kbd {
+  display: inline-block;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: .9em;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  margin: 0 1px;
+}
+
 /* Inline PDF viewer for EBRPD district maps */
 .park-pdf-wrap { display: flex; flex-direction: column; min-width: 0; }
 .park-pdf-frame {

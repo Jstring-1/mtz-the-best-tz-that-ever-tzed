@@ -133,6 +133,9 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
               className="park-pdf-frame"
               loading="lazy"
             />
+            <p className="pdf-search-hint muted">
+              Tip: click into the PDF and press <kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘</kbd>+<kbd>F</kbd> on Mac) to search.
+            </p>
             <div className="popup-ext-links">
               <a href={focusedMap.file} target="_blank" rel="noopener">Open PDF in new tab →</a>
               <a href={focusedMap.file} download>Download PDF →</a>
