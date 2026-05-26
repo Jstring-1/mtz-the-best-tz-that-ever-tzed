@@ -37,6 +37,19 @@ const EBRPD_MAPS: Array<{ slug: string; label: string; file: string; note: strin
     note: 'Full trail map for Briones Regional Park.' },
   { slug: 'briones-hike',     label: 'Briones — Hike Notes',     file: '/img/parks/briones-hike.pdf',
     note: 'Hike description / notes for Briones.' },
+  // Carquinez Strait + Martinez Shoreline
+  { slug: 'carquinez-loop',   label: 'Carquinez Strait — Scenic Loop Trail Map',
+    file: '/img/parks/carquinez-strait-scenic-loop-trail-map.pdf',
+    note: 'Scenic Loop trail map for Carquinez Strait Regional Shoreline.' },
+  { slug: 'mtz-shoreline-hike', label: 'Martinez Shoreline — Hike Notes',
+    file: '/img/parks/martinez-shoreline-hike.pdf',
+    note: 'Hike description / notes for the Martinez Shoreline.' },
+];
+
+// External park-related resources — open in a new tab, not embedded.
+const PARK_EXT_LINKS: Array<{ label: string; url: string }> = [
+  { label: 'Interactive parks map (ArcGIS Experience)',
+    url: 'https://experience.arcgis.com/experience/f48944466b004c26bd0e9524ae3f3323' },
 ];
 
 // Civic-strip popup contents:
@@ -95,6 +108,12 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
             >
               📄 {m.label}
             </button>
+          ))}
+        </div>
+        {/* External park resources (interactive maps, etc.) — open in new tab. */}
+        <div className="popup-ext-links" style={{ marginBottom: 12 }}>
+          {PARK_EXT_LINKS.map((l) => (
+            <a key={l.url} href={l.url} target="_blank" rel="noopener">{l.label} →</a>
           ))}
         </div>
 
