@@ -66,9 +66,87 @@ export interface TrainsPayload {
   lastUpdated: string | null; // The "Last updated …" line at the page footer
   arriving: TrainEntry[];
   departed: TrainEntry[];
+  /** Per-train detail (keyed by train number) scraped from the per-train
+   *  page (/trains/<n>/). One entry per unique trainNumber found in the
+   *  arriving/departed lists. May be missing if the per-train fetch
+   *  failed — UI should treat as optional. */
+  details: Record<string, TrainDetail>;
   /** Diagnostic: HTTP status from the upstream fetch, or 0 if fetch threw. */
   httpStatus: number;
   /** Diagnostic: short error message if the fetch / parse failed. */
+  error: string | null;
+}
+
+// ---- Per-train detail ---------------------------------------------------
+
+export interface TrainStop {
+  code: string;                 // 3-letter station code, e.g. "MTZ"
+  name: string;                 // human-readable station name
+  /** Visit status:
+   *   - 'past'       — train has already departed (or arrived at terminus)
+   *   - 'upcoming'   — estimated arrival/departure still in the future
+   */
+  state: 'past' | 'upcoming';
+  /** Free-form delay text shown on the row, e.g. "on time", "6 min. late",
+   *  "5 min. early". null when no delay info is shown. */
+  delay: string | null;
+  /** Scheduled / estimated / actual times as-shown ("06:18", "08:55"). */
+  scheduledDeparture: string | null;
+  actualDeparture: string | null;
+  estimatedDeparture: string | null;
+  scheduledArrival: string | null;
+  actualArrival: string | null;
+  estimatedArrival: string | null;
+  /** Coordinates pulled from the embedded L.marker() call, if available. */
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface PositionPing {
+  /** "HH:MM" Pacific time, as railrat displays it. */
+  time: string;
+  /** Free-form description: "0 mi SW of Suisun–Fairfield [SUI]". */
+  description: string;
+  /** Best-guess station code parsed from the description (e.g. "SUI"). */
+  nearStation: string | null;
+  /** Speed in mph + heading ("39 mph N"). null if stationary or stripped. */
+  speed: string | null;
+  /** Coordinates pulled from the matching L.circleMarker() call. */
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface TrainDetail {
+  /** Train number we used for the lookup ("524"). */
+  trainNumber: string;
+  /** Route name from the page header ("Capitol Corridor"). null if absent. */
+  routeName: string | null;
+  /** Page "Latest status … updated HH:MM on MM/DD" string. */
+  updated: string | null;
+  /** "San Jose Diridon, CA" or similar. */
+  origin: string | null;
+  destination: string | null;
+  /** Scheduled departure from origin, e.g. "06:18 PT 05/26". */
+  scheduledDeparture: string | null;
+  /** "Active" / "Departed" / etc. */
+  status: string | null;
+  /** Current location description ("0 mi SW of Suisun–Fairfield [SUI], 39 mph N"). */
+  currentPosition: string | null;
+  /** Free-form "38 miles SW of Sacramento". */
+  distanceToDestination: string | null;
+  distanceFromOrigin: string | null;
+  /** Live coordinates of the train pulled from the blue marker on the
+   *  embedded map. null when the train is not currently tracked (e.g.
+   *  finished trip or hasn't departed). */
+  currentLat: number | null;
+  currentLon: number | null;
+  /** Every station stop, in order, with sched/est/actual times + delay
+   *  + lat/lon from the embedded markers. */
+  progress: TrainStop[];
+  /** Last ~15 GPS pings, newest first. */
+  positions: PositionPing[];
+  /** Diagnostics. */
+  httpStatus: number;
   error: string | null;
 }
 
@@ -77,7 +155,7 @@ const URL = 'https://railrat.net/stations/MTZ/';
 export async function fetchTrains(): Promise<TrainsPayload> {
   const scrapedAt = new Date().toISOString();
   const empty: TrainsPayload = {
-    scrapedAt, lastUpdated: null, arriving: [], departed: [],
+    scrapedAt, lastUpdated: null, arriving: [], departed: [], details: {},
     httpStatus: 0, error: null,
   };
 
@@ -105,23 +183,300 @@ export async function fetchTrains(): Promise<TrainsPayload> {
     return empty;
   }
 
+  let arriving: TrainEntry[] = [];
+  let departed: TrainEntry[] = [];
   try {
     const arrSection = extractSection(html, 'Arriving Trains');
     const depSection = extractSection(html, 'Departed Trains');
-    const arriving = arrSection.map(parseEntry).filter((e): e is TrainEntry => e !== null);
-    const departed = depSection.map(parseEntry).filter((e): e is TrainEntry => e !== null);
-    return {
-      scrapedAt,
-      lastUpdated: extractLastUpdated(html),
-      arriving,
-      departed,
-      httpStatus: 200,
-      error: null,
-    };
+    arriving = arrSection.map(parseEntry).filter((e): e is TrainEntry => e !== null);
+    departed = depSection.map(parseEntry).filter((e): e is TrainEntry => e !== null);
   } catch (e) {
     empty.error = `parse: ${e instanceof Error ? e.message : String(e)}`;
     empty.httpStatus = 200;
     return empty;
+  }
+
+  // Fetch per-train detail pages for every unique train number we saw.
+  // Concurrency-3 with 250ms gaps between batch starts keeps us polite
+  // (railrat.net is a small hobby site).
+  const uniqueNumbers = Array.from(
+    new Set([...arriving, ...departed].map((e) => e.trainNumber).filter(Boolean)),
+  );
+  const details = await fetchTrainDetails(uniqueNumbers);
+
+  return {
+    scrapedAt,
+    lastUpdated: extractLastUpdated(html),
+    arriving,
+    departed,
+    details,
+    httpStatus: 200,
+    error: null,
+  };
+}
+
+// ---- Per-train detail page fetch + parse --------------------------------
+
+const TRAIN_FETCH_CONCURRENCY = 3;
+const TRAIN_FETCH_GAP_MS = 250;
+
+async function fetchTrainDetails(numbers: string[]): Promise<Record<string, TrainDetail>> {
+  const out: Record<string, TrainDetail> = {};
+  if (!numbers.length) return out;
+  // Process in batches of TRAIN_FETCH_CONCURRENCY with a small gap
+  // between batches so we don't slam railrat.net.
+  for (let i = 0; i < numbers.length; i += TRAIN_FETCH_CONCURRENCY) {
+    const batch = numbers.slice(i, i + TRAIN_FETCH_CONCURRENCY);
+    const results = await Promise.allSettled(batch.map((n) => fetchTrainDetail(n)));
+    for (let j = 0; j < batch.length; j++) {
+      const r = results[j];
+      const num = batch[j];
+      if (r.status === 'fulfilled' && r.value) out[num] = r.value;
+    }
+    if (i + TRAIN_FETCH_CONCURRENCY < numbers.length) {
+      await new Promise((res) => setTimeout(res, TRAIN_FETCH_GAP_MS));
+    }
+  }
+  return out;
+}
+
+export async function fetchTrainDetail(trainNumber: string): Promise<TrainDetail | null> {
+  const base: TrainDetail = {
+    trainNumber,
+    routeName: null,
+    updated: null,
+    origin: null,
+    destination: null,
+    scheduledDeparture: null,
+    status: null,
+    currentPosition: null,
+    distanceToDestination: null,
+    distanceFromOrigin: null,
+    currentLat: null,
+    currentLon: null,
+    progress: [],
+    positions: [],
+    httpStatus: 0,
+    error: null,
+  };
+  let html = '';
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    const r = await fetch(`https://railrat.net/trains/${encodeURIComponent(trainNumber)}/`, {
+      headers: {
+        'User-Agent': 'mtz.city (hyperlocal dashboard; +https://mtz.city)',
+        'Accept': 'text/html',
+      },
+      cache: 'no-store',
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    base.httpStatus = r.status;
+    if (!r.ok) { base.error = `${r.status} ${r.statusText}`; return base; }
+    html = await r.text();
+  } catch (e) {
+    base.error = e instanceof Error ? e.message : String(e);
+    return base;
+  }
+  try {
+    parseTrainDetailInto(html, base);
+    return base;
+  } catch (e) {
+    base.error = `parse: ${e instanceof Error ? e.message : String(e)}`;
+    return base;
+  }
+}
+
+function parseTrainDetailInto(html: string, out: TrainDetail): void {
+  // Route name + train number from the heading.
+  const headM = html.match(/<h1>\s*(?:<a[^>]*>([^<]+)<\/a>)?\s*Train\s+(\d+)\s*<\/h1>/i);
+  if (headM) {
+    out.routeName = headM[1] ? decode(headM[1]).trim() : null;
+  }
+  // "updated 08:54 on 05/26" line.
+  const updM = html.match(/updated\s+([0-9:]+)\s*(?:&nbsp;|\s)*on\s*(?:&nbsp;|\s)*(\d{1,2}\/\d{1,2})/i);
+  if (updM) out.updated = `${updM[1]} on ${updM[2]}`;
+
+  // ---- Train Status block: origin / destination / status / position
+  const statusBlockM = html.match(/<div\s+id="train_status">([\s\S]*?)<\/div>/i);
+  if (statusBlockM) {
+    const block = statusBlockM[1];
+    // Origin / Destination — prefer the viewport-1 (verbose) span text.
+    const originM = block.match(/<span\s+class="viewport-1">\s*Origin:\s*([^<]+?)<\/span>/i);
+    const destM   = block.match(/<span\s+class="viewport-1">\s*Destination:\s*([^<]+?)<\/span>/i);
+    if (originM) {
+      const text = decode(originM[1]).trim();
+      // Split off the ", sch. departure …" tail if present.
+      const schM = text.match(/^(.*?),\s*sch\.?\s*departure\s+(.+)$/i);
+      if (schM) { out.origin = schM[1].trim(); out.scheduledDeparture = schM[2].trim(); }
+      else out.origin = text;
+    }
+    if (destM) out.destination = decode(destM[1]).trim();
+    // Status: Active / Departed / etc.
+    const stM = block.match(/<li>\s*Status:\s*([^<]+?)<\/li>/i);
+    if (stM) out.status = decode(stM[1]).trim();
+    // Current position is the first <b>…</b> inside the nested <ul>.
+    const posM = block.match(/<li>\s*<b>([\s\S]*?)<\/b>\s*<\/li>/i);
+    if (posM) out.currentPosition = decode(stripTags(posM[1])).replace(/\s+/g, ' ').trim();
+    // The two miles-to/from siblings.
+    const lis = [...block.matchAll(/<li>\s*([^<]+?)\s*<\/li>/gi)].map((m) => decode(m[1]).trim());
+    for (const t of lis) {
+      if (/^\d+\s+miles?\s+.*\s+of\s+/i.test(t)) {
+        if (out.distanceToDestination == null) out.distanceToDestination = t;
+        else if (out.distanceFromOrigin == null) out.distanceFromOrigin = t;
+      }
+    }
+  }
+
+  // ---- Progress tracker: ordered list of every station stop
+  const progM = html.match(/<div\s+id="train_progress">([\s\S]*?)<\/div>/i);
+  if (progM) {
+    const olM = progM[1].match(/<ol>([\s\S]*?)<\/ol>/i);
+    if (olM) {
+      // Each station <li> in the <ol>. railrat doesn't always close
+      // the <li> tags, so split on lookahead.
+      const items = olM[1].split(/(?=<li>)/i).map((s) => s.replace(/^<li>/i, '').trim()).filter(Boolean);
+      for (const raw of items) {
+        const stop = parseStop(raw);
+        if (stop) out.progress.push(stop);
+      }
+    }
+  }
+
+  // ---- Position updates
+  const posBlockM = html.match(/<div\s+id="train_position_updates[^"]*">([\s\S]*?)<\/div>/i);
+  if (posBlockM) {
+    const ulM = posBlockM[1].match(/<ul>([\s\S]*?)<\/ul>/i);
+    if (ulM) {
+      const items = [...ulM[1].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map((m) => m[1]);
+      for (const raw of items) {
+        const ping = parsePing(raw);
+        if (ping) out.positions.push(ping);
+      }
+    }
+  }
+
+  // ---- Lat/lon extraction from the embedded Leaflet JS
+  // Stations: L.marker([lat,lon],{icon:marker_grey_sm,...}).addTo(mymap).bindPopup("<b>Name, ST [CODE]</b>...
+  // Current train: L.marker([lat,lon],{icon:marker_blue_med,...})
+  // Position pings: L.circleMarker([lat,lon],blueCircle).addTo(mymap).bindPopup("<b>... HH:MM ...
+  attachStationCoords(html, out.progress);
+  attachPingCoords(html, out.positions);
+  const blueM = html.match(/L\.marker\(\[(-?\d+\.\d+),\s*(-?\d+\.\d+)\][^)]*marker_blue_med/);
+  if (blueM) {
+    out.currentLat = parseFloat(blueM[1]);
+    out.currentLon = parseFloat(blueM[2]);
+  }
+}
+
+function parseStop(raw: string): TrainStop | null {
+  // raw is e.g.
+  //   <a href="/stations/SUI/" title="...">SUI</a>, est. arrival 08:55,
+  //   8 min. late<span class="viewport-1"><i>, est. departure 08:56,
+  //   8 min. late (Suisun–Fairfield)</i></span>.
+  const codeM = raw.match(/<a\s+href="\/stations\/([A-Z]+)\/"/i);
+  if (!codeM) return null;
+  const code = codeM[1].toUpperCase();
+  // Station name from the inline (...) inside the viewport-1 span.
+  const nameM = raw.match(/<i>[^(]*\(([^)]+?)\)<\/i>/i);
+  const name = nameM ? decode(nameM[1]).trim() : code;
+
+  const flat = decode(stripTags(raw)).replace(/\s+/g, ' ').trim();
+
+  const stop: TrainStop = {
+    code, name, state: 'upcoming', delay: null,
+    scheduledDeparture: null, actualDeparture: null, estimatedDeparture: null,
+    scheduledArrival: null, actualArrival: null, estimatedArrival: null,
+    lat: null, lon: null,
+  };
+
+  // Past stops use "<b>departed</b> HH:MM[…], <delay>" form. Future stops
+  // use "est. arrival HH:MM, <delay>" + ", est. departure HH:MM, <delay>".
+  const past = /\bdeparted\b/i.test(raw);
+  stop.state = past ? 'past' : 'upcoming';
+
+  if (past) {
+    // departed 06:18 PT[, arrived 06:24]
+    const depM = flat.match(/departed\s+(\d{1,2}:\d{2})/i);
+    if (depM) stop.actualDeparture = depM[1];
+    const arrM = flat.match(/arrived\s+(\d{1,2}:\d{2})/i);
+    if (arrM) stop.actualArrival = arrM[1];
+  } else {
+    // est. arrival 08:55[, est. departure 08:56]
+    const arrM = flat.match(/est\.\s*arrival\s+(\d{1,2}:\d{2})/i);
+    if (arrM) stop.estimatedArrival = arrM[1];
+    const depM = flat.match(/est\.\s*departure\s+(\d{1,2}:\d{2})/i);
+    if (depM) stop.estimatedDeparture = depM[1];
+  }
+  // Delay text is one of "on time" or "N min. (late|early)" — extract
+  // independently of the time. The first occurrence wins (matches the
+  // primary departed/arrival event; a subsequent departure delay shows
+  // up later in the line).
+  const delayM = flat.match(/(?:on\s+time|\d+\s+min\.\s+(?:late|early))/i);
+  if (delayM) stop.delay = delayM[0].replace(/\s+/g, ' ').trim();
+  return stop;
+}
+
+function parsePing(raw: string): PositionPing | null {
+  // <li>08:54 - 0 mi SW of Suisun–Fairfield [<a ...>SUI</a>], 39 mph N</li>
+  const flat = decode(stripTags(raw)).replace(/\s+/g, ' ').trim();
+  const timeM = flat.match(/^(\d{1,2}:\d{2})\s*-\s*(.+)$/);
+  if (!timeM) return null;
+  const time = timeM[1];
+  let rest = timeM[2];
+  // Try to split off "<speed> mph <heading>" tail.
+  let speed: string | null = null;
+  const spM = rest.match(/,\s*(\d+\s*mph\s*[A-Z]*)\s*$/i);
+  if (spM) { speed = spM[1].replace(/\s+/g, ' ').trim(); rest = rest.slice(0, spM.index).trim(); }
+  // "0 mi SW of Suisun–Fairfield [SUI]"
+  const stnM = rest.match(/\[([A-Z]+)\]\s*$/i);
+  return {
+    time,
+    description: rest,
+    nearStation: stnM ? stnM[1].toUpperCase() : null,
+    speed,
+    lat: null,
+    lon: null,
+  };
+}
+
+function attachStationCoords(html: string, stops: TrainStop[]): void {
+  // Walk every L.marker([lat,lon], …).bindPopup("<b>Name, ST [CODE]</b>…")
+  // call, pull the code from the popup, and stitch back to the stop.
+  const re = /L\.marker\(\[(-?\d+\.\d+),\s*(-?\d+\.\d+)\][^)]*\)\.addTo\(mymap\)\.bindPopup\("([^"]*)"/g;
+  const byCode = new Map<string, { lat: number; lon: number }>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const popup = m[3];
+    const codeM = popup.match(/\[([A-Z]+)\]/);
+    if (!codeM) continue;
+    byCode.set(codeM[1].toUpperCase(), { lat: parseFloat(m[1]), lon: parseFloat(m[2]) });
+  }
+  for (const s of stops) {
+    const c = byCode.get(s.code);
+    if (c) { s.lat = c.lat; s.lon = c.lon; }
+  }
+}
+
+function attachPingCoords(html: string, pings: PositionPing[]): void {
+  // L.circleMarker([lat,lon],blueCircle).addTo(mymap).bindPopup("<b>...
+  //   </b><small><br>HH:MM <description>, <speed></small>")
+  // Match the time inside the popup back to the ping list.
+  const re = /L\.circleMarker\(\[(-?\d+\.\d+),\s*(-?\d+\.\d+)\][^)]*\)\.addTo\(mymap\)\.bindPopup\("([^"]*)"/g;
+  const byTime = new Map<string, { lat: number; lon: number }>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const popup = m[3];
+    const tM = popup.match(/<br>(\d{1,2}:\d{2})\b/);
+    if (!tM) continue;
+    // Keep the FIRST occurrence — railrat doesn't repeat times within
+    // the visible window.
+    if (!byTime.has(tM[1])) byTime.set(tM[1], { lat: parseFloat(m[1]), lon: parseFloat(m[2]) });
+  }
+  for (const p of pings) {
+    const c = byTime.get(p.time);
+    if (c) { p.lat = c.lat; p.lon = c.lon; }
   }
 }
 

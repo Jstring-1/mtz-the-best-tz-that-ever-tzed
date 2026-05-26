@@ -2672,3 +2672,48 @@ button.econ-index.clickable.active {
 .train-status.late  { color: #d4a017; border-color: #d4a017; }
 .train-status.warn  { color: #e34234; border-color: #e34234; }
 
+/* Rich per-train detail panel (origin→dest, current position, progress) */
+.train-detail-panel {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 4px;
+  background: var(--bg-elev, transparent);
+}
+.train-detail-route,
+.train-detail-now,
+.train-detail-next { margin: 2px 0; font-size: .9em; }
+.train-progress-details { margin-top: 6px; font-size: .85em; }
+.train-progress-details summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  list-style: revert;
+}
+.train-progress-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  list-style: none;
+}
+.train-stop {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  gap: 6px;
+  align-items: baseline;
+  padding: 1px 0;
+}
+.train-stop.upcoming { opacity: 0.85; }
+.train-stop.mtz {
+  font-weight: 600;
+  background: rgba(255, 215, 0, 0.08);
+  margin: 0 -4px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.stop-code {
+  font-family: var(--mono, monospace);
+  font-size: .85em;
+  color: var(--accent);
+}
+.stop-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stop-times { font-size: .85em; text-align: right; white-space: nowrap; }
+

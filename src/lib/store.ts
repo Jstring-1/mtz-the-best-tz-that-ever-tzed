@@ -163,6 +163,10 @@ async function ensureTables(): Promise<void> {
   `;
   await sql`CREATE INDEX IF NOT EXISTS trains_scheduled_at_idx ON trains (scheduled_at)`;
   await sql`CREATE INDEX IF NOT EXISTS trains_last_seen_idx    ON trains (last_seen)`;
+  // Per-train detail blob scraped from /trains/<n>/ (progress tracker,
+  // position pings, lat/lon coords, current location). Added after the
+  // initial trains table shipped — ALTER for existing DBs.
+  await sql`ALTER TABLE trains ADD COLUMN IF NOT EXISTS detail JSONB`;
 
   ensured = true;
 }
@@ -664,7 +668,8 @@ export interface StoredTrain {
   minutes_off: number | null;  // signed
   warn: boolean;
   train_url: string | null;
-  details: string[] | null;    // Ar/Dp sch./est./act. lines
+  details: string[] | null;    // Ar/Dp sch./est./act. lines (station view)
+  detail: unknown | null;      // per-train detail blob (TrainDetail shape)
 }
 
 export async function upsertTrains(rows: StoredTrain[]): Promise<void> {
@@ -675,12 +680,13 @@ export async function upsertTrains(rows: StoredTrain[]): Promise<void> {
       INSERT INTO trains (
         id, state, train_number, train_name, route, display_time,
         scheduled_at, status, minutes_off, warn, train_url, details,
-        last_seen
+        detail, last_seen
       ) VALUES (
         ${r.id}, ${r.state}, ${r.train_number}, ${r.train_name},
         ${r.route}, ${r.display_time}, ${r.scheduled_at},
         ${r.status}, ${r.minutes_off}, ${r.warn}, ${r.train_url},
-        ${jsonify(r.details)}::jsonb, NOW()
+        ${jsonify(r.details)}::jsonb,
+        ${jsonify(r.detail)}::jsonb, NOW()
       )
       ON CONFLICT (id) DO UPDATE SET
         state        = EXCLUDED.state,
@@ -694,6 +700,7 @@ export async function upsertTrains(rows: StoredTrain[]): Promise<void> {
         warn         = EXCLUDED.warn,
         train_url    = EXCLUDED.train_url,
         details      = EXCLUDED.details,
+        detail       = COALESCE(EXCLUDED.detail, trains.detail),
         last_seen    = NOW()
     `;
   }

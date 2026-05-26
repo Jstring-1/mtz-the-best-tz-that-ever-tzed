@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool, useUrlEnum } from '@/lib/useUrlState';
-import type { TrainsPayload, TrainEntry } from '@/lib/trains';
+import type { TrainsPayload, TrainEntry, TrainDetail, TrainStop } from '@/lib/trains';
 
 interface Props {
   label: string;
@@ -56,14 +56,14 @@ export default function TrainsDetail({ label, tooltip, data }: Props) {
               )}
             </div>
 
-            <div className="tabs" role="tablist">
+            <div className="news-tabs" role="tablist">
               {TABS.map((t) => (
                 <button
                   key={t}
                   type="button"
                   role="tab"
                   aria-selected={tab === t}
-                  className={`tab ${tab === t ? 'active' : ''}`}
+                  className={`news-tab${tab === t ? ' active' : ''}`}
                   onClick={() => { setTab(t); setOpenKey(null); }}
                 >
                   {TAB_LABEL[t]} ({(t === 'arriving' ? arriving : departed).length})
@@ -109,11 +109,9 @@ export default function TrainsDetail({ label, tooltip, data }: Props) {
                               ))}
                             </ul>
                           )}
-                          <div className="popup-ext-links" style={{ marginTop: 8 }}>
-                            <a href={e.trainUrl} target="_blank" rel="noopener">
-                              railrat.net — Train {e.trainNumber} →
-                            </a>
-                          </div>
+                          {data.details[e.trainNumber] && (
+                            <TrainDetailPanel detail={data.details[e.trainNumber]} />
+                          )}
                         </div>
                       )}
                     </li>
@@ -122,23 +120,84 @@ export default function TrainsDetail({ label, tooltip, data }: Props) {
               </ul>
             )}
 
-            <div className="popup-ext-links">
-              <a href="https://railrat.net/stations/MTZ/" target="_blank" rel="noopener">
-                railrat.net — MTZ station page →
-              </a>
-              {' · '}
-              <a href="https://www.amtrak.com/stations/mtz" target="_blank" rel="noopener">
-                Amtrak — MTZ station →
-              </a>
-            </div>
-            <p className="muted" style={{ fontSize: '0.85em', marginTop: 6 }}>
-              Source: railrat.net (Amtrak Track Your Train Map). Scraped every 15min;
-              don&rsquo;t rely on this for time-critical departures.
-            </p>
           </>
         )}
       </Modal>
     </>
+  );
+}
+
+// Rich detail panel — origin/destination, current location, next ETA,
+// and full progress tracker pulled from railrat's per-train page.
+// All fields are optional; the panel renders only whatever the scraper
+// captured (so a failed sub-fetch still shows the basic times above).
+function TrainDetailPanel({ detail }: { detail: TrainDetail }) {
+  const nextStop = detail.progress.find((s) => s.state === 'upcoming');
+  return (
+    <div className="train-detail-panel">
+      {(detail.origin || detail.destination) && (
+        <div className="train-detail-route">
+          {detail.origin ?? '?'} <span className="muted">→</span> {detail.destination ?? '?'}
+          {detail.scheduledDeparture && (
+            <span className="muted"> · sch. dep {detail.scheduledDeparture}</span>
+          )}
+        </div>
+      )}
+      {detail.status === 'Active' && detail.currentPosition && (
+        <div className="train-detail-now">
+          <strong>Now:</strong> {detail.currentPosition}
+          {detail.distanceToDestination && (
+            <span className="muted"> · {detail.distanceToDestination}</span>
+          )}
+        </div>
+      )}
+      {nextStop && (
+        <div className="train-detail-next">
+          <strong>Next:</strong> {nextStop.name} [{nextStop.code}]
+          {nextStop.estimatedArrival && <> — est. {nextStop.estimatedArrival}</>}
+          {nextStop.delay && <> ({nextStop.delay})</>}
+        </div>
+      )}
+      {detail.progress.length > 0 && (
+        <details className="train-progress-details">
+          <summary>Full progress ({detail.progress.length} stops)</summary>
+          <ol className="train-progress-list">
+            {detail.progress.map((s) => (
+              <ProgressRow key={s.code + (s.actualDeparture ?? s.estimatedArrival ?? '')} stop={s} />
+            ))}
+          </ol>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function ProgressRow({ stop }: { stop: TrainStop }) {
+  const isMtz = stop.code === 'MTZ';
+  const cls = `train-stop ${stop.state}${isMtz ? ' mtz' : ''}`;
+  // Past stop: "departed HH:MM (arrived HH:MM) — on time"
+  // Upcoming: "est. arrival HH:MM (dep HH:MM) — N min. late"
+  return (
+    <li className={cls}>
+      <span className="stop-code">{stop.code}</span>
+      <span className="stop-name">{stop.name}</span>
+      <span className="stop-times muted">
+        {stop.state === 'past' ? (
+          <>
+            {stop.actualArrival && <>arr {stop.actualArrival}</>}
+            {stop.actualArrival && stop.actualDeparture && ' · '}
+            {stop.actualDeparture && <>dep {stop.actualDeparture}</>}
+          </>
+        ) : (
+          <>
+            {stop.estimatedArrival && <>est arr {stop.estimatedArrival}</>}
+            {stop.estimatedArrival && stop.estimatedDeparture && ' · '}
+            {stop.estimatedDeparture && <>est dep {stop.estimatedDeparture}</>}
+          </>
+        )}
+        {stop.delay && <> · {stop.delay}</>}
+      </span>
+    </li>
   );
 }
 

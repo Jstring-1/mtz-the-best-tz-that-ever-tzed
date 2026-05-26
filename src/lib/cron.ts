@@ -443,7 +443,9 @@ async function trainsMtz(json: Record<string, unknown>) {
   }
   json['trains_mtz'] = payload;
 
-  // Mirror into the structured trains table for history.
+  // Mirror into the structured trains table for history. Each row also
+  // carries the per-train detail blob (progress tracker + position
+  // pings + lat/lon) keyed off the train number.
   const { upsertTrains } = await import('./store');
   const rows = [
     ...payload.arriving.map((e) => ({ ...e, state: 'arriving' as const })),
@@ -461,6 +463,7 @@ async function trainsMtz(json: Record<string, unknown>) {
     warn: e.warn,
     train_url: e.trainUrl || null,
     details: e.details && e.details.length ? e.details : null,
+    detail: payload.details[e.trainNumber] ?? null,
   }));
   if (rows.length) await upsertTrains(rows);
 }
