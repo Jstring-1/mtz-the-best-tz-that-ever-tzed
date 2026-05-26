@@ -27,6 +27,9 @@ const EBRPD_MAPS: Array<{ slug: string; label: string; file: string; note: strin
     note: 'Per-city listing of every EBRPD park, with addresses and amenities (90 pages).' },
   { slug: 'wardmap',      label: 'EBRPD — Ward Map',             file: '/img/eastbayparkswardmap.pdf',
     note: 'EBRPD board-of-directors ward boundaries and member assignments (109 pages).' },
+  { slug: 'ebrpd-carquinez-2019', label: 'EBRPD — Benicia/Martinez Bridge to Carquinez Strait (2019)',
+    file: '/img/parks/eastbay-benicia-martinez-carquinez-2019.pdf',
+    note: 'Regional parks reference covering the Benicia–Martinez Bridge to Carquinez Strait area (2019 edition).' },
   // Briones Regional Park — bundled park-specific docs
   { slug: 'briones-brochure', label: 'Briones — Park Brochure',  file: '/img/parks/briones-map-brochure.pdf',
     note: 'Official EBRPD brochure for Briones Regional Park.' },
