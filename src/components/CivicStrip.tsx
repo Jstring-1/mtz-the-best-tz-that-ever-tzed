@@ -1,5 +1,6 @@
-import { getJson } from '@/lib/cache';
+import { getJson, getPlaces } from '@/lib/cache';
 import { listRecentBirds, listRecentQuakes, type StoredBird, type StoredQuake } from '@/lib/store';
+import type { PlaceRow } from '@/lib/types';
 import type { GovLocalPayload, GovNationalPayload, GovStripItem } from '@/lib/gov';
 import type { CouncilScrapeResult } from '@/lib/scrape-council';
 import BillsDetail from './BillsDetail';
@@ -14,6 +15,7 @@ import EconomyDetail from './EconomyDetail';
 import FemaDetail from './FemaDetail';
 import EonetDetail from './EonetDetail';
 import ParksDetail from './ParksDetail';
+import PlacesDetail from './PlacesDetail';
 import CodeDetail from './CodeDetail';
 import BirdsDetail from './BirdsDetail';
 import QuakesDetail from './QuakesDetail';
@@ -30,8 +32,9 @@ export default async function CivicStrip() {
   let stocks: Record<string, unknown> | null = null;
   let birds: StoredBird[] = [];
   let quakes: StoredQuake[] = [];
+  let places: PlaceRow[] = [];
   try {
-    [payload, council, national, stocks, birds, quakes] = await Promise.all([
+    [payload, council, national, stocks, birds, quakes, places] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
@@ -41,6 +44,8 @@ export default async function CivicStrip() {
       listRecentBirds(80).catch(() => []),
       // Significant CA quakes (USGS significant_month feed), newest first.
       listRecentQuakes(40).catch(() => []),
+      // Foursquare-fed places table, nearest-first.
+      getPlaces().catch(() => []),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -100,6 +105,11 @@ export default async function CivicStrip() {
   const quakesTooltip = quakes.length
     ? `${quakes.length} significant CA earthquakes cached (USGS significant_month).`
     : 'CA earthquakes — cache empty. Run /admin → 1h.';
+  // Foursquare-cached places (restaurants, shops, landmarks).
+  const placesLabelHtml = `<span class="civic-strip-val peru">Places</span>`;
+  const placesTooltip = places.length
+    ? `${places.length} cached Foursquare places near Martinez — click for map + list.`
+    : 'Places — cache empty. Run /admin → 12h.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -151,11 +161,12 @@ export default async function CivicStrip() {
   };
 
   // Civic-strip ordering (user-specified):
-  //   Parks · Birds · Council · Code · Funding · Bills · Reps · Crime
+  //   Parks · Places · Birds · Council · Code · Funding · Bills · Reps · Crime
   //   · Economy · Recalls · FEMA · EONET · Quakes · Unemployment · Gas
   return (
     <section className="civic-strip" aria-label="Civic indicators">
       <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
+      <PlacesDetail  tooltip={placesTooltip}  label={placesLabelHtml} data={places} />
       <BirdsDetail   tooltip={birdsTooltip}   label={birdsLabelHtml} data={birds} />
       <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />
       <CodeDetail    tooltip={codeTooltip}    label={codeLabelHtml} />

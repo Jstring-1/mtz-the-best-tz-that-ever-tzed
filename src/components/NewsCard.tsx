@@ -7,9 +7,37 @@ import type { NewsItem } from '@/lib/news-aggregator';
 import { relativeFromUnixSeconds } from '@/lib/time';
 import { useUrlString, useUrlEnum } from '@/lib/useUrlState';
 
-// 'all' = merged & sorted (default). Others act as exclusive filters.
+// 'all' = merged & sorted. Default lands on 'local' so the page leads
+// with neighborhood news; users can flip to All or World from the
+// chip row.
 type Tab = 'all' | 'local' | 'world';
 const TABS: Tab[] = ['all', 'local', 'world'];
+
+// Decode HTML entities (named + numeric, hex + decimal) so headlines
+// like "Smith &amp; Jones break out &#8212; what next" render as
+// "Smith & Jones break out — what next" in the plain-text <h3> title.
+// RSS feeds often double-encode entities in <title>; the modal body
+// uses dangerouslySetInnerHTML so decoding is automatic there.
+function decodeEntities(s: string): string {
+  if (!s) return '';
+  return s
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&mdash;/g, '—')
+    .replace(/&ndash;/g, '–')
+    .replace(/&hellip;/g, '…')
+    .replace(/&rsquo;/g, '’')
+    .replace(/&lsquo;/g, '‘')
+    .replace(/&rdquo;/g, '”')
+    .replace(/&ldquo;/g, '“');
+}
 
 interface Props {
   local: FeedRow[];
@@ -44,7 +72,7 @@ function mapLocal(rows: FeedRow[]): Row[] {
   return rows.map((f) => ({
     key: `local-${f.ts}`,
     ts: Number(f.ts),
-    title: f.title,
+    title: decodeEntities(f.title),
     body: f.body,
     link: f.link,
     scope: 'local',
@@ -55,7 +83,7 @@ function mapWire(scope: Exclude<Tab, 'all' | 'local'>, items: NewsItem[]): Row[]
   return items.map((it, i) => ({
     key: `${scope}-${it.ts}-${i}`,
     ts: it.ts,
-    title: it.title,
+    title: decodeEntities(it.title),
     body: it.body,
     link: it.link,
     source: it.source,
@@ -69,7 +97,7 @@ const SCOPE_LABEL: Record<Exclude<Tab, 'all'>, string> = {
 };
 
 export default function NewsCard(props: Props) {
-  const [tab, setTab] = useUrlEnum<Tab>('ntab', TABS, 'all');
+  const [tab, setTab] = useUrlEnum<Tab>('ntab', TABS, 'local');
   const [openKey, setOpenKey] = useUrlString('news');
 
   // Build all rows once, then filter — keeps the counts in chip

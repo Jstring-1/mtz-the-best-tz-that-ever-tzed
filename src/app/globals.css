@@ -1801,10 +1801,16 @@ button.rep-card.clickable:focus-visible {
 /* Generic Leaflet map wrapper (PinMap component). Used by Parks +
    EONET + any future detail panel that wants to drop points on tiles.
    Border matches the PDF viewer below so embedded surfaces feel like
-   a set. */
+   a set. Sticky-pinned to the top of the modal scroll container so
+   the list below can scroll without losing the map. */
 .pin-map {
   border: 1px solid var(--border-soft);
   background: var(--bg-elev);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  /* Subtle bottom shadow so list rows scrolling under read as below. */
+  box-shadow: 0 4px 6px -4px rgba(0,0,0,.5);
 }
 .pin-map .leaflet-container { background: var(--bg-elev); }
 /* Custom DivIcon pin — small colored dot with a white ring so it
@@ -1928,6 +1934,23 @@ button.rep-card.clickable:focus-visible {
   padding: 8px;
   min-width: 0;
 }
+/* Button variant: cards become click-to-expand. Override the default
+   <button> chrome and inherit text alignment from the page. */
+button.econ-index.clickable {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+  display: block;
+  width: 100%;
+}
+button.econ-index.clickable:hover { border-color: var(--accent); }
+button.econ-index.clickable.active {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
 .econ-index-head { display: flex; justify-content: space-between; align-items: baseline; }
 .econ-index-name { font-size: .82em; font-weight: 600; color: var(--text); }
 .econ-index-sym  { font-size: .68em; color: var(--text-muted); font-family: ui-monospace, monospace; }
@@ -1936,6 +1959,57 @@ button.rep-card.clickable:focus-visible {
 .econ-index-change.dir-up   { color: var(--accent-green); }
 .econ-index-change.dir-down { color: var(--accent-warm); }
 .econ-index-change.dir-flat { color: var(--text-muted); }
+
+/* Drawer that appears below the index grid when a card is clicked.
+   Mirrors the card's elevation so it visually connects. */
+.econ-drawer {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.econ-drawer-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.econ-drawer-status {
+  font-size: .72em; padding: 1px 6px; border-radius: 3px;
+  border: 1px solid var(--border-soft); white-space: nowrap;
+}
+.econ-drawer-status.open   { color: var(--accent-green); border-color: var(--accent-green); }
+.econ-drawer-status.closed { color: var(--text-muted); }
+.econ-drawer-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 16px;
+  row-gap: 4px;
+  margin: 8px 0 0;
+}
+.econ-drawer-kv dt { color: var(--text-muted); font-size: .85em; align-self: center; }
+.econ-drawer-kv dd { margin: 0; text-align: right; font-family: var(--mono, ui-monospace, monospace); }
+.econ-drawer-kv dd.big { font-size: 1.15em; font-weight: 700; }
+.econ-drawer-kv dd.dir-up   { color: var(--accent-green); }
+.econ-drawer-kv dd.dir-down { color: var(--accent-warm); }
+.econ-drawer-range { margin-top: 10px; }
+.econ-drawer-range .bar {
+  position: relative;
+  height: 6px;
+  background: var(--bg-elev);
+  border-radius: 3px;
+  border: 1px solid var(--border-soft);
+}
+.econ-drawer-range .dot {
+  position: absolute;
+  top: -3px; width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-elev-2);
+  transform: translateX(-50%);
+}
+.econ-drawer-range .ends {
+  display: flex; justify-content: space-between;
+  font-size: .72em; color: var(--text-muted);
+  margin-top: 4px;
+  font-family: var(--mono, ui-monospace, monospace);
+}
 
 /* Macro key-value list — two-column grid with right-aligned values */
 .econ-kv {

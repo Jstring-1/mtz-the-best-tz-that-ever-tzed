@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool } from '@/lib/useUrlState';
 import type { GovNationalPayload } from '@/lib/gov';
@@ -56,28 +57,104 @@ function direction(s: string): 'up' | 'down' | 'flat' {
   return n > 0 ? 'up' : 'down';
 }
 
-function IndexCard({ q, label, hint }: { q: StockQuote; label: string; hint: string }) {
+function IndexCard({ q, label, hint, active, onToggle }: {
+  q: StockQuote;
+  label: string;
+  hint: string;
+  active: boolean;
+  onToggle: () => void;
+}) {
   const d = direction(q.percent_change);
   return (
-    <div className="econ-index">
+    <button
+      type="button"
+      className={`econ-index clickable${active ? ' active' : ''}`}
+      onClick={onToggle}
+      aria-expanded={active}
+      title={hint}
+    >
       <div className="econ-index-head">
-        <span className="econ-index-name" title={hint}>{label}</span>
+        <span className="econ-index-name">{label}</span>
         <span className="econ-index-sym">{q.symbol}</span>
       </div>
       <div className="econ-index-price">{fmtNum(q.close)}</div>
       <div className={`econ-index-change dir-${d}`}>
         {d === 'up' ? '▲' : d === 'down' ? '▼' : '·'} {fmtPct(q.percent_change)}
       </div>
-    </div>
+    </button>
+  );
+}
+
+// Drawer shown below the index grid when one is selected. Pulls out
+// the remaining StockQuote fields (previous close, 52w range, market
+// status) — most of which we already cache but never previously
+// surfaced.
+function IndexDrawer({ q, label, hint }: { q: StockQuote; label: string; hint: string }) {
+  const d = direction(q.percent_change);
+  const change = Number(q.change);
+  const close = Number(q.close);
+  const prev = Number(q.previous_close);
+  const low = q.fifty_two_week ? Number(q.fifty_two_week.low) : NaN;
+  const high = q.fifty_two_week ? Number(q.fifty_two_week.high) : NaN;
+  // Position of current price within the 52w range — used to render a
+  // little progress-bar style indicator.
+  const rangePos = (isFinite(low) && isFinite(high) && high > low)
+    ? Math.max(0, Math.min(1, (close - low) / (high - low)))
+    : null;
+  return (
+    <section className="econ-drawer">
+      <div className="econ-drawer-head">
+        <div>
+          <strong>{label}</strong> <span className="muted">{q.symbol}</span>
+        </div>
+        <span className={`econ-drawer-status ${q.is_market_open ? 'open' : 'closed'}`}>
+          {q.is_market_open ? 'Market open' : 'Market closed'}
+        </span>
+      </div>
+      <p className="muted" style={{ marginTop: 4, fontSize: '.85em' }}>{hint}</p>
+      <dl className="econ-drawer-kv">
+        <dt>Last price</dt>
+        <dd className={`big dir-${d}`}>{fmtNum(q.close)}</dd>
+        <dt>Change</dt>
+        <dd className={`dir-${d}`}>
+          {isFinite(change) ? (change > 0 ? '+' : '') + fmtNum(q.change) : q.change}
+          {' '}({fmtPct(q.percent_change)})
+        </dd>
+        <dt>Previous close</dt>
+        <dd>{isFinite(prev) ? fmtNum(q.previous_close) : '—'}</dd>
+        {q.fifty_two_week && (
+          <>
+            <dt>52-week low</dt>
+            <dd>{isFinite(low) ? fmtNum(q.fifty_two_week.low) : '—'}</dd>
+            <dt>52-week high</dt>
+            <dd>{isFinite(high) ? fmtNum(q.fifty_two_week.high) : '—'}</dd>
+          </>
+        )}
+      </dl>
+      {rangePos != null && (
+        <div className="econ-drawer-range" title="Position within 52-week range">
+          <div className="bar"><div className="dot" style={{ left: `${rangePos * 100}%` }} /></div>
+          <div className="ends">
+            <span>{fmtNum(String(low))}</span>
+            <span>{fmtNum(String(high))}</span>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
 export default function EconomyDetail({ label, tooltip, data, stocks }: Props) {
   const [open, setOpen] = useUrlBool('econ');
+  // Which index card has its drawer expanded (click-to-toggle).
+  const [openSymbol, setOpenSymbol] = useState<string | null>(null);
 
   const indexCards = MACRO_INDEX_ORDER
     .map((m) => ({ ...m, q: stocks?.[m.symbol] }))
     .filter((m): m is typeof m & { q: StockQuote } => !!m.q);
+  const activeCard = openSymbol
+    ? indexCards.find((c) => c.symbol === openSymbol) ?? null
+    : null;
 
   // Treasury 10Y yield called out as a featured number — most-watched
   // single bond rate. Tries the yields array first, falls back to ^TNX
@@ -99,10 +176,23 @@ export default function EconomyDetail({ label, tooltip, data, stocks }: Props) {
               <section>
                 <h3 className="rep-h" style={{ marginTop: 0 }}>Major indexes</h3>
                 <div className="econ-index-grid">
-                  {indexCards.map((c) => <IndexCard key={c.symbol} q={c.q} label={c.label} hint={c.hint} />)}
+                  {indexCards.map((c) => (
+                    <IndexCard
+                      key={c.symbol}
+                      q={c.q}
+                      label={c.label}
+                      hint={c.hint}
+                      active={openSymbol === c.symbol}
+                      onToggle={() => setOpenSymbol(openSymbol === c.symbol ? null : c.symbol)}
+                    />
+                  ))}
                 </div>
+                {activeCard && (
+                  <IndexDrawer q={activeCard.q} label={activeCard.label} hint={activeCard.hint} />
+                )}
                 <p className="muted" style={{ fontSize: '.72em', marginTop: 4 }}>
                   Source: Yahoo Finance via the 5-minute stocks cron. Markets close ~1pm Pacific.
+                  Click an index for more detail.
                 </p>
               </section>
             )}
