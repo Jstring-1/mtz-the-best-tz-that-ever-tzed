@@ -14,6 +14,21 @@ const TABS: Tab[] = ['federal', 'state'];
 // bills never make it out of committee).
 const VOTED_RE = /\b(passed|agreed\s+to|failed|became\s+(?:public\s+)?law|enacted|signed)\b/i;
 
+// Congress.gov's latestAction strings always carry one or more
+// citation parentheticals like "(consideration: CR S2160; text: CR
+// S2180-2181)" or "(Roll no. 123)". Strip them out of the main verb so
+// the lead line stays readable, and surface them on a second line in
+// a lighter shade.
+function splitLatestAction(s: string): { main: string; refs: string } {
+  const refs: string[] = [];
+  const main = s
+    .replace(/\([^)]*\)/g, (m) => { refs.push(m); return ''; })
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.,;]+$/, '');
+  return { main, refs: refs.join(' ') };
+}
+
 // Parse a federal bill row back into a {congress, type, number} ref
 // for the nested BillDetail modal.
 function parseFedRef(b: BillRow): { congress: number; type: string; number: string } | null {
@@ -49,19 +64,27 @@ function BillRowItem({ b, onOpenFed }: {
         {trigger}
         <span className="bill-title-text">{b.title}</span>
       </div>
-      {(b.latestAction || b.introduced) && (
-        <div className="meta muted">
-          {b.sponsor && <>Sponsor: {b.sponsor} · </>}
-          {b.introduced && <>Introduced {b.introduced}</>}
-          {b.latestAction && (
-            <>
-              {' · Latest: '}{b.latestAction}
-              {b.latestActionDate && ` (${b.latestActionDate})`}
-              {VOTED_RE.test(b.latestAction) && <span className="voted-tag">voted</span>}
-            </>
-          )}
-        </div>
-      )}
+      {(b.latestAction || b.introduced) && (() => {
+        const split = b.latestAction ? splitLatestAction(b.latestAction) : { main: '', refs: '' };
+        const voted = !!b.latestAction && VOTED_RE.test(b.latestAction);
+        return (
+          <div className="bill-meta">
+            <div className="bill-meta-line">
+              {b.sponsor && <>Sponsor: {b.sponsor} · </>}
+              {b.introduced && <>Introduced {b.introduced}</>}
+              {split.main && <>{' · Latest: '}{split.main}</>}
+              {voted && <span className="voted-tag">voted</span>}
+            </div>
+            {(split.refs || b.latestActionDate) && (
+              <div className="bill-meta-refs">
+                {split.refs}
+                {split.refs && b.latestActionDate && ' · '}
+                {b.latestActionDate && b.latestActionDate}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </li>
   );
 }

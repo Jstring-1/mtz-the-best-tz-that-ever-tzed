@@ -257,19 +257,30 @@ async function weatherapiForecast(json: Record<string, unknown>) {
 
 
 async function usgsQuakes(json: Record<string, unknown>) {
-  type Q = { features?: { id: string; properties: { place?: string; mag?: number; time?: number; url?: string } }[] };
+  // USGS GeoJSON puts coordinates as [lng, lat, depth] on geometry —
+  // we capture them so the Quakes civic-strip popup can pin events.
+  type Q = { features?: {
+    id: string;
+    properties: { place?: string; mag?: number; time?: number; url?: string };
+    geometry?: { coordinates?: [number, number, number?] };
+  }[] };
   const r = await fetchJson<Q>('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_month.geojson');
   const out: Record<string, unknown> = {};
-  const rows: Array<{ id: string; magnitude: number | null; place: string; occurred_at: number; url: string | null }> = [];
+  const rows: Array<{ id: string; magnitude: number | null; place: string; occurred_at: number; url: string | null; lat: number | null; lon: number | null }> = [];
   for (const eq of r.features ?? []) {
     const place = eq.properties.place ?? '';
     if (!place.endsWith('CA')) continue;
     const occurred_at = Math.round((eq.properties.time ?? 0) / 1000);
+    const coords = eq.geometry?.coordinates;
+    const lon = Array.isArray(coords) && typeof coords[0] === 'number' ? coords[0] : null;
+    const lat = Array.isArray(coords) && typeof coords[1] === 'number' ? coords[1] : null;
     out[eq.id] = {
       magnitude: eq.properties.mag,
       place,
       occurred_at,
       url: eq.properties.url ?? '',
+      lat,
+      lon,
     };
     rows.push({
       id: eq.id,
@@ -277,6 +288,8 @@ async function usgsQuakes(json: Record<string, unknown>) {
       place,
       occurred_at,
       url: eq.properties.url ?? null,
+      lat,
+      lon,
     });
   }
   json.USGS_earthquakes = out;

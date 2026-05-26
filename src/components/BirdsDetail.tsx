@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 import type { StoredBird } from '@/lib/store';
+import PinMap, { type PinPoint } from './PinMap';
 
 interface Props {
   label: string;
@@ -26,6 +27,13 @@ function fmtDate(unixSec: number | null): string {
 export default function BirdsDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('birds');
   const [focusSlug, setFocusSlug] = useUrlString('bird');
+  // "Fly to this sighting" trigger for the embedded PinMap. Nonce makes
+  // repeat-clicks of the same species re-trigger the animation.
+  const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
+  const zoomToBird = (slug: string) => {
+    setFocusSlug(null);   // close any open species modal
+    setFocus({ id: slug, nonce: Date.now() });
+  };
 
   // The store query already deduplicates by common_name (DISTINCT ON) and
   // returns newest first, but be defensive in case caller passes raw data.
@@ -46,6 +54,21 @@ export default function BirdsDetail({ label, tooltip, data }: Props) {
     [focusSlug, unique],
   );
 
+  // One pin per unique sighting that has coords. Pin id = slug so the
+  // species detail modal can route by it; click flies to the pin AND
+  // opens the species detail.
+  const points = useMemo<PinPoint[]>(
+    () => unique
+      .map((b): PinPoint | null => {
+        const lat = typeof b.lat === 'number' ? b.lat : null;
+        const lng = typeof b.lon === 'number' ? b.lon : null;
+        if (lat == null || lng == null) return null;
+        return { id: slugify(b.common_name), lat, lng, title: b.common_name };
+      })
+      .filter((p): p is PinPoint => p !== null),
+    [unique],
+  );
+
   return (
     <>
       <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
@@ -57,6 +80,16 @@ export default function BirdsDetail({ label, tooltip, data }: Props) {
           <p className="muted">No sightings cached. Run /admin → 1h.</p>
         ) : (
           <>
+            {points.length > 0 && (
+              <PinMap
+                points={points}
+                onSelect={setFocusSlug}
+                focus={focus}
+                flyZoom={13}
+                pinColor="#4ea2d9"
+                ariaLabel="Map of recent bird sightings"
+              />
+            )}
             <ul className="recall-list bird-list">
               {unique.map((b) => {
                 const slug = slugify(b.common_name);
@@ -129,7 +162,10 @@ export default function BirdsDetail({ label, tooltip, data }: Props) {
                 <a href={focused.wiki_url} target="_blank" rel="noopener">Read on Wikipedia →</a>
               )}
               {focused.lat != null && focused.lon != null && (
-                <a href={`https://www.google.com/maps/?q=${focused.lat},${focused.lon}`} target="_blank" rel="noopener">Sighting location on map →</a>
+                <a href="#"
+                   onClick={(e) => { e.preventDefault(); zoomToBird(slugify(focused.common_name)); }}>
+                  Zoom to sighting on the map →
+                </a>
               )}
               <a href={`https://ebird.org/species/${encodeURIComponent(focused.common_name)}`} target="_blank" rel="noopener">
                 eBird species page →

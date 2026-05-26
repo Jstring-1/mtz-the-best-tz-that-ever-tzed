@@ -2290,3 +2290,71 @@ button.rep-card.clickable:focus-visible {
 .detail-modal-content .alert-meta .k { color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
 .detail-modal-content .alert-meta .v { color: var(--text); }
 .detail-modal-content .news-body img { max-width: 100%; height: auto; border-radius: 4px; }
+
+/* Bills popup — the federal + state lists. The per-bill cards inherit
+   from generic .rep-list / .bill-row but bills also need a second
+   "refs" sub-line for Congress.gov's citation parentheticals + the
+   action date. */
+.bills-federal .rep-list,
+.bills-state .rep-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.bills-federal .rep-list > li,
+.bills-state .rep-list > li {
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border-soft);
+}
+.bills-federal .rep-list > li:last-child,
+.bills-state .rep-list > li:last-child { border-bottom: 0; }
+.bills-federal .bill-row,
+.bills-state .bill-row {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+}
+.bills-federal .bill-trigger,
+.bills-state .bill-trigger {
+  background: transparent; border: 0; padding: 0;
+  text-align: left; cursor: pointer; color: var(--accent); font: inherit;
+  flex: 0 0 auto;
+}
+.bills-federal .bill-trigger:hover .num,
+.bills-state .bill-trigger:hover .num { text-decoration: underline; }
+.bills-federal .num,
+.bills-state .num { font-family: var(--mono); font-size: .9em; color: var(--accent); }
+.bills-federal .bill-title-text,
+.bills-state .bill-title-text { flex: 1 1 240px; min-width: 0; }
+
+/* Lead meta line — sponsor + introduced + main latestAction verb. */
+.bills-federal .bill-meta,
+.bills-state .bill-meta {
+  margin-top: 4px;
+  font-size: .8em;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+/* Second sub-line — citation refs + action date. Slightly lighter and
+   in mono so the Congress.gov record IDs read as data, not prose. */
+.bills-federal .bill-meta-refs,
+.bills-state .bill-meta-refs {
+  margin-top: 3px;
+  font-size: .9em;       /* relative to .bill-meta -> ~.72em absolute */
+  font-family: var(--mono, monospace);
+  color: var(--text-faint, var(--text-muted));
+  opacity: 0.72;
+}
+.bills-federal .voted-tag,
+.bills-state .voted-tag {
+  display: inline-block; margin-left: 6px;
+  font-size: .92em; padding: 0 5px; border-radius: 3px;
+  color: var(--accent-green, #4caf50);
+  border: 1px solid var(--accent-green, #4caf50);
+  vertical-align: baseline;
+}
+.bills-federal .kind,
+.bills-state .kind {
+  font-family: var(--mono); font-size: .72em; font-weight: 700;
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 1px 4px; text-align: center; color: var(--text-muted);
+}
+.bills-federal .kind-sp { color: var(--accent);       border-color: var(--accent); }
+.bills-federal .kind-co { color: var(--accent-cool);  border-color: var(--accent-cool); }

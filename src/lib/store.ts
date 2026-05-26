@@ -76,6 +76,10 @@ async function ensureTables(): Promise<void> {
       first_seen    TIMESTAMPTZ DEFAULT NOW()
     )
   `;
+  // Add coordinate columns on existing DBs (idempotent — Postgres 9.6+).
+  // Needed so the Quakes civic-strip popup can drop pins on a map.
+  await sql`ALTER TABLE quakes ADD COLUMN IF NOT EXISTS lat REAL`;
+  await sql`ALTER TABLE quakes ADD COLUMN IF NOT EXISTS lon REAL`;
   await sql`CREATE INDEX IF NOT EXISTS quakes_occurred_at_idx ON quakes (occurred_at)`;
 
   await sql`
@@ -396,6 +400,8 @@ export interface StoredQuake {
   place: string;
   occurred_at: number;
   url: string | null;
+  lat: number | null;
+  lon: number | null;
 }
 
 export async function upsertQuakes(rows: StoredQuake[]): Promise<void> {
@@ -403,13 +409,15 @@ export async function upsertQuakes(rows: StoredQuake[]): Promise<void> {
   await ensureTables();
   for (const r of rows) {
     await sql`
-      INSERT INTO quakes (id, magnitude, place, occurred_at, url)
-      VALUES (${r.id}, ${r.magnitude}, ${r.place}, ${r.occurred_at}, ${r.url})
+      INSERT INTO quakes (id, magnitude, place, occurred_at, url, lat, lon)
+      VALUES (${r.id}, ${r.magnitude}, ${r.place}, ${r.occurred_at}, ${r.url}, ${r.lat}, ${r.lon})
       ON CONFLICT (id) DO UPDATE SET
         magnitude   = EXCLUDED.magnitude,
         place       = EXCLUDED.place,
         occurred_at = EXCLUDED.occurred_at,
-        url         = EXCLUDED.url
+        url         = EXCLUDED.url,
+        lat         = EXCLUDED.lat,
+        lon         = EXCLUDED.lon
     `;
   }
 }
@@ -417,7 +425,7 @@ export async function upsertQuakes(rows: StoredQuake[]): Promise<void> {
 export async function listRecentQuakes(limit = 40): Promise<StoredQuake[]> {
   await ensureTables();
   return await sql<StoredQuake[]>`
-    SELECT id, magnitude, place, occurred_at, url
+    SELECT id, magnitude, place, occurred_at, url, lat, lon
     FROM quakes
     ORDER BY occurred_at DESC
     LIMIT ${limit}

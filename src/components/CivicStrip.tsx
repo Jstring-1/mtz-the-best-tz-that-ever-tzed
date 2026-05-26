@@ -1,5 +1,5 @@
 import { getJson } from '@/lib/cache';
-import { listRecentBirds, type StoredBird } from '@/lib/store';
+import { listRecentBirds, listRecentQuakes, type StoredBird, type StoredQuake } from '@/lib/store';
 import type { GovLocalPayload, GovNationalPayload, GovStripItem } from '@/lib/gov';
 import type { CouncilScrapeResult } from '@/lib/scrape-council';
 import BillsDetail from './BillsDetail';
@@ -16,6 +16,7 @@ import EonetDetail from './EonetDetail';
 import ParksDetail from './ParksDetail';
 import CodeDetail from './CodeDetail';
 import BirdsDetail from './BirdsDetail';
+import QuakesDetail from './QuakesDetail';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -28,8 +29,9 @@ export default async function CivicStrip() {
   let national: GovNationalPayload | null = null;
   let stocks: Record<string, unknown> | null = null;
   let birds: StoredBird[] = [];
+  let quakes: StoredQuake[] = [];
   try {
-    [payload, council, national, stocks, birds] = await Promise.all([
+    [payload, council, national, stocks, birds, quakes] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
@@ -37,6 +39,8 @@ export default async function CivicStrip() {
       // listRecentBirds already deduplicates by common_name via
       // DISTINCT ON, returning newest first.
       listRecentBirds(80).catch(() => []),
+      // Significant CA quakes (USGS significant_month feed), newest first.
+      listRecentQuakes(40).catch(() => []),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -91,6 +95,11 @@ export default async function CivicStrip() {
   const birdsTooltip = birds.length
     ? `${birds.length} unique species recently reported in the Martinez radius (eBird).`
     : 'Bird sightings — cache empty. Run /admin → 1h.';
+  // Significant California earthquakes — pinned on a Leaflet map.
+  const quakesLabelHtml = `<span class="civic-strip-val red">Quakes</span>`;
+  const quakesTooltip = quakes.length
+    ? `${quakes.length} significant CA earthquakes cached (USGS significant_month).`
+    : 'CA earthquakes — cache empty. Run /admin → 1h.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -143,7 +152,7 @@ export default async function CivicStrip() {
 
   // Civic-strip ordering (user-specified):
   //   Parks · Birds · Council · Code · Funding · Bills · Reps · Crime
-  //   · Economy · Recalls · FEMA · EONET · Unemployment · Gas
+  //   · Economy · Recalls · FEMA · EONET · Quakes · Unemployment · Gas
   return (
     <section className="civic-strip" aria-label="Civic indicators">
       <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
@@ -168,6 +177,7 @@ export default async function CivicStrip() {
       />
       <FemaDetail    tooltip={femaTooltip}    label={femaLabelHtml}    data={femaList} />
       <EonetDetail   tooltip={eonetTooltip}   label={eonetLabelHtml}   data={eonetList} />
+      <QuakesDetail  tooltip={quakesTooltip}  label={quakesLabelHtml}  data={quakes} />
       {unempChip()}
       {gasChip()}
     </section>
