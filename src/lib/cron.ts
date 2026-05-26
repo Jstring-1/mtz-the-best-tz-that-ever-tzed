@@ -422,6 +422,11 @@ async function outbreaks(json: Record<string, unknown>) {
   json['outbreaks'] = await fetchOutbreaks();
 }
 
+async function cchHealth(json: Record<string, unknown>) {
+  const { fetchCch } = await import('./cch');
+  json['cch_health'] = await fetchCch();
+}
+
 async function ccrmcData(json: Record<string, unknown>) {
   const { fetchCcrmcData } = await import('./ccrmc');
   json['ccrmc_data'] = await fetchCcrmcData();
@@ -1074,6 +1079,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
       safe('ccc_comp',      () => cccCompensation(json),  ok, errors, timings),
       safe('reps_data',     () => repsData(json),         ok, errors, timings),
       safe('crime_data',    () => crimeData(json),        ok, errors, timings),
+      safe('cch_health',    () => cchHealth(json),        ok, errors, timings),
     ]);
   }
 

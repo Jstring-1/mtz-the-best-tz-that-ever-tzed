@@ -19,6 +19,8 @@ import BirdsDetail from './BirdsDetail';
 import QuakesDetail from './QuakesDetail';
 import OutbreaksDetail from './OutbreaksDetail';
 import type { OutbreaksPayload } from '@/lib/outbreaks';
+import CchDetail from './CchDetail';
+import type { CchPayload } from '@/lib/cch';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -34,8 +36,9 @@ export default async function CivicStrip() {
   let quakes: StoredQuake[] = [];
   let places: PlaceRow[] = [];
   let outbreaks: OutbreaksPayload | null = null;
+  let cch: CchPayload | null = null;
   try {
-    [payload, council, national, stocks, birds, quakes, places, outbreaks] = await Promise.all([
+    [payload, council, national, stocks, birds, quakes, places, outbreaks, cch] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
@@ -49,6 +52,8 @@ export default async function CivicStrip() {
       getPlaces().catch(() => []),
       // Disease surveillance bundle (disease.sh / CDC NORS / Delphi / WHO DON).
       getJson<OutbreaksPayload>('outbreaks').catch(() => null),
+      // Contra Costa Health — CCRMC scorecards + CCHS reference links.
+      getJson<CchPayload>('cch_health').catch(() => null),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -120,6 +125,11 @@ export default async function CivicStrip() {
   const outbreaksTooltip = outbreaks
     ? `Disease surveillance: ${outbreaks.cdcFood.length} CDC NORS rows, ${outbreaks.flu.length} flu signals, ${outbreaks.whoDon.length} WHO DON items.`
     : 'Outbreaks — cache empty. Run /admin → 4h.';
+  // Contra Costa Health — county hospital scorecards + CCHS docs.
+  const cchLabelHtml = `<span class="civic-strip-val green">CCH</span>`;
+  const cchTooltip = cch?.general?.overallRating
+    ? `CCRMC CMS overall rating: ${cch.general.overallRating}/5 ★. Click for scorecards + CCHS docs.`
+    : 'Contra Costa Health — CCRMC scorecards (CMS Hospital Compare) + reference docs.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -149,7 +159,8 @@ export default async function CivicStrip() {
 
   // Civic-strip ordering (user-specified):
   //   Parks · Places · Birds · Council · Code · Funding · Bills · Reps · Crime
-  //   · Economy · Recalls · Outbreaks · FEMA · EONET · Quakes
+  //   · CCH · Economy · Recalls · Outbreaks · FEMA · EONET · Quakes
+  // CCH sits next to Crime in the local civic-services cluster.
   // Unemployment + Gas were removed from the strip — both live inside
   // the Economy popup now.
   return (
@@ -163,6 +174,7 @@ export default async function CivicStrip() {
       {billsChip()}
       <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
       {crimeChip()}
+      <CchDetail     tooltip={cchTooltip}     label={cchLabelHtml}     data={cch} />
       <EconomyDetail
         tooltip={economyTooltip}
         label={economyLabelHtml}

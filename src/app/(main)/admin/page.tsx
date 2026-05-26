@@ -13,7 +13,7 @@ const BUCKETS = [
   { id: '1h',  desc: 'noaa_hourly · noaa_buoys' },
   { id: '4h',  desc: 'news_feeds · news_aggregated · local_events · shelter_pets · noaa_forecast · noaa_aviation · weatherapi_marine · weatherapi_forecast · usgs_quakes · ebird' },
   { id: '12h', desc: 'osm_places · ticketmaster_events · gov_local · gov_national · outbreaks · affecting_bills · rep_votes · purge_stores' },
-  { id: '1d',  desc: 'council_votes · ccrmc_data · ccc_comp · reps_data · crime_data' },
+  { id: '1d',  desc: 'council_votes · ccrmc_data · ccc_comp · reps_data · crime_data · cch_health' },
   { id: 'all', desc: 'Every bucket sequentially (manual / cold start)' },
 ];
 
