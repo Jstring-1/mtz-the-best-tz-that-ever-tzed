@@ -1798,36 +1798,28 @@ button.rep-card.clickable:focus-visible {
   border-bottom: 1px solid var(--border-soft);
 }
 
-/* Leaflet map shown at the top of the Parks popup. Borders match the
-   PDF viewer below so the two embedded surfaces feel like a set. */
-.parks-map {
+/* Generic Leaflet map wrapper (PinMap component). Used by Parks +
+   EONET + any future detail panel that wants to drop points on tiles.
+   Border matches the PDF viewer below so embedded surfaces feel like
+   a set. */
+.pin-map {
   border: 1px solid var(--border-soft);
   background: var(--bg-elev);
 }
-.parks-map .leaflet-container { background: var(--bg-elev); }
-/* Custom DivIcon pin — small dodger-blue dot with a white ring so it
-   reads on both the OSM grays and on green park polygons. */
-.park-pin { background: transparent; border: 0; }
-.park-pin-dot {
+.pin-map .leaflet-container { background: var(--bg-elev); }
+/* Custom DivIcon pin — small colored dot with a white ring so it
+   reads on both OSM grays and green/water polygons. The fill color
+   comes from inline style on the inner dot so PinMap callers can
+   theme it per use (parks: blue, eonet: red, etc). */
+.pin-map-pin { background: transparent; border: 0; cursor: pointer; }
+.pin-map-dot {
   display: block;
   width: 14px; height: 14px;
   margin: 2px;
   border-radius: 50%;
-  background: var(--dodger, #1e90ff);
   border: 2px solid #fff;
   box-shadow: 0 1px 2px rgba(0,0,0,.4);
 }
-/* Popup body inside Leaflet — the name is a button so a click both
-   selects the park (URL state) and triggers the nested detail modal. */
-.park-pop { min-width: 140px; font-size: .92em; }
-.park-pop-btn {
-  background: none; border: 0; padding: 0; margin: 0;
-  color: var(--accent, #1e90ff);
-  font: inherit; font-weight: 600;
-  cursor: pointer; text-align: left;
-}
-.park-pop-btn:hover { text-decoration: underline; }
-.park-pop-addr { margin-top: 2px; color: var(--muted, #888); font-size: .9em; }
 
 /* Inline PDF viewer for EBRPD district maps */
 .park-pdf-wrap { display: flex; flex-direction: column; min-width: 0; }
@@ -2278,10 +2270,6 @@ button.rep-card.clickable:focus-visible {
 /* The map-link is the one exception — short token like "↗ map" that
    we explicitly do NOT want to break across two lines. */
 .detail-modal-content .map-link { white-space: nowrap !important; }
-/* Pin marker hint cursor — clicking a pin opens the park detail
-   modal directly (no Leaflet popup in between, so no popup chrome
-   styling needed). */
-.park-pin { cursor: pointer; }
 .detail-modal-close {
   position: absolute; top: 6px; right: 10px;
   background: transparent; border: 0; color: var(--text-muted);

@@ -5,7 +5,7 @@ import Modal from './Modal';
 import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 import type { Park } from '@/lib/types';
 import { MARTINEZ_PARKS } from '@/lib/parks-data';
-import ParksMap from './ParksMap';
+import PinMap, { type PinPoint } from './PinMap';
 
 interface Props {
   label: string;
@@ -43,6 +43,13 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
   const zoomToPark = (id: string) => setFocus({ id, nonce: Date.now() });
 
   const parks = data ?? MARTINEZ_PARKS;
+  const points = useMemo<PinPoint[]>(
+    () => parks
+      .filter((p): p is Park & { lat: number; lng: number } =>
+        typeof p.lat === 'number' && typeof p.lng === 'number')
+      .map((p) => ({ id: p.id, lat: p.lat, lng: p.lng, title: p.name })),
+    [parks],
+  );
   const focusedMap = useMemo(
     () => (mapSlug ? EBRPD_MAPS.find((m) => m.slug === mapSlug) ?? null : null),
     [mapSlug],
@@ -55,8 +62,13 @@ export default function ParksDetail({ label, tooltip, data }: Props) {
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Martinez parks" size="lg">
         {/* Leaflet map with one pin per park — click a pin to zoom to it. */}
-        {parks.length > 0 && (
-          <ParksMap parks={parks} onSelect={zoomToPark} focus={focus} />
+        {points.length > 0 && (
+          <PinMap
+            points={points}
+            onSelect={zoomToPark}
+            focus={focus}
+            ariaLabel="Map of Martinez parks"
+          />
         )}
         {/* EBRPD district map shortcuts — embedded PDFs from /public/img/. */}
         <div className="park-map-links">

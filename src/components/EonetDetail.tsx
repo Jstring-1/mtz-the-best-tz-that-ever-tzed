@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool } from '@/lib/useUrlState';
 import type { EonetRow } from '@/lib/gov';
+import PinMap, { type PinPoint } from './PinMap';
 
 interface Props {
   label: string;
@@ -50,6 +51,34 @@ function fmtCoords(c?: [number, number]): string {
 export default function EonetDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('eonet');
   const [openIdx, setOpenIdx] = useState<number | null>(null);
+  // "Fly to this pin" trigger — nonce makes re-clicks of the same pin
+  // re-run the animation. We also use the pin click to expand the
+  // matching list row inline.
+  const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
+  const rowRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+
+  // EONET stores coords as [lng, lat]. Index id is the array position so
+  // pin -> row mapping works even if events lack a stable id.
+  const points = useMemo<PinPoint[]>(
+    () => data
+      .map((e, i): PinPoint | null => {
+        if (!e.latestCoords) return null;
+        const [lng, lat] = e.latestCoords;
+        return { id: String(i), lat, lng, title: e.title };
+      })
+      .filter((p): p is PinPoint => p !== null),
+    [data],
+  );
+
+  const onPinClick = (id: string) => {
+    const idx = Number(id);
+    setOpenIdx(idx);
+    setFocus({ id, nonce: Date.now() });
+    // Scroll the matching list row into view after the modal repaints.
+    requestAnimationFrame(() => {
+      rowRefs.current.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  };
 
   return (
     <>
@@ -61,12 +90,30 @@ export default function EonetDetail({ label, tooltip, data }: Props) {
           <p className="muted">No open events cached. Run /admin → 4h.</p>
         ) : (
           <>
+            {points.length > 0 && (
+              <PinMap
+                points={points}
+                onSelect={onPinClick}
+                focus={focus}
+                flyZoom={5}
+                pinColor="#e34234"
+                ariaLabel="Map of active NASA EONET events"
+              />
+            )}
             <ul className="recall-list">
               {data.map((e, i) => {
                 const expanded = openIdx === i;
                 const coords = fmtCoords(e.latestCoords);
+                const pinId = String(i);
                 return (
-                  <li key={`${e.id ?? e.title}-${i}`} className="recall-item">
+                  <li
+                    key={`${e.id ?? e.title}-${i}`}
+                    className="recall-item"
+                    ref={(el) => {
+                      if (el) rowRefs.current.set(pinId, el);
+                      else rowRefs.current.delete(pinId);
+                    }}
+                  >
                     <button
                       type="button"
                       className="recall-head"
@@ -91,9 +138,10 @@ export default function EonetDetail({ label, tooltip, data }: Props) {
                         {coords && (
                           <p style={{ marginTop: 8 }}>
                             <strong>Latest position:</strong> {coords}
-                            {' '}<a className="map-link"
-                              href={e.latestCoords ? `https://www.google.com/maps/?q=${e.latestCoords[1]},${e.latestCoords[0]}` : '#'}
-                              target="_blank" rel="noopener">↗ map</a>
+                            {' '}<a className="map-link" href="#"
+                              onClick={(ev) => { ev.preventDefault(); setFocus({ id: pinId, nonce: Date.now() }); }}>
+                              ↗ zoom on map
+                            </a>
                           </p>
                         )}
                         {e.sources && e.sources.length > 0 && (
