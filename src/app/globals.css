@@ -1869,12 +1869,49 @@ button.rep-card.clickable:focus-visible {
 .bill-prefix-key {
   display: grid;
   grid-template-columns: max-content 1fr;
-  column-gap: 12px; row-gap: 4px;
-  font-size: .8em;
-  margin: 6px 0 0;
+  column-gap: 14px; row-gap: 8px;
+  font-size: .82em;
+  margin: 8px 0 0;
+  line-height: 1.5;
 }
-.bill-prefix-key dt { font-weight: 600; color: var(--text); }
+.bill-prefix-key dt {
+  font-weight: 700;
+  font-family: var(--mono, ui-monospace, monospace);
+  color: var(--accent);
+  padding-top: 2px;
+}
 .bill-prefix-key dd { margin: 0; color: var(--text-muted); }
+.bill-prefix-key dd strong { color: var(--text); font-weight: 600; }
+
+/* Bills modal header block — legend + collapsible prefix key + cached
+   timestamp. Sits above the tabs so the reader can decode badges /
+   prefixes before scrolling into the list. */
+.bills-header {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.bills-legend { margin: 0; font-size: .82em; line-height: 1.5; }
+.bills-prefix-details { margin-top: 8px; }
+.bills-prefix-details > summary {
+  cursor: pointer;
+  font-size: .82em;
+  list-style: none;
+}
+.bills-prefix-details > summary::-webkit-details-marker { display: none; }
+.bills-prefix-details > summary::before { content: '▸ '; color: var(--text-muted); }
+.bills-prefix-details[open] > summary::before { content: '▾ '; }
+.bills-cached { margin: 8px 0 0; font-size: .72em; }
+
+/* Inline Sp / Co badge inside .bill-row — the previous absolute-
+   positioned variant gave it no spacing. Now it sits before the bill
+   number with the same gap that separates trigger from title. */
+.bills-federal .bill-row > .kind,
+.bills-state .bill-row > .kind {
+  flex: 0 0 auto;
+  align-self: baseline;
+  margin-right: 2px;
+}
 
 /* Stacked text links at the bottom of a popup — replaces the chunky
    yellow event-modal-btn buttons that used to crowd popup footers.
