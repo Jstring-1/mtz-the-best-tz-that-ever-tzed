@@ -35,10 +35,16 @@ export default function Modal({
       onClose={onClose}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
+      {/* Two-row layout: fixed header (title + close) + scrollable body.
+          The split is what lets `position: sticky` on a child of the body
+          actually stick — otherwise the body scrolls past the title and
+          the sticky's reference is the wrong scroll container. */}
       <div className="detail-modal-content">
-        <button className="detail-modal-close" onClick={onClose} aria-label="Close">×</button>
-        {title && <h2 className="detail-modal-title">{title}</h2>}
-        {children}
+        <header className="detail-modal-header">
+          <button className="detail-modal-close" onClick={onClose} aria-label="Close">×</button>
+          {title && <h2 className="detail-modal-title">{title}</h2>}
+        </header>
+        <div className="detail-modal-body">{children}</div>
       </div>
     </dialog>
   );

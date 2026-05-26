@@ -2427,7 +2427,6 @@ button.econ-index.clickable.active {
 .detail-modal.size-xl { max-width: 1100px; }
 
 .detail-modal-content {
-  padding: 18px 22px 20px;
   position: relative;
   font-family: var(--sans);
   /* Slightly smaller than the 16px body type but not the ~13px we had
@@ -2436,13 +2435,30 @@ button.econ-index.clickable.active {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  overflow-x: hidden;
-  overflow-y: auto;
+  /* Flex column so the header sits fixed and the body owns the
+     scrolling. Without this, position:sticky on a body child sticks
+     to the wrong container. */
+  display: flex;
+  flex-direction: column;
   max-height: calc(100vh - 24px);
+  overflow: hidden;
   /* Wrap long unbreakable tokens (URLs, addresses, CFDA objective
      blocks) instead of forcing a horizontal scroll. */
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+.detail-modal-header {
+  flex: 0 0 auto;
+  padding: 18px 22px 8px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border-soft);
+}
+.detail-modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 22px 20px;
+  min-height: 0;
 }
 /* min-width: 0 on every descendant unblocks flex/grid shrinking so 1fr
    tracks can actually shrink below content size. The wrap props are
