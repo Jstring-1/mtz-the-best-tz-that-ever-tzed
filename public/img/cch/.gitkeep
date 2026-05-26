@@ -1,0 +1,3 @@
+# Drop CCHS PDFs here. Register each in CCH_DOCS in
+# src/components/CchDetail.tsx to make it appear in the
+# CCH popup with click-to-open viewer + Ctrl+F search.

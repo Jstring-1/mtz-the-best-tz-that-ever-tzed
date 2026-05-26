@@ -13,7 +13,7 @@ import {
 } from './cache';
 
 export type Bucket = '1m' | '2m' | '5m' | '15m' | '1h' | '4h' | '12h' | '1d' | 'all';
-export const BUCKETS: Bucket[] = ['1m', '2m', '5m', '15m', '1h', '4h', '12h', 'all'];
+export const BUCKETS: Bucket[] = ['1m', '2m', '5m', '1h', '4h', '12h', '1d', 'all'];
 
 const NOAA_LOCAL_CODES = new Set([
   'CAC001','CAC013','CAC033','CAC041','CAC055','CAC067','CAC075','CAC077',
