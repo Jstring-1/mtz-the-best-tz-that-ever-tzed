@@ -139,6 +139,31 @@ async function ensureTables(): Promise<void> {
   `;
   await sql`CREATE INDEX IF NOT EXISTS pets_last_seen_idx ON pets (last_seen)`;
 
+  // Amtrak MTZ train history. Key is railrat.net's per-train-instance
+  // numeric id (a/d prefix stripped) so the same train moving from
+  // arriving → departed updates a single row. `state` carries the
+  // latest known status. Retained 30 days then purged.
+  await sql`
+    CREATE TABLE IF NOT EXISTS trains (
+      id            TEXT PRIMARY KEY,
+      state         TEXT NOT NULL,        -- 'arriving' | 'departed'
+      train_number  TEXT NOT NULL,
+      train_name    TEXT NOT NULL,
+      route         TEXT,
+      display_time  TEXT,                 -- HH:MM as shown on railrat
+      scheduled_at  TIMESTAMPTZ,          -- best-effort Pacific→UTC stop time
+      status        TEXT,                 -- "on tm" / "5m lt" / ""
+      minutes_off   INT,                  -- signed (negative = early)
+      warn          BOOLEAN DEFAULT FALSE,
+      train_url     TEXT,
+      details       JSONB,
+      first_seen    TIMESTAMPTZ DEFAULT NOW(),
+      last_seen     TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS trains_scheduled_at_idx ON trains (scheduled_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS trains_last_seen_idx    ON trains (last_seen)`;
+
   ensured = true;
 }
 
@@ -625,6 +650,55 @@ export async function listAvailablePets(): Promise<StoredPet[]> {
   `;
 }
 
+// ---------- Trains ----------------------------------------------------
+
+export interface StoredTrain {
+  id: string;                  // railrat numeric instance id (a/d stripped)
+  state: 'arriving' | 'departed';
+  train_number: string;
+  train_name: string;
+  route: string | null;
+  display_time: string | null; // "HH:MM"
+  scheduled_at: string | null; // ISO 8601 UTC
+  status: string | null;       // "on tm" / "5m lt" / ""
+  minutes_off: number | null;  // signed
+  warn: boolean;
+  train_url: string | null;
+  details: string[] | null;    // Ar/Dp sch./est./act. lines
+}
+
+export async function upsertTrains(rows: StoredTrain[]): Promise<void> {
+  if (!rows.length) return;
+  await ensureTables();
+  for (const r of rows) {
+    await sql`
+      INSERT INTO trains (
+        id, state, train_number, train_name, route, display_time,
+        scheduled_at, status, minutes_off, warn, train_url, details,
+        last_seen
+      ) VALUES (
+        ${r.id}, ${r.state}, ${r.train_number}, ${r.train_name},
+        ${r.route}, ${r.display_time}, ${r.scheduled_at},
+        ${r.status}, ${r.minutes_off}, ${r.warn}, ${r.train_url},
+        ${jsonify(r.details)}::jsonb, NOW()
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        state        = EXCLUDED.state,
+        train_number = EXCLUDED.train_number,
+        train_name   = EXCLUDED.train_name,
+        route        = EXCLUDED.route,
+        display_time = EXCLUDED.display_time,
+        scheduled_at = COALESCE(EXCLUDED.scheduled_at, trains.scheduled_at),
+        status       = EXCLUDED.status,
+        minutes_off  = EXCLUDED.minutes_off,
+        warn         = EXCLUDED.warn,
+        train_url    = EXCLUDED.train_url,
+        details      = EXCLUDED.details,
+        last_seen    = NOW()
+    `;
+  }
+}
+
 // ---------- Purge -----------------------------------------------------
 
 // Drop rows older than the per-table TTL. Run from the 12h cron bucket.
@@ -661,10 +735,21 @@ export async function purgeOldRows(): Promise<Record<string, number>> {
       RETURNING id
     ) SELECT COUNT(*)::text AS c FROM del
   `;
+  // Trains: 30-day window. last_seen is the most recent scrape we saw
+  // the row in; once a train is gone from railrat's rolling window and
+  // hasn't been refreshed in a month, drop it.
+  const t = await sql<{ c: string }[]>`
+    WITH del AS (
+      DELETE FROM trains
+      WHERE last_seen < NOW() - INTERVAL '30 days'
+      RETURNING id
+    ) SELECT COUNT(*)::text AS c FROM del
+  `;
   return {
     events: Number(e[0]?.c ?? 0),
     birds:  Number(b[0]?.c ?? 0),
     quakes: Number(q[0]?.c ?? 0),
     alerts: Number(a[0]?.c ?? 0),
+    trains: Number(t[0]?.c ?? 0),
   };
 }

@@ -430,17 +430,39 @@ async function cchHealth(json: Record<string, unknown>) {
 // Amtrak MTZ train status — scraped from railrat.net (hobby site that
 // pulls Amtrak's Track Your Train Map). 15m cadence is gentle on the
 // upstream and plenty fresh for status that updates over many minutes.
+// The blob is kept for fast strip rendering; we also mirror every
+// observed train into the `trains` table for 30-day history (purged
+// from the 12h bucket).
 async function trainsMtz(json: Record<string, unknown>) {
   const { fetchTrains } = await import('./trains');
   const payload = await fetchTrains();
-  // Only overwrite the cache when we got a usable response. A failed
-  // scrape (HTTP error, network blip) shouldn't blank a healthy cache.
-  if (payload.httpStatus === 200 && !payload.error) {
-    json['trains_mtz'] = payload;
-  } else if (payload.error) {
+  if (payload.httpStatus !== 200 || payload.error) {
     // Preserve the last good cache; just surface the failure in logs.
-    console.warn(`[trains_mtz] scrape failed: ${payload.error} (HTTP ${payload.httpStatus})`);
+    if (payload.error) console.warn(`[trains_mtz] scrape failed: ${payload.error} (HTTP ${payload.httpStatus})`);
+    return;
   }
+  json['trains_mtz'] = payload;
+
+  // Mirror into the structured trains table for history.
+  const { upsertTrains } = await import('./store');
+  const rows = [
+    ...payload.arriving.map((e) => ({ ...e, state: 'arriving' as const })),
+    ...payload.departed.map((e) => ({ ...e, state: 'departed' as const })),
+  ].map((e) => ({
+    id: e.railratId,
+    state: e.state,
+    train_number: e.trainNumber,
+    train_name: e.trainName,
+    route: e.route || null,
+    display_time: e.time || null,
+    scheduled_at: e.scheduledAt,
+    status: e.status || null,
+    minutes_off: e.minutesOff,
+    warn: e.warn,
+    train_url: e.trainUrl || null,
+    details: e.details && e.details.length ? e.details : null,
+  }));
+  if (rows.length) await upsertTrains(rows);
 }
 
 async function ccrmcData(json: Record<string, unknown>) {
@@ -471,8 +493,9 @@ async function councilVotes(json: Record<string, unknown>) {
 async function purgeStores() {
   const { purgeOldRows } = await import('./store');
   const r = await purgeOldRows();
-  if (process.env.MTZ_DEBUG === '1' || r.events + r.birds + r.quakes + r.alerts > 0) {
-    console.log(`[cron] purge: events ${r.events}, birds ${r.birds}, quakes ${r.quakes}, alerts ${r.alerts}`);
+  const total = (r.events ?? 0) + (r.birds ?? 0) + (r.quakes ?? 0) + (r.alerts ?? 0) + (r.trains ?? 0);
+  if (process.env.MTZ_DEBUG === '1' || total > 0) {
+    console.log(`[cron] purge: events ${r.events}, birds ${r.birds}, quakes ${r.quakes}, alerts ${r.alerts}, trains ${r.trains}`);
   }
 }
 

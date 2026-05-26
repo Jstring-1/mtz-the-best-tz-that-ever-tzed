@@ -29,6 +29,11 @@
 // payload cached under apis_json key `trains_mtz`.
 
 export interface TrainEntry {
+  /** Stable per-train-run id (railrat's numeric portion of the
+   *  `ReverseDisplay('aXXXX')` toggle, with the a/d prefix stripped).
+   *  Same train on different days gets different ids; same train as it
+   *  transitions arriving → departed should keep the same numeric id. */
+  railratId: string;
   /** The main-line display time, "HH:MM" (US Pacific). For trains
    *  with no live status this is the scheduled time; with status, it
    *  is the estimated arrival. */
@@ -49,6 +54,11 @@ export interface TrainEntry {
   route: string;
   /** Raw detail lines (Ar sch./est./act., Dp sch./est./act.). HTML decoded. */
   details: string[];
+  /** Best-effort full ISO timestamp for the train's MTZ stop. Built by
+   *  combining the HH:MM display time with the MM/DD found in the
+   *  detail lines (defaulting to today Pacific). Null when we can't
+   *  pin down a date — better than guessing. */
+  scheduledAt: string | null;
 }
 
 export interface TrainsPayload {
@@ -174,6 +184,9 @@ const ANCHOR_RE = /<a\s+href="(\/trains\/(\d+)\/)"[^>]*>([^<]+)<\/a>/i;
 const LEADING_TIME_RE = /^\s*(\d{1,2}:\d{2})\b/;
 
 function parseEntry(liInner: string): TrainEntry | null {
+  // Pull railrat's per-instance id from the detail-div's id (or the
+  // ReverseDisplay toggle target) BEFORE we strip JS anchors.
+  const railratM = liInner.match(/<div\s+id="([ad])(\d+)"\s+class="(?:arriving|departed)"/i);
   // Strip out the "more_vert" toggle link so the comma-status regex
   // doesn't trip over it.
   const cleaned = liInner.replace(/<a\s+href="javascript:[^"]*"[^>]*>[\s\S]*?<\/a>/gi, '');
@@ -205,7 +218,14 @@ function parseEntry(liInner: string): TrainEntry | null {
     }
   }
 
+  const railratId = railratM ? railratM[2] : '';
+  // Fallback: if we couldn't capture railrat's id (page format drifted),
+  // synthesize a key from train_number + display_time. Better than
+  // dropping the row.
+  const id = railratId || `${anchorM[2]}-${timeM[1]}`;
+
   return {
+    railratId: id,
     time: timeM[1],
     trainNumber: anchorM[2],
     trainName,
@@ -216,7 +236,84 @@ function parseEntry(liInner: string): TrainEntry | null {
     warn,
     route,
     details,
+    scheduledAt: buildScheduledAt(timeM[1], details),
   };
+}
+
+// Combine the leading HH:MM with any "MM/DD" we find in the detail
+// lines (e.g. "Ar est. 15:47 05/27") into a full UTC ISO timestamp.
+// Train times are Pacific; we convert to UTC for storage.
+//
+// Heuristic: pick the latest MM/DD that appears in any detail line —
+// that's usually the actual stop date (departed entries show today's
+// or yesterday's date; future arrivals show tomorrow's). If nothing
+// is found, assume today in America/Los_Angeles.
+function buildScheduledAt(hhmm: string, details: string[]): string | null {
+  const hhmmM = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+  if (!hhmmM) return null;
+  const hh = Number(hhmmM[1]);
+  const mm = Number(hhmmM[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+
+  // Scan detail lines for MM/DD tokens.
+  const candidates: Array<[number, number]> = [];
+  for (const d of details) {
+    const re = /\b(\d{1,2})\/(\d{1,2})\b/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(d)) !== null) {
+      const mo = Number(m[1]); const da = Number(m[2]);
+      if (mo >= 1 && mo <= 12 && da >= 1 && da <= 31) candidates.push([mo, da]);
+    }
+  }
+
+  // Pacific "today" in MM/DD form, so we can pick a year sensibly when
+  // the MM/DD straddles year boundaries (e.g. scrape on 01/02 sees 12/31).
+  const nowPt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const ptYear  = Number(nowPt.find((p) => p.type === 'year')?.value);
+  const ptMonth = Number(nowPt.find((p) => p.type === 'month')?.value);
+  const ptDay   = Number(nowPt.find((p) => p.type === 'day')?.value);
+
+  let mo = ptMonth, da = ptDay;
+  if (candidates.length) {
+    // Pick the latest (largest) candidate date in calendar order.
+    candidates.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    [mo, da] = candidates[candidates.length - 1];
+  }
+
+  // Year resolution: assume current Pacific year, but if the candidate
+  // is much earlier than today (>6mo) treat it as next year, and if
+  // much later (>6mo) treat it as last year. Handles both rollover
+  // directions defensively.
+  let yr = ptYear;
+  const diff = (mo - ptMonth) * 31 + (da - ptDay);
+  if (diff < -180) yr += 1;
+  else if (diff > 180) yr -= 1;
+
+  // Convert Pacific local wall-clock to UTC. Easiest correct way: build
+  // a Date as if the wall-clock were UTC, then ask Intl what offset
+  // Pacific would have at that instant, and shift.
+  const naive = Date.UTC(yr, mo - 1, da, hh, mm);
+  // Get the Pacific offset (in minutes) at the naive instant.
+  const ptFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const parts = ptFmt.formatToParts(new Date(naive));
+  const pYr = Number(parts.find((p) => p.type === 'year')?.value);
+  const pMo = Number(parts.find((p) => p.type === 'month')?.value);
+  const pDa = Number(parts.find((p) => p.type === 'day')?.value);
+  const pHr = Number(parts.find((p) => p.type === 'hour')?.value);
+  const pMi = Number(parts.find((p) => p.type === 'minute')?.value);
+  if (!Number.isFinite(pYr)) return null;
+  const ptUtc = Date.UTC(pYr, pMo - 1, pDa, pHr, pMi);
+  // Difference = Pacific-as-UTC minus actual UTC instant; subtract to
+  // shift the naive UTC into real UTC.
+  const offsetMs = ptUtc - naive;
+  return new Date(naive - offsetMs).toISOString();
 }
 
 function normalizeStatus(raw: string): string {

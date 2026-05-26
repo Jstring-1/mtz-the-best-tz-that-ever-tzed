@@ -67,7 +67,7 @@ export async function getNoaaHourly(): Promise<NoaaHourlyRow[]> {
 }
 
 export async function getRowCounts(): Promise<Record<string, number>> {
-  const tables = ['apis_json', 'apis_xml', 'misc', 'places', 'places_json', 'noaa_hrly', 'feeds'] as const;
+  const tables = ['apis_json', 'apis_xml', 'misc', 'places', 'places_json', 'noaa_hrly', 'feeds', 'trains'] as const;
   const out: Record<string, number> = {};
   for (const t of tables) {
     try {
