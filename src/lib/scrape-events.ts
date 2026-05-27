@@ -864,49 +864,27 @@ async function scrapeMartinezChamber(): Promise<LocalEvent[]> {
 // contra-costa.legistar.com/Calendar.aspx is the authoritative source
 // for Contra Costa County Board of Supervisors, committee, and advisory
 // body meetings. Legistar's public iCal/RSS endpoints are 410'd or
-// require auth, so we scrape the HTML calendar page. Each meeting row
-// is a `<tr class="rgRow|rgAltRow">` with stable ASP.NET-generated cell
-// IDs that survive minor template changes.
+// require auth, so we used to scrape the HTML calendar page in-process.
+//
+// But Granicus / Akamai has null-routed Railway's outbound IP range —
+// the TCP connect to legistar.com:443 times out from Railway. The
+// scrape now runs from a GitHub Actions runner (different IP range)
+// which downloads the HTML and POSTs it to /api/legistar-ingest; the
+// endpoint reuses `parseLegistarCalendar` below.
+//
+// This exported function stays so the parser tests + future direct-
+// scrape revival (different host) work without code duplication.
 
-async function scrapeContraCostaLegistar(): Promise<LocalEvent[]> {
-  const url = 'https://contra-costa.legistar.com/Calendar.aspx';
-  // Legistar sits behind Granicus's WAF. From Railway's outbound IP
-  // the default safeFetch headers come back as a bare "fetch failed"
-  // (likely Akamai bot block — TLS fingerprint plus header sniff).
-  // Try a richer browser-like header set with a same-site referer; if
-  // that still 0s out, the upstream is genuinely refusing Railway and
-  // we'd need a proxy or to drop the scraper.
-  const html = await safeFetch(url, {
-    headers: {
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Referer': 'https://contra-costa.legistar.com/',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'same-origin',
-      'Sec-Fetch-User': '?1',
-      'Upgrade-Insecure-Requests': '1',
-    },
-  });
-  if (!html) { console.warn('[cclegistar] fetch returned null (likely WAF blocking Railway outbound IP)'); return []; }
-
+export function parseLegistarCalendar(html: string): LocalEvent[] {
   // Split out each meeting row. Both grids on the page (upcoming +
   // calendar) share the same rgRow/rgAltRow structure.
   const rowRe = /<tr\s+class="(?:rgRow|rgAltRow)"[\s\S]*?<\/tr>/gi;
   const rows = html.match(rowRe) ?? [];
-  if (rows.length === 0) {
-    console.warn('[cclegistar] no rows matched');
-    return [];
-  }
-
+  if (rows.length === 0) return [];
   const out: LocalEvent[] = [];
   for (const row of rows) {
     const event = parseLegistarRow(row);
     if (event) out.push(event);
-  }
-  if (process.env.MTZ_DEBUG === '1') {
-    console.log(`[cclegistar] rows=${rows.length}, parsed=${out.length}`);
   }
   return out;
 }
@@ -1049,7 +1027,11 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
   ['farmers',        farmersMarketRecurring],
   ['martinezchamber', scrapeMartinezChamber],
   ['contracosta',    scrapeContraCosta],
-  ['cclegistar',     scrapeContraCostaLegistar],
+  // cclegistar removed from the Railway-side loop — Granicus null-
+  // routes Railway's outbound IP. The GitHub Actions workflow
+  // .github/workflows/legistar-ingest.yml fetches the HTML from a
+  // different network and POSTs it to /api/legistar-ingest, which
+  // calls parseLegistarCalendar() and upserts directly.
 ];
 
 export async function scrapeAllLocalEvents(): Promise<LocalEvent[]> {

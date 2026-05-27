@@ -1,0 +1,58 @@
+name: Legistar ingest
+
+# Granicus has null-routed Railway's outbound IP range, so we can't
+# fetch contra-costa.legistar.com/Calendar.aspx from the running app.
+# This workflow runs on a GitHub-hosted runner (whose IPs aren't on
+# Granicus's blocklist), downloads the calendar HTML, and POSTs it to
+# our /api/legistar-ingest endpoint with a shared-secret token.
+
+on:
+  schedule:
+    # Every 4 hours, offset 7 minutes from the top so we don't pile on
+    # the main 4h Railway cron. UTC.
+    - cron: '7 */4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SITE: https://mtz.city
+  LEGISTAR_URL: https://contra-costa.legistar.com/Calendar.aspx
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch Legistar calendar HTML
+        run: |
+          set -euo pipefail
+          # GitHub runners can reach Granicus where Railway can't.
+          # Browser-like UA helps glide past lighter bot checks.
+          curl -sSfL --max-time 45 \
+            -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+            -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
+            -H "Accept-Language: en-US,en;q=0.9" \
+            -H "Referer: https://contra-costa.legistar.com/" \
+            "$LEGISTAR_URL" \
+            -o /tmp/cc-cal.html
+          echo "Downloaded $(wc -c < /tmp/cc-cal.html) bytes"
+      - name: POST to ingest endpoint
+        env:
+          INGEST_TOKEN: ${{ secrets.LEGISTAR_INGEST_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${INGEST_TOKEN}" ]; then
+            echo "::error::LEGISTAR_INGEST_TOKEN repo secret not set"
+            exit 1
+          fi
+          # -f makes curl exit non-zero on 4xx/5xx so the action fails
+          # visibly. The endpoint returns JSON with the parsed count.
+          curl -sSf -X POST \
+            --max-time 30 \
+            -H "Authorization: Bearer $INGEST_TOKEN" \
+            -H "Content-Type: text/html" \
+            --data-binary @/tmp/cc-cal.html \
+            "$SITE/api/legistar-ingest"
+          echo
