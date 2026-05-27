@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool, useUrlEnum } from '@/lib/useUrlState';
 import type { OutbreaksPayload, OutbreakItem, OutbreakSnapshot } from '@/lib/outbreaks';
@@ -144,7 +144,11 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                           </button>
                           {expanded && (
                             <div className="recall-reason">
-                              {row.body && <p style={{ margin: 0 }}>{row.body}</p>}
+                              {row.category === 'WHO' && row.url ? (
+                                <ArticleBody url={row.url} fallback={row.body} />
+                              ) : (
+                                row.body && <p style={{ margin: 0 }}>{row.body}</p>
+                              )}
                               {row.url && (
                                 <div className="popup-ext-links">
                                   <a href={row.url} target="_blank" rel="noopener">
@@ -214,6 +218,8 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                               )}
                             </div>
                           )}
+                          {/* NORS rows all share the same dashboard URL,
+                              so article extraction wouldn't help. */}
                         </li>
                       );
                     })}
@@ -273,7 +279,11 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                           </button>
                           {expanded && (
                             <div className="recall-reason">
-                              {row.body && <p style={{ margin: 0 }}>{row.body}</p>}
+                              {row.url ? (
+                                <ArticleBody url={row.url} fallback={row.body} />
+                              ) : (
+                                row.body && <p style={{ margin: 0 }}>{row.body}</p>
+                              )}
                               {row.url && (
                                 <div className="popup-ext-links">
                                   <a href={row.url} target="_blank" rel="noopener">Full DON post →</a>
@@ -309,6 +319,92 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
       </Modal>
     </>
   );
+}
+
+// On-demand article extraction via /api/article-extract (Mozilla
+// Readability + 30-day server cache). Renders the extracted body
+// when available, otherwise falls back to the RSS summary, otherwise
+// a discreet "couldn't pull" note. In-memory cache keyed by URL so
+// re-opening the same item doesn't refetch.
+const ARTICLE_MEMO = new Map<string, ExtractedArticle | null>();
+
+interface ExtractedArticle {
+  title?: string;
+  byline?: string;
+  content?: string;   // sanitized HTML from Readability
+  excerpt?: string;
+  empty?: boolean;
+}
+
+function ArticleBody({ url, fallback }: { url: string; fallback?: string }) {
+  const [article, setArticle] = useState<ExtractedArticle | null>(() => ARTICLE_MEMO.get(url) ?? null);
+  const [loading, setLoading] = useState<boolean>(() => !ARTICLE_MEMO.has(url));
+  const [failed, setFailed] = useState<boolean>(() => ARTICLE_MEMO.get(url) === null && ARTICLE_MEMO.has(url));
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (ARTICLE_MEMO.has(url)) {
+      const hit = ARTICLE_MEMO.get(url) ?? null;
+      setArticle(hit); setFailed(hit == null && ARTICLE_MEMO.get(url) === null); setLoading(false);
+      return;
+    }
+    setLoading(true); setFailed(false); setArticle(null);
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    fetch(`/api/article-extract?url=${encodeURIComponent(url)}`, { signal: ctrl.signal })
+      .then(async (r) => {
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || j.empty) {
+          ARTICLE_MEMO.set(url, null);
+          setFailed(true);
+        } else {
+          ARTICLE_MEMO.set(url, j as ExtractedArticle);
+          setArticle(j as ExtractedArticle);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!(e instanceof DOMException && e.name === 'AbortError')) {
+          ARTICLE_MEMO.set(url, null);
+          setFailed(true);
+        }
+      })
+      .finally(() => setLoading(false));
+    return () => ctrl.abort();
+  }, [url]);
+
+  if (loading) {
+    return <p className="muted" style={{ margin: 0, fontSize: '.85em' }}>Loading article…</p>;
+  }
+  if (article?.content) {
+    return (
+      <div
+        className="article-extracted news-body"
+        style={{ lineHeight: 1.55, fontSize: '.92em' }}
+        // Readability-sanitized HTML — safe to inline (same pattern as NewsCard).
+        dangerouslySetInnerHTML={{ __html: article.content }}
+      />
+    );
+  }
+  if (fallback) {
+    return (
+      <>
+        <p style={{ margin: 0 }}>{fallback}</p>
+        {failed && (
+          <p className="muted" style={{ fontSize: '.78em', marginTop: 6 }}>
+            Couldn&rsquo;t pull the full article (paywall or blocked) — showing the RSS summary.
+          </p>
+        )}
+      </>
+    );
+  }
+  if (failed) {
+    return (
+      <p className="muted" style={{ fontSize: '.85em', margin: 0 }}>
+        Couldn&rsquo;t pull the full article — click the link below to read on the publisher&rsquo;s site.
+      </p>
+    );
+  }
+  return null;
 }
 
 // Render one disease.sh snapshot panel — Global / US / CA, in that order.
