@@ -2726,6 +2726,38 @@ button.econ-index.clickable.active {
 .sev-high     { color: #e34234; }
 .sev-unknown  { color: var(--text-muted); }
 
+/* ---- Housing popup ------------------------------------------------ */
+.housing-panel {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 4px;
+  background: var(--bg-elev-2, transparent);
+}
+.housing-head {
+  display: flex; gap: 10px; align-items: baseline;
+  justify-content: space-between; margin-bottom: 6px;
+}
+.housing-headline {
+  display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap;
+}
+.housing-big {
+  font-size: 1.6em; font-weight: 700;
+  font-family: var(--mono, monospace);
+  color: var(--accent);
+}
+.housing-delta {
+  font-size: .85em; font-family: var(--mono, monospace);
+  margin-left: 6px;
+}
+.housing-delta.up   { color: #e34234; }
+.housing-delta.down { color: var(--accent-green, #4caf50); }
+.housing-spark {
+  margin-top: 8px;
+  display: flex; align-items: center; gap: 10px;
+  color: var(--accent);
+}
+
 /* Rich per-train detail panel (origin→dest, current position, progress) */
 .train-detail-panel {
   margin-top: 8px;

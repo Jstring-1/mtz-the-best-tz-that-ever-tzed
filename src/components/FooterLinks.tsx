@@ -154,7 +154,8 @@ function SourcesBody() {
         <li><strong>Congress.gov API</strong> (Library of Congress) — federal bills + sponsor/cosponsor info.</li>
         <li><strong>OpenStates</strong> (Plural Policy) — California legislature data.</li>
         <li><strong>USAspending.gov</strong> — federal grants + contracts to Contra Costa.</li>
-        <li><strong>U.S. Census Bureau ACS</strong> — Contra Costa median income + home value.</li>
+        <li><strong>U.S. Census Bureau ACS</strong> — Contra Costa median income + home value, plus ZIP 94553 housing detail.</li>
+        <li><strong>Zillow Research (ZORI)</strong> — typical-rent index for Martinez via the public CSV exports at <code>files.zillowstatic.com/research/</code>.</li>
         <li><strong>Bureau of Labor Statistics (BLS)</strong> — LAUS unemployment + CPI for U.S. / CA / Contra Costa / Bay Area MSA.</li>
         <li><strong>U.S. Energy Information Administration (EIA)</strong> — California weekly retail gas series.</li>
         <li><strong>FBI Crime Data Explorer</strong> — Martinez agency-level crime stats.</li>

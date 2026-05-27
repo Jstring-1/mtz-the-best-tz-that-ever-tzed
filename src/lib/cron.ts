@@ -427,6 +427,11 @@ async function cchHealth(json: Record<string, unknown>) {
   json['cch_health'] = await fetchCch();
 }
 
+async function housing(json: Record<string, unknown>) {
+  const { fetchHousing } = await import('./housing');
+  json['housing'] = await fetchHousing();
+}
+
 // Amtrak MTZ train status — scraped from railrat.net (hobby site that
 // pulls Amtrak's Track Your Train Map). 15m cadence is gentle on the
 // upstream and plenty fresh for status that updates over many minutes.
@@ -1126,6 +1131,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
       safe('reps_data',     () => repsData(json),         ok, errors, timings),
       safe('crime_data',    () => crimeData(json),        ok, errors, timings),
       safe('cch_health',    () => cchHealth(json),        ok, errors, timings),
+      safe('housing',       () => housing(json),          ok, errors, timings),
     ]);
   }
 

@@ -23,6 +23,8 @@ import CchDetail from './CchDetail';
 import type { CchPayload } from '@/lib/cch';
 import TrainsDetail from './TrainsDetail';
 import type { TrainsPayload } from '@/lib/trains';
+import HousingDetail from './HousingDetail';
+import type { HousingPayload } from '@/lib/housing';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
 // civic indicators (unemployment, gas, funding total, rep, crime,
@@ -40,8 +42,9 @@ export default async function CivicStrip() {
   let outbreaks: OutbreaksPayload | null = null;
   let cch: CchPayload | null = null;
   let trains: TrainsPayload | null = null;
+  let housing: HousingPayload | null = null;
   try {
-    [payload, council, national, stocks, birds, quakes, places, outbreaks, cch, trains] = await Promise.all([
+    [payload, council, national, stocks, birds, quakes, places, outbreaks, cch, trains, housing] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
@@ -59,6 +62,8 @@ export default async function CivicStrip() {
       getJson<CchPayload>('cch_health').catch(() => null),
       // Amtrak MTZ train arrivals + departures (railrat.net scrape).
       getJson<TrainsPayload>('trains_mtz').catch(() => null),
+      // Martinez housing — Zillow ZORI rent + Census ACS ZIP 94553.
+      getJson<HousingPayload>('housing').catch(() => null),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -140,6 +145,11 @@ export default async function CivicStrip() {
   const trainsTooltip = trains
     ? `Amtrak MTZ — ${trains.arriving.length} arriving, ${trains.departed.length} departed${trains.lastUpdated ? ` (upstream ${trains.lastUpdated})` : ''}.`
     : 'Amtrak — Martinez arrivals & departures. Cache empty. Run /admin → 15m.';
+  // Martinez housing — Zillow ZORI rent + Census ACS ZIP 94553.
+  const housingLabelHtml = `<span class="civic-strip-val peru">Housing</span>`;
+  const housingTooltip = housing?.zillow?.currentRent
+    ? `Martinez typical rent: $${Math.round(housing.zillow.currentRent).toLocaleString()}/mo (Zillow ZORI). Click for more.`
+    : 'Martinez housing — rent index + median home value. Cache empty. Run /admin → 1d.';
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -187,6 +197,7 @@ export default async function CivicStrip() {
       <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
       {crimeChip()}
       <CchDetail     tooltip={cchTooltip}     label={cchLabelHtml}     data={cch} />
+      <HousingDetail tooltip={housingTooltip} label={housingLabelHtml} data={housing} />
       <EconomyDetail
         tooltip={economyTooltip}
         label={economyLabelHtml}
