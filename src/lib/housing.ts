@@ -221,7 +221,11 @@ async function fetchCensus(): Promise<{ data: HousingPayload['census']; diag: st
     };
   }
   if (attempts.length) console.warn(`[housing] Census ACS all vintages failed:\n  ${attempts.join('\n  ')}`);
-  return { data: null, diag: attempts[0] ?? 'no attempts made' };
+  // Join all attempts so the UI shows every vintage's failure mode,
+  // not just the first one (e.g. 2025: 404 expected | 2024: real error
+  // | 2023: another). The first failure alone is rarely the actual
+  // cause — the most recent vintage typically isn't published yet.
+  return { data: null, diag: attempts.length ? attempts.join(' | ') : 'no attempts made' };
 }
 
 interface RawResponse { ok: boolean; status: number; body: string }
