@@ -21,7 +21,9 @@ const TAB_LABEL: Record<Tab, string> = {
   who: 'WHO',
 };
 const SOURCE_LABEL: Record<string, string> = {
-  NORS: 'CDC NORS',
+  // WHO DON rows still use the "WHO" category. CDC outbreak rows use
+  // the pathogen name as category (Listeria / Salmonella / etc.) and
+  // display it as-is — no remap needed.
   WHO: 'WHO DON',
 };
 
@@ -40,7 +42,11 @@ function dedupKey(it: OutbreakItem): string {
 
 // Civic-strip Outbreaks popup. Tabs across four data layers:
 //   Snapshot — disease.sh (global / US / CA COVID counts)
-//   Food     — CDC NORS recent foodborne outbreaks
+//   Food     — current CDC outbreak investigations across Listeria,
+//              Salmonella, E. coli, Campylobacter, Hepatitis A
+//              (scraped from each pathogen's /outbreaks/ page —
+//              orders of magnitude fresher than the legacy NORS feed
+//              which has a 2-year publication lag)
 //   Flu      — Delphi Epidata fluview (ILI percent for US + CA)
 //   WHO      — WHO Disease Outbreak News RSS items
 // Each tab gracefully handles "no data" so a single failing source
@@ -50,13 +56,16 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
   const [tab, setTab] = useUrlEnum<Tab>('otab', TABS, 'all');
   const [openItem, setOpenItem] = useState<string | null>(null);
 
-  // Merge NORS + WHO DON into a single deduplicated chronological event
-  // list. Snapshot + Flu are aggregate stats, not events, so they're
-  // intentionally NOT merged in — they show in their own tabs.
+  // Merge CDC outbreak pages + WHO DON into a single deduplicated
+  // chronological event list. Snapshot + Flu are aggregate stats, not
+  // events, so they're intentionally NOT merged in — own tabs only.
   const allEvents = useMemo<OutbreakItem[]>(() => {
     if (!data) return [];
     const merged: OutbreakItem[] = [
-      ...data.cdcFood.map((r) => ({ ...r, category: r.category || 'NORS' })),
+      // CDC pathogen scrape already sets category to the pathogen name
+      // (Listeria / Salmonella / E. coli / Campylobacter / Hepatitis A).
+      // Default to 'CDC' for any stray legacy rows missing a category.
+      ...data.cdcFood.map((r) => ({ ...r, category: r.category || 'CDC' })),
       ...data.whoDon.map((r) => ({ ...r, category: r.category || 'WHO' })),
     ];
     // Dedupe — keep whichever variant has the longer body (more detail).
@@ -96,7 +105,7 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
             <p className="muted bills-legend" style={{ margin: 0 }}>
               Layered surveillance from{' '}
               <a href="https://disease.sh" target="_blank" rel="noopener">disease.sh</a>{' '}(snapshot),{' '}
-              <a href="https://data.cdc.gov/" target="_blank" rel="noopener">CDC Open Data</a>{' '}(food),{' '}
+              <a href="https://www.cdc.gov/foodborne-outbreaks/outbreaks/" target="_blank" rel="noopener">CDC outbreak investigations</a>{' '}(food),{' '}
               <a href="https://delphi.cmu.edu/epidata/" target="_blank" rel="noopener">Delphi Epidata</a>{' '}(flu),{' '}
               and{' '}<a href="https://www.who.int/emergencies/disease-outbreak-news" target="_blank" rel="noopener">WHO DON</a>{' '}(early warnings).
             </p>
@@ -120,7 +129,7 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
             {tab === 'all' && (
               <section>
                 {allEvents.length === 0 ? (
-                  <p className="muted">No event records cached — CDC NORS + WHO DON were both empty.</p>
+                  <p className="muted">No event records cached — CDC outbreak pages + WHO DON were both empty.</p>
                 ) : (
                   <ul className="recall-list">
                     {allEvents.map((row) => {
@@ -144,7 +153,7 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                           </button>
                           {expanded && (
                             <div className="recall-reason">
-                              {row.category === 'WHO' && row.url ? (
+                              {row.url ? (
                                 <ArticleBody url={row.url} fallback={row.body} />
                               ) : (
                                 row.body && <p style={{ margin: 0 }}>{row.body}</p>
@@ -152,7 +161,7 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                               {row.url && (
                                 <div className="popup-ext-links">
                                   <a href={row.url} target="_blank" rel="noopener">
-                                    {row.category === 'WHO' ? 'Full DON post →' : 'CDC NORS dashboard →'}
+                                    {row.category === 'WHO' ? 'Full DON post →' : 'Full CDC outbreak page →'}
                                   </a>
                                 </div>
                               )}
@@ -164,9 +173,11 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                   </ul>
                 )}
                 <p className="muted" style={{ fontSize: '.72em', marginTop: 8 }}>
-                  Unified, deduplicated event feed combining CDC NORS foodborne
-                  records and WHO Disease Outbreak News. Snapshot + Flu tabs
-                  carry aggregate stats and don&rsquo;t merge in here.
+                  Unified, deduplicated event feed combining current CDC
+                  outbreak investigations (Listeria / Salmonella / E. coli /
+                  Campylobacter / Hepatitis A) and WHO Disease Outbreak News.
+                  Snapshot + Flu tabs carry aggregate stats and don&rsquo;t
+                  merge in here.
                 </p>
               </section>
             )}
@@ -189,7 +200,7 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
             {tab === 'food' && (
               <section>
                 {data.cdcFood.length === 0 ? (
-                  <p className="muted">No CDC NORS rows cached.</p>
+                  <p className="muted">No CDC outbreak rows cached.</p>
                 ) : (
                   <ul className="recall-list">
                     {data.cdcFood.map((row) => {
@@ -203,23 +214,24 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                           >
                             <span className="recall-title">{row.title}</span>
                             <span className="meta">
-                              {row.region && <span className="recall-src">{row.region}</span>}
+                              {row.category && <span className="recall-src">{row.category}</span>}
                               {row.date && <span> · {row.date}</span>}
-                              {row.category && <span> · {row.category}</span>}
                             </span>
                           </button>
                           {expanded && (
                             <div className="recall-reason">
-                              {row.body && <p style={{ margin: 0 }}>{row.body}</p>}
+                              {row.url ? (
+                                <ArticleBody url={row.url} fallback={row.body} />
+                              ) : (
+                                row.body && <p style={{ margin: 0 }}>{row.body}</p>
+                              )}
                               {row.url && (
                                 <div className="popup-ext-links">
-                                  <a href={row.url} target="_blank" rel="noopener">CDC NORS dashboard →</a>
+                                  <a href={row.url} target="_blank" rel="noopener">Full CDC outbreak page →</a>
                                 </div>
                               )}
                             </div>
                           )}
-                          {/* NORS rows all share the same dashboard URL,
-                              so article extraction wouldn't help. */}
                         </li>
                       );
                     })}

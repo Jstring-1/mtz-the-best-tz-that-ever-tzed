@@ -53,7 +53,7 @@ export default async function CivicStrip() {
       listRecentQuakes(40).catch(() => []),
       // Foursquare-fed places table, nearest-first.
       getPlaces().catch(() => []),
-      // Disease surveillance bundle (disease.sh / CDC NORS / Delphi / WHO DON).
+      // Disease surveillance bundle (disease.sh / CDC outbreak pages / Delphi / WHO DON).
       getJson<OutbreaksPayload>('outbreaks').catch(() => null),
       // Contra Costa Health — CCRMC scorecards + CCHS reference links.
       getJson<CchPayload>('cch_health').catch(() => null),
@@ -128,7 +128,7 @@ export default async function CivicStrip() {
   // Disease surveillance — disease.sh + CDC + Delphi + WHO DON layered.
   const outbreaksLabelHtml = `<span class="civic-strip-val red">Outbreaks</span>`;
   const outbreaksTooltip = outbreaks
-    ? `Disease surveillance: ${outbreaks.cdcFood.length} CDC NORS rows, ${outbreaks.flu.length} flu signals, ${outbreaks.whoDon.length} WHO DON items.`
+    ? `Disease surveillance: ${outbreaks.cdcFood.length} CDC outbreaks, ${outbreaks.flu.length} flu signals, ${outbreaks.whoDon.length} WHO DON items.`
     : 'Outbreaks — cache empty. Run /admin → 4h.';
   // Contra Costa Health — county hospital scorecards + CCHS docs.
   const cchLabelHtml = `<span class="civic-strip-val green">CCH</span>`;

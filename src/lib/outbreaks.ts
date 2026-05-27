@@ -2,8 +2,13 @@
 // `outbreaks` cache key, populated by the 4h cron bucket:
 //
 //   disease.sh   — global / US / California COVID snapshot (keyless)
-//   data.cdc.gov — CDC Open Data via Socrata; we pull NORS foodborne
-//                  outbreaks (keyless; optional X-App-Token bumps quota)
+//   CDC outbreak pages — HTML scrape of /listeria/outbreaks/,
+//                  /salmonella/outbreaks/, /e-coli/outbreaks/,
+//                  /campylobacter/outbreaks/, /hepatitis-a/outbreaks/.
+//                  Each pathogen page lists current+recent investigations
+//                  with title / description / publication date / URL.
+//                  Replaces NORS Socrata, which had a 2-year publication
+//                  lag (j5jx-3hes retired, 5xkq-dg7x still ~2yr behind).
 //   Delphi Epidata API — CMU's flu/ILI surveillance for CA + national
 //                  (keyless; optional api_key bumps quota)
 //   WHO DON RSS  — Disease Outbreak News, the WHO's early-warning feed
@@ -155,59 +160,100 @@ async function fetchDiseaseSh(): Promise<{
   };
 }
 
-// ---- 2. CDC Open Data — NORS foodborne outbreaks ---------------------
+// ---- 2. CDC pathogen pages — current foodborne outbreaks --------------
 
-interface NorsRow {
-  year?: string;
-  month?: string;
-  state?: string;
-  primary_mode?: string;
-  etiology?: string;
-  illnesses?: string;
-  hospitalizations?: string;
-  deaths?: string;
-  food_vehicle?: string;
-  setting?: string;
+const CDC_PATHOGENS: Array<{ slug: string; label: string }> = [
+  { slug: 'listeria',      label: 'Listeria' },
+  { slug: 'salmonella',    label: 'Salmonella' },
+  { slug: 'e-coli',        label: 'E. coli' },
+  { slug: 'campylobacter', label: 'Campylobacter' },
+  { slug: 'hepatitis-a',   label: 'Hepatitis A' },
+];
+
+// Each pathogen's `/outbreaks/index.html` page lists current and recent
+// outbreak investigations as `.dfe-curated-link` blocks containing the
+// outbreak page link, a short description, and a `<time>` with the CDC
+// publication date. Pages are updated within days of each investigation
+// starting or evolving — orders of magnitude fresher than NORS, which
+// has a ~2-year publication lag and is no good for a "current" view.
+//
+// We scrape all five pathogens in parallel, merge + sort newest-first,
+// and cap to 50 rows so the popup stays readable.
+async function fetchCdcFood(): Promise<OutbreakItem[]> {
+  const results = await Promise.allSettled(
+    CDC_PATHOGENS.map((p) => fetchPathogenOutbreaks(p.slug, p.label)),
+  );
+  const merged: OutbreakItem[] = [];
+  for (const r of results) if (r.status === 'fulfilled') merged.push(...r.value);
+  // Sort newest first by ISO date string (parse failure → empty string →
+  // sinks to bottom).
+  merged.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+  return merged.slice(0, 50);
 }
 
-// NORS dataset on data.cdc.gov. CDC retired the foodborne-only dataset
-// `j5jx-3hes` and replaced it with the broader `5xkq-dg7x` ("NORS")
-// which includes all transmission modes (foodborne + person-to-person
-// + waterborne + animal contact + environmental + unknown). We sort by
-// year+month desc and keep the 25 most recent.
-//
-// Publication lag is ~2 years — the newest rows are typically Dec 2023
-// as of this comment. That's normal; NORS is a slow surveillance feed,
-// not a real-time signal.
-async function fetchCdcFood(): Promise<OutbreakItem[]> {
-  const token = process.env.CDC_APP_TOKEN ?? '';
-  const url = 'https://data.cdc.gov/resource/5xkq-dg7x.json'
-    + '?$order=year DESC,month DESC&$limit=25';
-  const init: RequestInit = token ? { headers: { 'X-App-Token': token } } : {};
-  const rows = await safeJson<NorsRow[]>(url, 12000, init);
-  if (!Array.isArray(rows)) return [];
-  return rows.map((r, i): OutbreakItem => {
-    const etiology = (r.etiology ?? '').trim() || 'Unknown agent';
-    const food = (r.food_vehicle ?? '').trim();
-    const setting = (r.setting ?? '').trim();
-    const ill = r.illnesses ? Number(r.illnesses) : 0;
-    const hosp = r.hospitalizations ? Number(r.hospitalizations) : 0;
-    const deaths = r.deaths ? Number(r.deaths) : 0;
-    const counts = [
-      ill > 0 ? `${ill} ill` : '',
-      hosp > 0 ? `${hosp} hosp.` : '',
-      deaths > 0 ? `${deaths} died` : '',
-    ].filter(Boolean).join(' · ');
-    return {
-      id: `nors-${r.year ?? '?'}-${r.month ?? '?'}-${i}`,
-      title: food ? `${etiology} — ${food}` : etiology,
-      category: 'NORS',
-      date: r.year ? (r.month ? `${r.year}-${String(r.month).padStart(2, '0')}` : r.year) : undefined,
-      region: r.state,
-      body: [counts, setting && `Setting: ${setting}`].filter(Boolean).join(' — ') || undefined,
-      url: 'https://wwwn.cdc.gov/norsdashboard/',
-    };
-  });
+async function fetchPathogenOutbreaks(slug: string, label: string): Promise<OutbreakItem[]> {
+  const url = `https://www.cdc.gov/${slug}/outbreaks/index.html`;
+  const html = await safeText(url);
+  if (!html) return [];
+  const out: OutbreakItem[] = [];
+  // Each curated link block:
+  //   <div class="dfe-curated-link …">
+  //     …
+  //     <a class="cdc-block-link" href="/<slug>/outbreaks/<event>/index.html">TITLE</a>
+  //     <div class="dfe-curated-link__desc">DESC</div>
+  //     …
+  //     <time class="dfe-curated-link__date">Apr 10, 2024</time>
+  //   </div>
+  // We grab from the opening `dfe-curated-link` div up to the matching
+  // `</time>` — there's exactly one `<time>` per block.
+  const blockRe = /<div class="dfe-curated-link[^"]*"[\s\S]*?<\/time>/g;
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(html)) !== null) {
+    const block = m[0];
+    const linkM = block.match(/<a class="cdc-block-link" href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+    if (!linkM) continue;
+    const href = linkM[1];
+    // Skip self-links back to the index (e.g. "View all outbreaks").
+    if (!href.includes('/outbreaks/') || href.endsWith('/outbreaks/index.html')) continue;
+    const title = decodeBasic(stripTagsLocal(linkM[2])).replace(/\s+/g, ' ').trim();
+    if (!title) continue;
+    const descM = block.match(/<div class="dfe-curated-link__desc">([\s\S]*?)<\/div>/);
+    const desc = descM
+      ? decodeBasic(stripTagsLocal(descM[1])).replace(/\s+/g, ' ').trim() || undefined
+      : undefined;
+    const timeM = block.match(/<time[^>]*class="dfe-curated-link__date"[^>]*>([^<]+)<\/time>/);
+    const rawDate = timeM ? timeM[1].trim() : '';
+    const iso = parseCdcDate(rawDate);
+    // Slug from URL serves as a stable id within this pathogen.
+    const eventSlug = href.replace(/\/index\.html$/, '').split('/').filter(Boolean).slice(-1)[0];
+    out.push({
+      id: `cdc-${slug}-${eventSlug ?? Math.random().toString(36).slice(2)}`,
+      title,
+      category: label,
+      date: iso ?? rawDate ?? undefined,
+      body: desc,
+      url: `https://www.cdc.gov${href}`,
+    });
+  }
+  return out;
+}
+
+function parseCdcDate(s: string): string | null {
+  if (!s) return null;
+  const ms = Date.parse(s);
+  if (Number.isNaN(ms)) return null;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+function stripTagsLocal(s: string): string {
+  return s.replace(/<[^>]+>/g, '');
+}
+
+function decodeBasic(s: string): string {
+  return s
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ');
 }
 
 // ---- 3. Delphi Epidata API — fluview ILI -----------------------------

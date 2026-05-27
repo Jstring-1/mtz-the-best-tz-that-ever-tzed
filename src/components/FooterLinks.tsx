@@ -167,7 +167,7 @@ function SourcesBody() {
         <li><strong>FEMA</strong> — active disaster declarations.</li>
         <li><strong>NASA EONET</strong> — open natural events (wildfires, storms, volcanoes).</li>
         <li><strong>disease.sh</strong> — global / US / California COVID snapshot.</li>
-        <li><strong>CDC Open Data</strong> (data.cdc.gov) — NORS foodborne outbreaks via Socrata.</li>
+        <li><strong>CDC Outbreak Investigations</strong> — current Listeria / Salmonella / E. coli / Campylobacter / Hepatitis A investigations, scraped from each pathogen&rsquo;s outbreak landing page on cdc.gov.</li>
         <li><strong>Delphi Epidata API</strong> (Carnegie Mellon) — fluview ILI surveillance.</li>
         <li><strong>WHO Disease Outbreak News</strong> — early warnings RSS.</li>
         <li><strong>FDA &amp; CPSC</strong> — food / drug / device / consumer-product recalls.</li>
