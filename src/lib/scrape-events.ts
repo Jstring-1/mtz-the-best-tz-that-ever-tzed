@@ -852,6 +852,162 @@ async function scrapeMartinezChamber(): Promise<LocalEvent[]> {
   return out;
 }
 
+// ----- Contra Costa County Legistar — Board / committee meetings -------
+//
+// contra-costa.legistar.com/Calendar.aspx is the authoritative source
+// for Contra Costa County Board of Supervisors, committee, and advisory
+// body meetings. Legistar's public iCal/RSS endpoints are 410'd or
+// require auth, so we scrape the HTML calendar page. Each meeting row
+// is a `<tr class="rgRow|rgAltRow">` with stable ASP.NET-generated cell
+// IDs that survive minor template changes.
+
+async function scrapeContraCostaLegistar(): Promise<LocalEvent[]> {
+  const url = 'https://contra-costa.legistar.com/Calendar.aspx';
+  const html = await safeFetch(url);
+  if (!html) { console.warn('[cclegistar] fetch returned null'); return []; }
+
+  // Split out each meeting row. Both grids on the page (upcoming +
+  // calendar) share the same rgRow/rgAltRow structure.
+  const rowRe = /<tr\s+class="(?:rgRow|rgAltRow)"[\s\S]*?<\/tr>/gi;
+  const rows = html.match(rowRe) ?? [];
+  if (rows.length === 0) {
+    console.warn('[cclegistar] no rows matched');
+    return [];
+  }
+
+  const out: LocalEvent[] = [];
+  for (const row of rows) {
+    const event = parseLegistarRow(row);
+    if (event) out.push(event);
+  }
+  if (process.env.MTZ_DEBUG === '1') {
+    console.log(`[cclegistar] rows=${rows.length}, parsed=${out.length}`);
+  }
+  return out;
+}
+
+function parseLegistarRow(row: string): LocalEvent | null {
+  // Body name from `<a id="...hypBody">TEXT</a>`
+  const bodyM = row.match(/<a\s+id="[^"]*hypBody"[^>]*>([\s\S]*?)<\/a>/i);
+  if (!bodyM) return null;
+  const body = decodeEntities(stripHtml(bodyM[1])).trim();
+  if (!body) return null;
+
+  // Date from `<td class="rgSorted">M/D/YYYY</td>`
+  const dateM = row.match(/<td\s+class="rgSorted">\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*<\/td>/i);
+  if (!dateM) return null;
+
+  // Time from `<span id="...lblTime">10:00 AM</span>`
+  const timeM = row.match(/<span\s+id="[^"]*lblTime"[^>]*>\s*([0-9:]+\s*(?:AM|PM))\s*<\/span>/i);
+  const startEpoch = pacificDateTimeToEpoch(dateM[1], timeM ? timeM[1] : '12:00 PM');
+  if (startEpoch == null) return null;
+
+  // Meeting detail URL (when public — otherwise the link has class
+  // `meeting_NotViewable` and no href).
+  const detailM = row.match(/<a\s+id="[^"]*hypMeetingDetail"[^>]*\s+href="([^"]+)"/i);
+  // Agenda PDF URL (when available — otherwise class `meetingAgendaNotAvailbleLink`).
+  const agendaM = row.match(/<a\s+id="[^"]*hypAgenda"[^>]*\s+href="([^"]+)"/i);
+  // Extract meeting ID from any of the available URLs for a stable row id.
+  const idFromUrl = [detailM?.[1], agendaM?.[1]]
+    .map((u) => u && /ID=(\d+)/.exec(u)?.[1])
+    .find(Boolean);
+
+  // Location cell — anchored on the END of the time cell so we don't
+  // accidentally capture the iCal-export cell that precedes it. Pull
+  // everything between `</span></td>` (close of time) and the meeting-
+  // detail link cell, then clean up the embedded Zoom/dial-in HTML.
+  const locM = row.match(/<span\s+id="[^"]*lblTime"[^>]*>[^<]*<\/span>\s*<\/td>\s*<td>([\s\S]*?)<\/td>\s*<td>\s*<a\s+id="[^"]*hypMeetingDetail"/i);
+  const locationRaw = locM ? locM[1] : '';
+  const venue = cleanLegistarLocation(locationRaw);
+
+  // Build the meeting detail URL (relative → absolute).
+  const detailHref = detailM?.[1] ?? '';
+  const fullUrl = detailHref
+    ? `https://contra-costa.legistar.com/${detailHref.replace(/&amp;/g, '&')}`
+    : 'https://contra-costa.legistar.com/Calendar.aspx';
+  const agendaUrl = agendaM?.[1]
+    ? `https://contra-costa.legistar.com/${agendaM[1].replace(/&amp;/g, '&')}`
+    : null;
+
+  const idSeed = idFromUrl ?? slugForId(`${body}-${dateM[1]}-${timeM?.[1] ?? ''}`);
+  const description = agendaUrl
+    ? `Agenda available — ${agendaUrl}`
+    : 'No agenda posted yet.';
+
+  return {
+    id: `cclegistar-${idSeed}`,
+    source: 'cclegistar',
+    source_label: 'Contra Costa County (Legistar)',
+    title: body,
+    start_at: startEpoch,
+    venue,
+    url: fullUrl,
+    description,
+  };
+}
+
+// Strip Legistar's location cell down to a readable single line — drop
+// embedded Zoom URLs, "Dial: 855-…" lines, and the trailing italic
+// notes, but keep the in-person address.
+function cleanLegistarLocation(raw: string): string {
+  let s = stripHtml(raw);
+  s = decodeEntities(s);
+  // Cut at the first occurrence of any common phone/zoom marker.
+  // No LEADING `\b` on Zoom variants — Legistar often glues "Zoom" onto
+  // an address (e.g. "…CA 94513Zoom link:") with no whitespace, so a
+  // leading word-boundary anchor never fires. Trailing `\b` is fine.
+  const cutMarkers = [
+    /Zoom\b/i,
+    /Dial[:]?\s*1[-.\s]?\d/i,
+    /\bMeeting ID\b/i,
+    /\bcall in\b/i,
+    /https?:\/\//i,
+  ];
+  let cutAt = s.length;
+  for (const m of cutMarkers) {
+    const found = s.search(m);
+    if (found >= 0 && found < cutAt) cutAt = found;
+  }
+  s = s.slice(0, cutAt).replace(/[\s|]+$/, '').trim();
+  // Collapse whitespace.
+  s = s.replace(/\s+/g, ' ');
+  return s || 'Contra Costa County';
+}
+
+// Combine a Pacific-local date + time into a UTC unix-epoch second.
+// Handles PT/PDT automatically by asking Intl what Pacific reads as
+// when we pretend the wall-clock is UTC, then shifting by the diff.
+function pacificDateTimeToEpoch(dateStr: string, timeStr: string): number | null {
+  const dm = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!dm) return null;
+  const month = Number(dm[1]);
+  const day   = Number(dm[2]);
+  const year  = Number(dm[3]);
+  const tm = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!tm) return null;
+  let hour = Number(tm[1]) % 12;
+  if (tm[3].toUpperCase() === 'PM') hour += 12;
+  const minute = Number(tm[2]);
+  // Pretend the wall-clock is UTC, then find Pacific's reading of that
+  // instant, then shift by the difference to land on the real UTC.
+  const naive = Date.UTC(year, month - 1, day, hour, minute);
+  const ptFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const parts = ptFmt.formatToParts(new Date(naive));
+  const ptYr = Number(parts.find((p) => p.type === 'year')?.value);
+  const ptMo = Number(parts.find((p) => p.type === 'month')?.value);
+  const ptDa = Number(parts.find((p) => p.type === 'day')?.value);
+  const ptHr = Number(parts.find((p) => p.type === 'hour')?.value);
+  const ptMi = Number(parts.find((p) => p.type === 'minute')?.value);
+  if (!Number.isFinite(ptYr)) return null;
+  const ptUtc = Date.UTC(ptYr, ptMo - 1, ptDa, ptHr, ptMi);
+  const offsetMs = ptUtc - naive;
+  return Math.floor((naive - offsetMs) / 1000);
+}
+
 // ----- public entry ----------------------------------------------------
 
 const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
@@ -868,6 +1024,7 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
   ['farmers',        farmersMarketRecurring],
   ['martinezchamber', scrapeMartinezChamber],
   ['contracosta',    scrapeContraCosta],
+  ['cclegistar',     scrapeContraCostaLegistar],
 ];
 
 export async function scrapeAllLocalEvents(): Promise<LocalEvent[]> {

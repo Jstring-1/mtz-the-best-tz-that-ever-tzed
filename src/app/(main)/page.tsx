@@ -57,7 +57,7 @@ export default async function MainPage() {
     description: e.description ?? undefined,
     image: e.image ?? undefined,
     source: e.source === 'ticketmaster' ? 'ticketmaster'
-           : e.source === 'contracosta'  ? 'municipal'
+           : (e.source === 'contracosta' || e.source === 'cclegistar') ? 'municipal'
            : 'local',
     source_label: e.source_label,
     segment: e.segment ?? undefined,
