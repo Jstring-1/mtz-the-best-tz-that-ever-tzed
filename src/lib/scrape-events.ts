@@ -114,7 +114,14 @@ async function safeFetch(url: string, init?: RequestInit): Promise<string | null
     }
     return await r.text();
   } catch (e) {
-    console.warn(`[scrape] ${url} threw:`, e instanceof Error ? e.message : e);
+    // Node's `fetch failed` swallows the actual socket-layer reason in
+    // `e.cause`. Drag it out so we can tell TLS errors from DNS errors
+    // from ECONNRESET vs a real bot-block.
+    const msg = e instanceof Error ? e.message : String(e);
+    const cause = e instanceof Error && 'cause' in e && e.cause
+      ? ` (cause: ${(e.cause as Error)?.message ?? String(e.cause)})`
+      : '';
+    console.warn(`[scrape] ${url} threw: ${msg}${cause}`);
     return null;
   }
 }
@@ -863,8 +870,26 @@ async function scrapeMartinezChamber(): Promise<LocalEvent[]> {
 
 async function scrapeContraCostaLegistar(): Promise<LocalEvent[]> {
   const url = 'https://contra-costa.legistar.com/Calendar.aspx';
-  const html = await safeFetch(url);
-  if (!html) { console.warn('[cclegistar] fetch returned null'); return []; }
+  // Legistar sits behind Granicus's WAF. From Railway's outbound IP
+  // the default safeFetch headers come back as a bare "fetch failed"
+  // (likely Akamai bot block — TLS fingerprint plus header sniff).
+  // Try a richer browser-like header set with a same-site referer; if
+  // that still 0s out, the upstream is genuinely refusing Railway and
+  // we'd need a proxy or to drop the scraper.
+  const html = await safeFetch(url, {
+    headers: {
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Referer': 'https://contra-costa.legistar.com/',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-User': '?1',
+      'Upgrade-Insecure-Requests': '1',
+    },
+  });
+  if (!html) { console.warn('[cclegistar] fetch returned null (likely WAF blocking Railway outbound IP)'); return []; }
 
   // Split out each meeting row. Both grids on the page (upcoming +
   // calendar) share the same rgRow/rgAltRow structure.
