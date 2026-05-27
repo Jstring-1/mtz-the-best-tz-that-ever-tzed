@@ -29,15 +29,21 @@ jobs:
         run: |
           set -euo pipefail
           # GitHub runners can reach Granicus where Railway can't.
-          # Browser-like UA helps glide past lighter bot checks.
-          curl -sSfL --max-time 45 \
+          # Browser-like UA helps glide past lighter bot checks. -w
+          # prints HTTP status separately so we know which step failed.
+          HTTP=$(curl -sSL --max-time 45 -o /tmp/cc-cal.html -w '%{http_code}' \
             -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
             -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
             -H "Accept-Language: en-US,en;q=0.9" \
             -H "Referer: https://contra-costa.legistar.com/" \
-            "$LEGISTAR_URL" \
-            -o /tmp/cc-cal.html
-          echo "Downloaded $(wc -c < /tmp/cc-cal.html) bytes"
+            "$LEGISTAR_URL")
+          SIZE=$(wc -c < /tmp/cc-cal.html)
+          echo "Legistar fetch: HTTP $HTTP, $SIZE bytes"
+          if [ "$HTTP" != "200" ] || [ "$SIZE" -lt 1000 ]; then
+            echo "::error::Legistar fetch failed — HTTP $HTTP, $SIZE bytes"
+            head -c 500 /tmp/cc-cal.html
+            exit 1
+          fi
       - name: POST to ingest endpoint
         env:
           INGEST_TOKEN: ${{ secrets.LEGISTAR_INGEST_TOKEN }}
@@ -47,12 +53,20 @@ jobs:
             echo "::error::LEGISTAR_INGEST_TOKEN repo secret not set"
             exit 1
           fi
-          # -f makes curl exit non-zero on 4xx/5xx so the action fails
-          # visibly. The endpoint returns JSON with the parsed count.
-          curl -sSf -X POST \
-            --max-time 30 \
+          # Capture status + body separately so we can show the
+          # endpoint's response (and its specific error code) when the
+          # POST fails — 401 means token mismatch, 503 means Railway
+          # env var not set, 422 means parser found 0 events, etc.
+          HTTP=$(curl -sS -X POST --max-time 30 \
+            -o /tmp/ingest-response.txt -w '%{http_code}' \
             -H "Authorization: Bearer $INGEST_TOKEN" \
             -H "Content-Type: text/html" \
             --data-binary @/tmp/cc-cal.html \
-            "$SITE/api/legistar-ingest"
+            "$SITE/api/legistar-ingest")
+          echo "Ingest endpoint: HTTP $HTTP"
+          cat /tmp/ingest-response.txt
           echo
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::Ingest endpoint returned HTTP $HTTP"
+            exit 1
+          fi
