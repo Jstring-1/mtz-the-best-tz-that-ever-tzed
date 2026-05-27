@@ -1030,14 +1030,25 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
 export async function scrapeAllLocalEvents(): Promise<LocalEvent[]> {
   const results = await Promise.all(
     SCRAPERS.map(async ([name, fn]) => {
-      try { return await fn(); }
+      try {
+        const out = await fn();
+        return { name, events: out };
+      }
       catch (e) {
         console.warn(`[scrape] ${name} threw:`, e instanceof Error ? e.message : e);
-        return [];
+        return { name, events: [] };
       }
     }),
   );
-  const flat = results.flat();
+  // Per-scraper count summary — always logged so we can diagnose silent
+  // empties from Railway logs (previously these were eaten by the
+  // bucket-level "ok" summary). One line, alphabetical, fast to scan.
+  const summary = results
+    .map((r) => `${r.name}=${r.events.length}`)
+    .sort()
+    .join(' ');
+  console.log(`[scrape] local_events counts: ${summary}`);
+  const flat = results.flatMap((r) => r.events);
   // Drop past events (>6h ago), dedupe by id, sort ascending by start.
   const cutoff = Math.floor(Date.now() / 1000) - 6 * 3600;
   const byId = new Map<string, LocalEvent>();
