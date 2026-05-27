@@ -11,8 +11,8 @@ import RecallsDetail from './RecallsDetail';
 import IndicatorsDetail from './IndicatorsDetail';
 import FemaDetail from './FemaDetail';
 import EonetDetail from './EonetDetail';
-import ParksDetail from './ParksDetail';
 import PlacesDetail from './PlacesDetail';
+import { MARTINEZ_PARKS } from '@/lib/parks-data';
 import CodeDetail from './CodeDetail';
 import BirdsDetail from './BirdsDetail';
 import QuakesDetail from './QuakesDetail';
@@ -104,10 +104,26 @@ export default async function CivicStrip() {
   const eonetTooltip = eonetList.length
     ? `${eonetList.length} active NASA EONET natural events — click to browse.`
     : 'NASA EONET natural events — cache empty. Run /admin → 4h.';
-  // Martinez parks — static registry (src/lib/parks-data.ts). ParksDetail
-  // pulls from it directly so we don't need to pass a `data` prop.
-  const parksLabelHtml = `<span class="civic-strip-val green">Parks</span>`;
-  const parksTooltip = 'Martinez parks — click for address and map link.';
+  // Martinez parks — static registry (src/lib/parks-data.ts). Folded
+  // into the Places list below so users see "every Martinez place"
+  // in one popup. Each park is synthesized as a PlaceRow with
+  // category "parks|City park" so the existing PlacesDetail rendering
+  // picks it up without changes.
+  const parkRowsForPlaces: PlaceRow[] = MARTINEZ_PARKS
+    .filter((p): p is typeof p & { lat: number; lng: number } =>
+      typeof p.lat === 'number' && typeof p.lng === 'number')
+    .map((p) => ({
+      fsq_id: `park-${p.id}`,
+      name: p.name,
+      addy: p.address ?? null,
+      cats: 'parks|City park',
+      dist: null,
+      // PlaceRow stores lat/lon as strings (PostgreSQL fallback shape).
+      // We pass numbers; PlacesDetail's `Number(p.lat)` coerces fine.
+      images: null,
+      lat: String(p.lat),
+      lon: String(p.lng),
+    }));
   // Martinez Municipal Code — bundled PDF, displayed in-site via iframe.
   const codeLabelHtml = `<span class="civic-strip-val gold">Code</span>`;
   const codeTooltip = 'Martinez Municipal Code (68 pages, PDF) — click to read in-site.';
@@ -121,10 +137,14 @@ export default async function CivicStrip() {
   const quakesTooltip = quakes.length
     ? `${quakes.length} significant CA earthquakes cached (USGS significant_month).`
     : 'CA earthquakes — cache empty. Run /admin → 1h.';
-  // Foursquare-cached places (restaurants, shops, landmarks).
+  // Curated places (food / retail / rec / parks) — OSM-fed + Martinez
+  // city parks folded in. Sort by name so parks intermix naturally
+  // with restaurants etc. rather than clumping by source.
+  const placesMerged: PlaceRow[] = [...places, ...parkRowsForPlaces]
+    .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
   const placesLabelHtml = `<span class="civic-strip-val peru">Places</span>`;
-  const placesTooltip = places.length
-    ? `${places.length} cached Foursquare places near Martinez — click for map + list.`
+  const placesTooltip = placesMerged.length
+    ? `${placesMerged.length} Martinez places & parks — click for map + list + park map PDFs.`
     : 'Places — cache empty. Run /admin → 12h.';
   // Disease surveillance — disease.sh + CDC + Delphi + WHO DON layered.
   const outbreaksLabelHtml = `<span class="civic-strip-val red">Outbreaks</span>`;
@@ -183,8 +203,7 @@ export default async function CivicStrip() {
   // that read better as a group than as peer chips.
   return (
     <section className="civic-strip" aria-label="Civic indicators">
-      <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
-      <PlacesDetail  tooltip={placesTooltip}  label={placesLabelHtml} data={places} />
+      <PlacesDetail  tooltip={placesTooltip}  label={placesLabelHtml} data={placesMerged} />
       <TrainsDetail  tooltip={trainsTooltip}  label={trainsLabelHtml}  data={trains} />
       <BirdsDetail   tooltip={birdsTooltip}   label={birdsLabelHtml} data={birds} />
       <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />

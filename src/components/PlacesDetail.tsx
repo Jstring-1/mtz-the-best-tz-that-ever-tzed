@@ -2,9 +2,10 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Modal from './Modal';
-import { useUrlBool } from '@/lib/useUrlState';
+import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 import PinMap, { type PinPoint } from './PinMap';
 import type { PlaceRow } from '@/lib/types';
+import { EBRPD_MAPS, PARK_EXT_LINKS } from '@/lib/park-maps-data';
 
 interface Props {
   label: string;
@@ -27,14 +28,18 @@ function shortAddr(a: string | null): string {
   return head.replace(/[,\s]+$/, '').trim();
 }
 
-// Civic-strip Places popup. Pulls from the Foursquare-fed `places`
-// table — one pin per row that has lat/lon, plus an expandable list
-// underneath. Click a pin OR a row to fly the map to it; the row
-// also expands inline with category + distance + address.
+// Civic-strip Places popup. Combines OSM-fed curated places + the
+// hand-maintained Martinez city parks registry (merged in by the
+// parent server component). Bundled EBRPD park-map PDFs are available
+// via a dropdown at the top.
+//
+// Click a pin or a row to fly the map to it; the row expands inline
+// with category + distance + address.
 export default function PlacesDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('places');
   const [openId, setOpenId] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
+  const [mapSlug, setMapSlug] = useUrlString('parkmap');
   const rowRefs = useRef<Map<string, HTMLLIElement>>(new Map());
 
   const points = useMemo<PinPoint[]>(
@@ -47,6 +52,11 @@ export default function PlacesDetail({ label, tooltip, data }: Props) {
       })
       .filter((p): p is PinPoint => p !== null),
     [data],
+  );
+
+  const focusedMap = useMemo(
+    () => (mapSlug ? EBRPD_MAPS.find((m) => m.slug === mapSlug) ?? null : null),
+    [mapSlug],
   );
 
   const onPinClick = (id: string) => {
@@ -78,6 +88,32 @@ export default function PlacesDetail({ label, tooltip, data }: Props) {
                 ariaLabel="Map of cached Martinez places"
               />
             )}
+
+            {/* Park maps & guides — bundled EBRPD PDFs surfaced via a
+                native <select> dropdown. Selection opens a nested PDF
+                modal; the URL state (?parkmap=<slug>) makes the open
+                viewer shareable. */}
+            <div className="park-maps-dropdown">
+              <label htmlFor="park-pdf-select">
+                Park maps &amp; guides:
+              </label>
+              <select
+                id="park-pdf-select"
+                value={mapSlug ?? ''}
+                onChange={(e) => setMapSlug(e.target.value || null)}
+              >
+                <option value="">— Open a PDF —</option>
+                {EBRPD_MAPS.map((m) => (
+                  <option key={m.slug} value={m.slug} title={m.note}>{m.label}</option>
+                ))}
+              </select>
+              {PARK_EXT_LINKS.map((l) => (
+                <a key={l.url} className="ftr-link" href={l.url} target="_blank" rel="noopener">
+                  {l.label} →
+                </a>
+              ))}
+            </div>
+
             <ul className="recall-list">
               {data.map((p) => {
                 const expanded = openId === p.fsq_id;
@@ -135,6 +171,27 @@ export default function PlacesDetail({ label, tooltip, data }: Props) {
           </>
         )}
       </Modal>
+
+      {focusedMap && (
+        <Modal open={true} onClose={() => setMapSlug(null)} title={focusedMap.label} size="xl">
+          <div className="park-pdf-wrap">
+            <iframe
+              key={focusedMap.file}
+              src={`${focusedMap.file}#pagemode=none`}
+              title={focusedMap.label}
+              className="park-pdf-frame"
+              loading="lazy"
+            />
+            <p className="pdf-search-hint muted">
+              Tip: click into the PDF and press <kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘</kbd>+<kbd>F</kbd> on Mac) to search.
+            </p>
+            <div className="popup-ext-links">
+              <a href={focusedMap.file} target="_blank" rel="noopener">Open PDF in new tab →</a>
+              <a href={focusedMap.file} download>Download PDF →</a>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

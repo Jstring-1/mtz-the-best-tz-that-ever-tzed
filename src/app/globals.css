@@ -2758,6 +2758,25 @@ button.econ-index.clickable.active {
   color: var(--accent);
 }
 
+/* Park-maps dropdown inside the Places popup. Compact row with a
+   native <select> + external-link anchors trailing. */
+.park-maps-dropdown {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  margin: 12px 0 14px;
+  font-size: .9em;
+}
+.park-maps-dropdown label { color: var(--text-muted); }
+.park-maps-dropdown select {
+  background: var(--bg-elev-2, var(--bg-elev));
+  color: var(--text);
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+  max-width: 100%;
+}
+.park-maps-dropdown a { font-size: .85em; }
+
 /* Rich per-train detail panel (origin→dest, current position, progress) */
 .train-detail-panel {
   margin-top: 8px;

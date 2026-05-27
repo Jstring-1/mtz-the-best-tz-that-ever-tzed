@@ -5,6 +5,7 @@ import Modal from './Modal';
 import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 import type { Park } from '@/lib/types';
 import { MARTINEZ_PARKS } from '@/lib/parks-data';
+import { EBRPD_MAPS, PARK_EXT_LINKS } from '@/lib/park-maps-data';
 import PinMap, { type PinPoint } from './PinMap';
 
 interface Props {
@@ -15,42 +16,10 @@ interface Props {
   data?: Park[];
 }
 
-// East Bay Regional Park District PDF maps — bundled in /public/img/
-// so they're served same-origin and can be embedded directly in an
-// <iframe> (no proxy needed). When a map is selected, the nested modal
-// opens with the PDF embedded for in-page reading.
-const EBRPD_MAPS: Array<{ slug: string; label: string; file: string; note: string }> = [
-  // District-wide EBRPD references
-  { slug: 'district',     label: 'EBRPD — District Map',         file: '/img/eastbayparksdistrictmap.pdf',
-    note: 'Overview map of all East Bay Regional Park District parks (21 pages).' },
-  { slug: 'parksbycity',  label: 'EBRPD — Parks by City',        file: '/img/eastbayparksdistrictparksbycity.pdf',
-    note: 'Per-city listing of every EBRPD park, with addresses and amenities (90 pages).' },
-  { slug: 'wardmap',      label: 'EBRPD — Ward Map',             file: '/img/eastbayparkswardmap.pdf',
-    note: 'EBRPD board-of-directors ward boundaries and member assignments (109 pages).' },
-  { slug: 'ebrpd-carquinez-2019', label: 'EBRPD — Benicia/Martinez Bridge to Carquinez Strait (2019)',
-    file: '/img/parks/eastbay-benicia-martinez-carquinez-2019.pdf',
-    note: 'Regional parks reference covering the Benicia–Martinez Bridge to Carquinez Strait area (2019 edition).' },
-  // Briones Regional Park — bundled park-specific docs
-  { slug: 'briones-brochure', label: 'Briones — Park Brochure',  file: '/img/parks/briones-map-brochure.pdf',
-    note: 'Official EBRPD brochure for Briones Regional Park.' },
-  { slug: 'briones-trailmap', label: 'Briones — Trail Map',      file: '/img/parks/briones-trail-map.pdf',
-    note: 'Full trail map for Briones Regional Park.' },
-  { slug: 'briones-hike',     label: 'Briones — Hike Notes',     file: '/img/parks/briones-hike.pdf',
-    note: 'Hike description / notes for Briones.' },
-  // Carquinez Strait + Martinez Shoreline
-  { slug: 'carquinez-loop',   label: 'Carquinez Strait — Scenic Loop Trail Map',
-    file: '/img/parks/carquinez-strait-scenic-loop-trail-map.pdf',
-    note: 'Scenic Loop trail map for Carquinez Strait Regional Shoreline.' },
-  { slug: 'mtz-shoreline-hike', label: 'Martinez Shoreline — Hike Notes',
-    file: '/img/parks/martinez-shoreline-hike.pdf',
-    note: 'Hike description / notes for the Martinez Shoreline.' },
-];
-
-// External park-related resources — open in a new tab, not embedded.
-const PARK_EXT_LINKS: Array<{ label: string; url: string }> = [
-  { label: 'Interactive parks map (ArcGIS Experience)',
-    url: 'https://experience.arcgis.com/experience/f48944466b004c26bd0e9524ae3f3323' },
-];
+// NOTE: this component is no longer wired into the civic strip — Parks
+// were folded into the Places popup. Kept as dead code so we can bring
+// back the standalone chip if ever needed; the PDF list + city park
+// registry are imported from shared modules so there's no duplication.
 
 // Civic-strip popup contents:
 //   Leaflet map (one pin per park) + EBRPD PDF shortcuts + a card list
