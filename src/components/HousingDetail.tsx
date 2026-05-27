@@ -105,7 +105,9 @@ export default function HousingDetail({ label, tooltip, data }: Props) {
               </section>
             ) : (
               <p className="muted" style={{ marginTop: 12 }}>
-                Census ACS returned no ZIP 94553 row this run.
+                {data.status.census_acs_zip?.detail === 'CENSUS_API_KEY not set'
+                  ? <>Census ACS needs a free API key. Sign up at <a href="https://api.census.gov/data/key_signup.html" target="_blank" rel="noopener">api.census.gov</a>, set <code>CENSUS_API_KEY</code> in Railway env, then re-run <code>/admin → 1d</code>.</>
+                  : `Census ACS returned no ZIP 94553 row this run${data.status.census_acs_zip?.detail ? ` (${data.status.census_acs_zip.detail})` : ''}.`}
               </p>
             )}
 
