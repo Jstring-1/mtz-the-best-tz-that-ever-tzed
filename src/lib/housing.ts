@@ -161,41 +161,81 @@ function parseCsvLine(line: string): string[] {
 
 const ZIP_94553 = '94553';
 
-async function fetchCensus(): Promise<HousingPayload['census']> {
+async function fetchCensus(): Promise<{ data: HousingPayload['census']; diag: string | null }> {
   // Census ACS started enforcing API keys on every request — the old
   // "500 free reads / day / IP" allowance is gone, and unauth'd calls
   // silently 302 to a "Missing Key" HTML page. Bail fast if the key
-  // isn't configured rather than retrying four vintages × ~10s each.
+  // isn't configured rather than retrying every vintage × ~10s each.
   const apiKey = process.env.CENSUS_API_KEY ?? '';
   if (!apiKey) {
     console.warn('[housing] CENSUS_API_KEY missing — skipping ZIP 94553 ACS panel');
-    return null;
+    return { data: null, diag: 'CENSUS_API_KEY not set' };
   }
   const thisYear = new Date().getUTCFullYear();
-  // ACS 5-year publishes ~14 months behind, so the current year vintage
-  // typically 404s until late. Walk back two vintages — three would be
-  // wasted attempts on data that should be ready by now.
+  // Per-attempt diagnostic — what each vintage actually returned. Lets
+  // us see "401 invalid key" vs "ZCTA unsupported" vs "data not yet
+  // published" in the freshness panel without server log access.
+  const attempts: string[] = [];
   for (let vintage = thisYear - 1; vintage >= thisYear - 3; vintage--) {
     const url =
       `https://api.census.gov/data/${vintage}/acs/acs5` +
       `?get=NAME,B25077_001E,B25064_001E` +
       `&for=zip%20code%20tabulation%20area:${ZIP_94553}` +
       `&key=${apiKey}`;
-    const j = await safeJson<string[][]>(url, 8000);
-    if (!Array.isArray(j) || j.length < 2) continue;
-    const row = j[1];
+    const r = await rawFetch(url, 8000);
+    if (!r) { attempts.push(`${vintage}: fetch threw`); continue; }
+    if (!r.ok) {
+      const snippet = r.body.slice(0, 120).replace(/\s+/g, ' ').trim();
+      attempts.push(`${vintage}: HTTP ${r.status} — ${snippet}`);
+      continue;
+    }
+    let j: unknown;
+    try { j = JSON.parse(r.body); }
+    catch {
+      // Most common failure mode: 200 with HTML "invalid key" page after
+      // a silent redirect. Capture the first ~120 chars so we can see it.
+      const snippet = r.body.slice(0, 120).replace(/\s+/g, ' ').trim();
+      attempts.push(`${vintage}: non-JSON body — ${snippet}`);
+      continue;
+    }
+    if (!Array.isArray(j) || j.length < 2) {
+      attempts.push(`${vintage}: empty or malformed JSON (${JSON.stringify(j).slice(0, 80)})`);
+      continue;
+    }
+    const row = (j as string[][])[1];
     // Header order: [NAME, B25077_001E (median home value),
     //                B25064_001E (median gross rent), zip-tab-area]
     const homeVal = Number(row[1]);
     const grossRent = Number(row[2]);
-    if (!Number.isFinite(homeVal) && !Number.isFinite(grossRent)) continue;
+    if (!Number.isFinite(homeVal) && !Number.isFinite(grossRent)) {
+      attempts.push(`${vintage}: row had no numeric values (${JSON.stringify(row).slice(0, 80)})`);
+      continue;
+    }
     return {
-      medianHomeValue: Number.isFinite(homeVal) && homeVal > 0 ? homeVal : null,
-      medianGrossRent: Number.isFinite(grossRent) && grossRent > 0 ? grossRent : null,
-      vintage,
+      data: {
+        medianHomeValue: Number.isFinite(homeVal) && homeVal > 0 ? homeVal : null,
+        medianGrossRent: Number.isFinite(grossRent) && grossRent > 0 ? grossRent : null,
+        vintage,
+      },
+      diag: null,
     };
   }
-  return null;
+  if (attempts.length) console.warn(`[housing] Census ACS all vintages failed:\n  ${attempts.join('\n  ')}`);
+  return { data: null, diag: attempts[0] ?? 'no attempts made' };
+}
+
+interface RawResponse { ok: boolean; status: number; body: string }
+async function rawFetch(url: string, timeoutMs = 8000): Promise<RawResponse | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers: COMMON_HEADERS, cache: 'no-store' });
+    const body = await r.text();
+    return { ok: r.ok, status: r.status, body };
+  } catch (e) {
+    console.warn(`[housing] ${url} threw:`, e instanceof Error ? e.message : e);
+    return null;
+  } finally { clearTimeout(timer); }
 }
 
 // ---- top-level fetcher ----------------------------------------------
@@ -203,19 +243,29 @@ async function fetchCensus(): Promise<HousingPayload['census']> {
 export async function fetchHousing(): Promise<HousingPayload> {
   const [zResult, cResult] = await Promise.allSettled([fetchZillow(), fetchCensus()]);
   const status: HousingPayload['status'] = {};
-  const get = <T>(r: PromiseSettledResult<T | null>, key: string, emptyDetail = 'no data'): T | null => {
-    if (r.status === 'fulfilled') {
-      status[key] = r.value ? { ok: true } : { ok: false, detail: emptyDetail };
-      return r.value;
-    }
-    status[key] = { ok: false, detail: r.reason instanceof Error ? r.reason.message : String(r.reason) };
-    return null;
-  };
-  const censusEmptyDetail = process.env.CENSUS_API_KEY ? 'no data' : 'CENSUS_API_KEY not set';
+
+  // Zillow: simple ok/no-data.
+  if (zResult.status === 'fulfilled') {
+    status['zillow_zori'] = zResult.value ? { ok: true } : { ok: false, detail: 'no data' };
+  } else {
+    status['zillow_zori'] = { ok: false, detail: zResult.reason instanceof Error ? zResult.reason.message : String(zResult.reason) };
+  }
+
+  // Census: pull the diagnostic string from the structured result.
+  let censusData: HousingPayload['census'] = null;
+  if (cResult.status === 'fulfilled') {
+    censusData = cResult.value.data;
+    status['census_acs_zip'] = censusData
+      ? { ok: true }
+      : { ok: false, detail: cResult.value.diag ?? 'no data' };
+  } else {
+    status['census_acs_zip'] = { ok: false, detail: cResult.reason instanceof Error ? cResult.reason.message : String(cResult.reason) };
+  }
+
   return {
     scrapedAt: new Date().toISOString(),
-    zillow: get(zResult, 'zillow_zori'),
-    census: get(cResult, 'census_acs_zip', censusEmptyDetail),
+    zillow: zResult.status === 'fulfilled' ? zResult.value : null,
+    census: censusData,
     status,
   };
 }
