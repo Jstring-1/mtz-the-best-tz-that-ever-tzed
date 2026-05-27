@@ -1048,11 +1048,11 @@ async function blsNationalSnapshot() {
 
 // ---- Census ACS — Contra Costa County demographics -------------------
 
-// Census ACS 5-year endpoint. Unauthenticated reads are capped at 500
-// requests / 24h / IP — way more than the 4h cron's 6/day, so no
-// CENSUS_API_KEY is required. We pull the most-recent 5-year vintage
-// available (Census publishes vintage N around Dec of year N+1, so a
-// safe default is to ask for last year — fall back two years if 404).
+// Census ACS 5-year endpoint. Census started enforcing API keys on
+// every request in 2025 — the old keyless allowance is gone, and
+// unauth'd calls silently 302 to a "Missing Key" HTML page. We bail
+// fast when CENSUS_API_KEY isn't set instead of retrying three
+// vintages × ~15s each (which was burning ~45s per cron run).
 //
 //   B19013_001E  median household income (past 12 months, in current $)
 //   B25077_001E  median home value (owner-occupied)
@@ -1060,6 +1060,11 @@ async function censusContraCosta(): Promise<{
   income: { value: string; year: string } | null;
   homeValue: { value: string; year: string } | null;
 } | null> {
+  const apiKey = process.env.CENSUS_API_KEY ?? '';
+  if (!apiKey) {
+    if (!lastFail['census']) lastFail['census'] = 'CENSUS_API_KEY not set';
+    return null;
+  }
   const fmtUsd = (n: number): string => {
     if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
     if (n >= 1e3) return `$${Math.round(n / 1e3)}k`;
@@ -1070,7 +1075,8 @@ async function censusContraCosta(): Promise<{
   const thisYr = new Date().getUTCFullYear();
   for (const vintage of [thisYr - 2, thisYr - 3, thisYr - 4]) {
     const url = `https://api.census.gov/data/${vintage}/acs/acs5` +
-      `?get=NAME,B19013_001E,B25077_001E&for=county:013&in=state:06`;
+      `?get=NAME,B19013_001E,B25077_001E&for=county:013&in=state:06` +
+      `&key=${apiKey}`;
     const j = await safeJson<unknown[][]>(url, undefined, 'census');
     if (!Array.isArray(j) || j.length < 2) continue;
     // Row 0 = headers, row 1 = data: [NAME, income, home, state, county]

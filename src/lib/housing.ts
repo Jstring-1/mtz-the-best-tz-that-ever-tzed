@@ -162,15 +162,26 @@ function parseCsvLine(line: string): string[] {
 const ZIP_94553 = '94553';
 
 async function fetchCensus(): Promise<HousingPayload['census']> {
-  // Try last few years (ACS 5-year publishes ~14 months behind, so the
-  // current and previous year typically 404 until late).
+  // Census ACS started enforcing API keys on every request — the old
+  // "500 free reads / day / IP" allowance is gone, and unauth'd calls
+  // silently 302 to a "Missing Key" HTML page. Bail fast if the key
+  // isn't configured rather than retrying four vintages × ~10s each.
+  const apiKey = process.env.CENSUS_API_KEY ?? '';
+  if (!apiKey) {
+    console.warn('[housing] CENSUS_API_KEY missing — skipping ZIP 94553 ACS panel');
+    return null;
+  }
   const thisYear = new Date().getUTCFullYear();
-  for (let vintage = thisYear - 1; vintage >= thisYear - 4; vintage--) {
+  // ACS 5-year publishes ~14 months behind, so the current year vintage
+  // typically 404s until late. Walk back two vintages — three would be
+  // wasted attempts on data that should be ready by now.
+  for (let vintage = thisYear - 1; vintage >= thisYear - 3; vintage--) {
     const url =
       `https://api.census.gov/data/${vintage}/acs/acs5` +
       `?get=NAME,B25077_001E,B25064_001E` +
-      `&for=zip%20code%20tabulation%20area:${ZIP_94553}`;
-    const j = await safeJson<string[][]>(url);
+      `&for=zip%20code%20tabulation%20area:${ZIP_94553}` +
+      `&key=${apiKey}`;
+    const j = await safeJson<string[][]>(url, 8000);
     if (!Array.isArray(j) || j.length < 2) continue;
     const row = j[1];
     // Header order: [NAME, B25077_001E (median home value),
@@ -192,18 +203,19 @@ async function fetchCensus(): Promise<HousingPayload['census']> {
 export async function fetchHousing(): Promise<HousingPayload> {
   const [zResult, cResult] = await Promise.allSettled([fetchZillow(), fetchCensus()]);
   const status: HousingPayload['status'] = {};
-  const get = <T>(r: PromiseSettledResult<T | null>, key: string): T | null => {
+  const get = <T>(r: PromiseSettledResult<T | null>, key: string, emptyDetail = 'no data'): T | null => {
     if (r.status === 'fulfilled') {
-      status[key] = r.value ? { ok: true } : { ok: false, detail: 'no data' };
+      status[key] = r.value ? { ok: true } : { ok: false, detail: emptyDetail };
       return r.value;
     }
     status[key] = { ok: false, detail: r.reason instanceof Error ? r.reason.message : String(r.reason) };
     return null;
   };
+  const censusEmptyDetail = process.env.CENSUS_API_KEY ? 'no data' : 'CENSUS_API_KEY not set';
   return {
     scrapedAt: new Date().toISOString(),
     zillow: get(zResult, 'zillow_zori'),
-    census: get(cResult, 'census_acs_zip'),
+    census: get(cResult, 'census_acs_zip', censusEmptyDetail),
     status,
   };
 }
