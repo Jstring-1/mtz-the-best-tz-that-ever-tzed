@@ -160,89 +160,148 @@ async function fetchDiseaseSh(): Promise<{
   };
 }
 
-// ---- 2. CDC pathogen pages — current foodborne outbreaks --------------
-
-const CDC_PATHOGENS: Array<{ slug: string; label: string }> = [
-  { slug: 'listeria',      label: 'Listeria' },
-  { slug: 'salmonella',    label: 'Salmonella' },
-  { slug: 'e-coli',        label: 'E. coli' },
-  { slug: 'campylobacter', label: 'Campylobacter' },
-  { slug: 'hepatitis-a',   label: 'Hepatitis A' },
-];
-
-// Each pathogen's `/outbreaks/index.html` page lists current and recent
-// outbreak investigations as `.dfe-curated-link` blocks containing the
-// outbreak page link, a short description, and a `<time>` with the CDC
-// publication date. Pages are updated within days of each investigation
-// starting or evolving — orders of magnitude fresher than NORS, which
-// has a ~2-year publication lag and is no good for a "current" view.
+// ---- 2. CDC foodborne outbreaks CSV — all pathogens, current ---------
 //
-// We scrape all five pathogens in parallel, merge + sort newest-first,
-// and cap to 50 rows so the popup stays readable.
+// CDC's foodborne outbreaks hub (cdc.gov/foodborne-outbreaks/outbreaks/)
+// renders its table from a CSV at a fixed path, and that CSV is the
+// freshest authoritative list: every active and recent investigation
+// across all pathogens (Salmonella, E. coli, Listeria, Botulism, Hep A,
+// Cyclospora, …), pre-sorted newest-first, refreshed by CDC within days
+// of each new investigation.
+//
+// Replaces the per-pathogen-page scrape, which only worked for Listeria
+// (the other pathogen pages have a different structure that surfaces no
+// individual outbreak links in the static HTML).
+//
+// CSV shape (3 columns):
+//   Contaminated Food, Germ, Year
+//   "<a href=""/ecoli/outbreaks/rawcheese-03-26/index.html"">Raw Dairy</a>",<em>E. coli</em> O157:H7,2026
+const CDC_FOODBORNE_CSV = 'https://www.cdc.gov/foodborne-outbreaks/media/files/2024/04/full-outbreak-list.csv';
+
 async function fetchCdcFood(): Promise<OutbreakItem[]> {
-  const results = await Promise.allSettled(
-    CDC_PATHOGENS.map((p) => fetchPathogenOutbreaks(p.slug, p.label)),
-  );
-  const merged: OutbreakItem[] = [];
-  for (const r of results) if (r.status === 'fulfilled') merged.push(...r.value);
-  // Sort newest first by ISO date string (parse failure → empty string →
-  // sinks to bottom).
-  merged.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
-  return merged.slice(0, 50);
-}
-
-async function fetchPathogenOutbreaks(slug: string, label: string): Promise<OutbreakItem[]> {
-  const url = `https://www.cdc.gov/${slug}/outbreaks/index.html`;
-  const html = await safeText(url);
-  if (!html) return [];
+  const csv = await safeText(CDC_FOODBORNE_CSV);
+  if (!csv) return [];
+  const lines = csv.split(/\r?\n/);
   const out: OutbreakItem[] = [];
-  // Each curated link block:
-  //   <div class="dfe-curated-link …">
-  //     …
-  //     <a class="cdc-block-link" href="/<slug>/outbreaks/<event>/index.html">TITLE</a>
-  //     <div class="dfe-curated-link__desc">DESC</div>
-  //     …
-  //     <time class="dfe-curated-link__date">Apr 10, 2024</time>
-  //   </div>
-  // We grab from the opening `dfe-curated-link` div up to the matching
-  // `</time>` — there's exactly one `<time>` per block.
-  const blockRe = /<div class="dfe-curated-link[^"]*"[\s\S]*?<\/time>/g;
-  let m: RegExpExecArray | null;
-  while ((m = blockRe.exec(html)) !== null) {
-    const block = m[0];
-    const linkM = block.match(/<a class="cdc-block-link" href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
-    if (!linkM) continue;
-    const href = linkM[1];
-    // Skip self-links back to the index (e.g. "View all outbreaks").
-    if (!href.includes('/outbreaks/') || href.endsWith('/outbreaks/index.html')) continue;
-    const title = decodeBasic(stripTagsLocal(linkM[2])).replace(/\s+/g, ' ').trim();
-    if (!title) continue;
-    const descM = block.match(/<div class="dfe-curated-link__desc">([\s\S]*?)<\/div>/);
-    const desc = descM
-      ? decodeBasic(stripTagsLocal(descM[1])).replace(/\s+/g, ' ').trim() || undefined
-      : undefined;
-    const timeM = block.match(/<time[^>]*class="dfe-curated-link__date"[^>]*>([^<]+)<\/time>/);
-    const rawDate = timeM ? timeM[1].trim() : '';
-    const iso = parseCdcDate(rawDate);
-    // Slug from URL serves as a stable id within this pathogen.
-    const eventSlug = href.replace(/\/index\.html$/, '').split('/').filter(Boolean).slice(-1)[0];
-    out.push({
-      id: `cdc-${slug}-${eventSlug ?? Math.random().toString(36).slice(2)}`,
-      title,
-      category: label,
-      date: iso ?? rawDate ?? undefined,
-      body: desc,
-      url: `https://www.cdc.gov${href}`,
-    });
+  // Skip header (index 0). Each subsequent row → one outbreak.
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    const item = parseCdcFoodborneRow(line);
+    if (item) out.push(item);
   }
-  return out;
+  // CSV is already sorted newest-first by year, but within-year order
+  // is whatever CDC publishes. Resort by our slug-derived YYYY-MM key
+  // (falling back to year) so months sort correctly.
+  out.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+  return out.slice(0, 60);
 }
 
-function parseCdcDate(s: string): string | null {
-  if (!s) return null;
-  const ms = Date.parse(s);
-  if (Number.isNaN(ms)) return null;
-  return new Date(ms).toISOString().slice(0, 10);
+function parseCdcFoodborneRow(line: string): OutbreakItem | null {
+  const fields = parseCsvLine(line);
+  if (fields.length < 3) return null;
+  const [foodHtml, germHtml, year] = fields;
+  // foodHtml: `<a href="/ecoli/outbreaks/rawcheese-03-26/index.html">Raw Dairy</a>`
+  const linkM = foodHtml.match(/<a\s+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+  if (!linkM) return null;
+  const href = linkM[1];
+  const title = decodeBasic(stripTagsLocal(linkM[2])).replace(/\s+/g, ' ').trim();
+  if (!title) return null;
+  // germHtml: `<em>E. coli</em> O157:H7` → strip italics, keep full strain.
+  const germ = decodeBasic(stripTagsLocal(germHtml)).replace(/\s+/g, ' ').trim();
+  // Slug-derived ID + date.
+  const slug = href.replace(/\/index\.html$/, '').split('/').filter(Boolean).slice(-1)[0] ?? title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const date = dateFromSlug(href, year.trim());
+  return {
+    id: `cdc-fb-${slug}`,
+    title,
+    category: shortPathogen(germ) || germ || 'Foodborne',
+    date,
+    // body intentionally undefined — ArticleBody fetches the full CDC
+    // page via Readability when the row is expanded.
+    body: germ && germ !== shortPathogen(germ) ? germ : undefined,
+    url: href.startsWith('http') ? href : `https://www.cdc.gov${href}`,
+  };
+}
+
+// Pull the short pathogen name out of a longer strain description.
+// "Salmonella Newport" → "Salmonella". "E. coli O157:H7" → "E. coli".
+// "Clostridium botulinum" → "Botulism" (more familiar civic-dashboard
+// term). Returns the input unchanged if no rule matches.
+function shortPathogen(germ: string): string {
+  if (!germ) return germ;
+  const g = germ.toLowerCase();
+  if (g.startsWith('salmonella'))           return 'Salmonella';
+  if (g.startsWith('e. coli') || g.startsWith('escherichia'))       return 'E. coli';
+  if (g.startsWith('listeria'))             return 'Listeria';
+  if (g.startsWith('campylobacter'))        return 'Campylobacter';
+  if (g.startsWith('hepatitis a'))          return 'Hepatitis A';
+  if (g.startsWith('cyclospora'))           return 'Cyclospora';
+  if (g.startsWith('clostridium botulinum') || g.startsWith('botulism')) return 'Botulism';
+  if (g.startsWith('norovirus'))            return 'Norovirus';
+  if (g.startsWith('vibrio'))               return 'Vibrio';
+  if (g.startsWith('shigella'))             return 'Shigella';
+  return germ;
+}
+
+// Extract a YYYY-MM date from the URL slug if possible (CDC uses
+// `-MM-YY` or `-mmm-YYYY` suffixes consistently). Falls back to year.
+const MONTH_SHORT: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+function dateFromSlug(href: string, year: string): string | undefined {
+  const csvYr = /^\d{4}$/.test(year) ? Number(year) : NaN;
+  const yearOnly = Number.isFinite(csvYr) ? String(csvYr) : undefined;
+  // -MM-YY or -M-YY at the end of the slug (most common): "rawcheese-03-26"
+  const m1 = href.match(/-(\d{1,2})-(\d{2})\/index\.html$/i);
+  if (m1) {
+    const mo = Number(m1[1]);
+    const slugYr = Number(m1[2]) + (Number(m1[2]) > 50 ? 1900 : 2000);
+    // Only trust the slug-derived YY when it matches the CSV year (±1
+    // for the occasional year-end / January edge case). Without this
+    // guard, old URL slugs like `/2013/A1b-03-31/` get mis-parsed as
+    // year 2031 because `-31` looks like a year suffix.
+    if (mo >= 1 && mo <= 12 && Number.isFinite(csvYr) && Math.abs(slugYr - csvYr) <= 1) {
+      return `${csvYr}-${String(mo).padStart(2, '0')}`;
+    }
+  }
+  // Or full 4-digit year: "infant-formula-nov-2025"
+  const m2 = href.match(/-([a-z]{3,9})-(\d{4})\/index\.html$/i);
+  if (m2) {
+    const mo = MONTH_SHORT[m2[1].slice(0, 3).toLowerCase()];
+    const slugYr = Number(m2[2]);
+    if (mo && Number.isFinite(csvYr) && Math.abs(slugYr - csvYr) <= 1) {
+      return `${csvYr}-${String(mo).padStart(2, '0')}`;
+    }
+    if (mo && !Number.isFinite(csvYr)) {
+      return `${slugYr}-${String(mo).padStart(2, '0')}`;
+    }
+  }
+  return yearOnly;
+}
+
+// Minimal RFC 4180 CSV line parser — handles "double-doubled" quote
+// escaping and unquoted fields. We only need single-line parsing because
+// the CDC CSV doesn't embed newlines in any field.
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else { inQuotes = false; }
+      } else { cur += c; }
+    } else {
+      if (c === ',') { out.push(cur); cur = ''; }
+      else if (c === '"' && cur === '') { inQuotes = true; }
+      else { cur += c; }
+    }
+  }
+  out.push(cur);
+  return out;
 }
 
 function stripTagsLocal(s: string): string {
