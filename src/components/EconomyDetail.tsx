@@ -147,8 +147,8 @@ function IndexDrawer({ q, label, hint }: { q: StockQuote; label: string; hint: s
   );
 }
 
-export default function EconomyDetail({ label, tooltip, data, stocks, gas }: Props) {
-  const [open, setOpen] = useUrlBool('econ');
+// Body-only view — used inside the consolidated Indicators popup.
+export function EconomyBody({ data, stocks, gas }: Omit<Props, 'label' | 'tooltip'>) {
   // Which index card has its drawer expanded (click-to-toggle).
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
 
@@ -159,22 +159,14 @@ export default function EconomyDetail({ label, tooltip, data, stocks, gas }: Pro
     ? indexCards.find((c) => c.symbol === openSymbol) ?? null
     : null;
 
-  // Treasury 10Y yield called out as a featured number — most-watched
-  // single bond rate. Tries the yields array first, falls back to ^TNX
-  // proxy from the stock cache if available later.
   const tenYear = data?.yields.find((y) => /^10[\s-]?(yr|year|y)/i.test(y.maturity))
     ?? data?.yields.find((y) => y.maturity.toLowerCase().includes('10'));
 
+  if (!data && !stocks) {
+    return <p className="muted">Cache empty — run /admin → 4h.</p>;
+  }
   return (
     <>
-      <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
-        <span dangerouslySetInnerHTML={{ __html: label }} />
-      </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="U.S. economy — at a glance" size="lg">
-        {!data && !stocks ? (
-          <p className="muted">Cache empty — run /admin → 4h.</p>
-        ) : (
-          <>
             {indexCards.length > 0 && (
               <section>
                 <h3 className="rep-h" style={{ marginTop: 0 }}>Major indexes</h3>
@@ -334,8 +326,20 @@ export default function EconomyDetail({ label, tooltip, data, stocks, gas }: Pro
               <a href="https://www.bls.gov/cpi/" target="_blank" rel="noopener">BLS CPI →</a>
               <a href="https://fred.stlouisfed.org/" target="_blank" rel="noopener">FRED (Fed economic data) →</a>
             </div>
-          </>
-        )}
+    </>
+  );
+}
+
+// Legacy standalone civic-bar chip — wraps EconomyBody in a Modal.
+export default function EconomyDetail({ label, tooltip, data, stocks, gas }: Props) {
+  const [open, setOpen] = useUrlBool('econ');
+  return (
+    <>
+      <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
+        <span dangerouslySetInnerHTML={{ __html: label }} />
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="U.S. economy — at a glance" size="lg">
+        <EconomyBody data={data} stocks={stocks} gas={gas} />
       </Modal>
     </>
   );

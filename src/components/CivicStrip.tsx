@@ -5,11 +5,10 @@ import type { GovLocalPayload, GovNationalPayload, GovStripItem } from '@/lib/go
 import type { CouncilScrapeResult } from '@/lib/scrape-council';
 import BillsDetail from './BillsDetail';
 import GrantsDetail from './GrantsDetail';
-import CrimeDetail from './CrimeDetail';
 import CouncilDetail from './CouncilDetail';
 import RepsDetail from './RepsDetail';
 import RecallsDetail from './RecallsDetail';
-import EconomyDetail from './EconomyDetail';
+import IndicatorsDetail from './IndicatorsDetail';
 import FemaDetail from './FemaDetail';
 import EonetDetail from './EonetDetail';
 import ParksDetail from './ParksDetail';
@@ -23,7 +22,6 @@ import CchDetail from './CchDetail';
 import type { CchPayload } from '@/lib/cch';
 import TrainsDetail from './TrainsDetail';
 import type { TrainsPayload } from '@/lib/trains';
-import HousingDetail from './HousingDetail';
 import type { HousingPayload } from '@/lib/housing';
 
 // Third top strip — sits under WeatherStrip + wx-row-2. Renders the
@@ -91,11 +89,9 @@ export default async function CivicStrip() {
     ? `${recallsList.length} active nationwide recalls (FDA food/drug/device + CPSC) — click to browse.`
     : 'Nationwide recalls (FDA + CPSC) — cache empty. Run /admin → 4h.';
   // U.S. economy snapshot — debt + yields + unemployment + CPI.
+  // Label/tooltip moved into the Indicators chip below (consolidated
+  // with Housing + Crime under one popup).
   const economyData = national?.economy ?? null;
-  const economyLabelHtml = `<span class="civic-strip-val green">Economy</span>`;
-  const economyTooltip = economyData?.debt
-    ? `U.S. federal debt ${economyData.debt.total} (${economyData.debt.date}); click for yields + unemp + CPI.`
-    : 'U.S. economy snapshot — cache empty. Run /admin → 4h.';
   // FEMA active disaster declarations nationwide.
   const femaList = national?.disasters?.fema ?? [];
   const femaLabelHtml = `<span class="civic-strip-val red">FEMA</span>`;
@@ -145,11 +141,20 @@ export default async function CivicStrip() {
   const trainsTooltip = trains
     ? `Amtrak MTZ — ${trains.arriving.length} arriving, ${trains.departed.length} departed${trains.lastUpdated ? ` (upstream ${trains.lastUpdated})` : ''}.`
     : 'Amtrak — Martinez arrivals & departures. Cache empty. Run /admin → 15m.';
-  // Martinez housing — Zillow ZORI rent + Census ACS ZIP 94553.
-  const housingLabelHtml = `<span class="civic-strip-val peru">Housing</span>`;
-  const housingTooltip = housing?.zillow?.currentRent
-    ? `Martinez typical rent: $${Math.round(housing.zillow.currentRent).toLocaleString()}/mo (Zillow ZORI). Click for more.`
-    : 'Martinez housing — rent index + median home value. Cache empty. Run /admin → 1d.';
+  // Indicators — consolidates the former Economy / Housing / Crime
+  // chips into one tabbed popup. Tooltip leads with the most-likely-
+  // useful number: Martinez typical rent, with the other two as
+  // breadcrumbs so users know what else is in there.
+  const indicatorsLabelHtml = `<span class="civic-strip-val green">Indicators</span>`;
+  const indicatorsTooltip = (() => {
+    const parts: string[] = [];
+    if (economyData?.debt) parts.push(`U.S. debt ${economyData.debt.total}`);
+    if (housing?.zillow?.currentRent) parts.push(`rent $${Math.round(housing.zillow.currentRent).toLocaleString()}/mo`);
+    parts.push('crime stats');
+    return parts.length
+      ? `Economy · Housing · Crime — ${parts.join(' · ')}. Click for tabs.`
+      : 'Economy · Housing · Crime — caches empty. Run /admin.';
+  })();
   const councilTooltip = councilCount > 0
     ? `Martinez City Council — ${councilCount} cached meetings${councilDate ? ` (latest ${councilDate})` : ''}. Click to browse agendas & minutes (read in-page).`
     : 'Council meetings — no cache yet. Run /admin → 12h.';
@@ -172,18 +177,10 @@ export default async function CivicStrip() {
     const it = byKey('rep');
     return it ? <BillsDetail tooltip={it.tooltip} label={valHtmlFor(it)} /> : null;
   };
-  const crimeChip = () => {
-    const it = byKey('crime');
-    return it ? <CrimeDetail tooltip={it.tooltip} label={valHtmlFor(it)} /> : null;
-  };
-
-  // Civic-strip ordering (user-specified):
-  //   Parks · Places · Trains · Birds · Council · Code · Funding · Bills ·
-  //   Reps · Crime · CCH · Economy · Recalls · Outbreaks · FEMA · EONET · Quakes
-  // Trains sits next to Places — both are "what's around right now"
-  // local items. CCH stays next to Crime in the local civic-services
-  // cluster. Unemployment + Gas were removed from the strip — both
-  // live inside the Economy popup now.
+  // Civic-strip ordering: Indicators sits where Crime used to (between
+  // Reps and CCH). Replaces the former Crime + Economy + Housing trio
+  // with one tabbed popup since they all carry slow-moving macro stats
+  // that read better as a group than as peer chips.
   return (
     <section className="civic-strip" aria-label="Civic indicators">
       <ParksDetail   tooltip={parksTooltip}   label={parksLabelHtml} />
@@ -195,16 +192,15 @@ export default async function CivicStrip() {
       {fundingChip()}
       {billsChip()}
       <RepsDetail    tooltip={repsTooltip}    label={repsLabelHtml} />
-      {crimeChip()}
-      <CchDetail     tooltip={cchTooltip}     label={cchLabelHtml}     data={cch} />
-      <HousingDetail tooltip={housingTooltip} label={housingLabelHtml} data={housing} />
-      <EconomyDetail
-        tooltip={economyTooltip}
-        label={economyLabelHtml}
-        data={economyData}
-        stocks={stocks as Parameters<typeof EconomyDetail>[0]['stocks']}
+      <IndicatorsDetail
+        tooltip={indicatorsTooltip}
+        label={indicatorsLabelHtml}
+        economy={economyData}
+        stocks={stocks as Parameters<typeof IndicatorsDetail>[0]['stocks']}
         gas={gasData}
+        housing={housing}
       />
+      <CchDetail     tooltip={cchTooltip}     label={cchLabelHtml}     data={cch} />
       <RecallsDetail
         tooltip={recallsTooltip}
         label={recallsLabelHtml}

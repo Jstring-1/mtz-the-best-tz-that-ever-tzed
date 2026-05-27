@@ -10,27 +10,13 @@ interface Props {
   data: HousingPayload | null;
 }
 
-// Civic-strip "Housing" popup. Two stacked panels:
-//   Zillow ZORI — Martinez typical-rent index, headline value + YoY +
-//                 24-month sparkline.
-//   Census ACS  — ZIP 94553 median home value + median gross rent
-//                 (5-year, ~14 month publication lag).
-//
-// Each panel hides itself when its source returned null so a single
-// silent feed doesn't show a sea of em-dashes.
-export default function HousingDetail({ label, tooltip, data }: Props) {
-  const [open, setOpen] = useUrlBool('housing');
-
+// Body-only view — used inside the consolidated Indicators popup. The
+// default export below wraps this in a standalone Modal + chip for any
+// direct embedders that still want the old behavior.
+export function HousingBody({ data }: { data: HousingPayload | null }) {
+  if (!data) return <p className="muted">No housing cache. Run /admin → 1d.</p>;
   return (
     <>
-      <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
-        <span dangerouslySetInnerHTML={{ __html: label }} />
-      </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Housing — Martinez market" size="md">
-        {!data ? (
-          <p className="muted">No housing cache. Run /admin → 1d.</p>
-        ) : (
-          <>
             <p className="muted bills-legend" style={{ margin: 0 }}>
               Rent index from{' '}
               <a href="https://www.zillow.com/research/data/" target="_blank" rel="noopener">Zillow Research (ZORI)</a>{' '}and
@@ -133,8 +119,20 @@ export default function HousingDetail({ label, tooltip, data }: Props) {
                 ))}
               </dl>
             </details>
-          </>
-        )}
+    </>
+  );
+}
+
+// Legacy standalone civic-bar chip — wraps HousingBody inside a Modal.
+export default function HousingDetail({ label, tooltip, data }: Props) {
+  const [open, setOpen] = useUrlBool('housing');
+  return (
+    <>
+      <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
+        <span dangerouslySetInnerHTML={{ __html: label }} />
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Housing — Martinez market" size="md">
+        <HousingBody data={data} />
       </Modal>
     </>
   );
