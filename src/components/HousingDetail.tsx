@@ -105,9 +105,16 @@ export default function HousingDetail({ label, tooltip, data }: Props) {
               </section>
             ) : (
               <p className="muted" style={{ marginTop: 12 }}>
-                {data.status.census_acs_zip?.detail === 'CENSUS_API_KEY not set'
-                  ? <>Census ACS needs a free API key. Sign up at <a href="https://api.census.gov/data/key_signup.html" target="_blank" rel="noopener">api.census.gov</a>, set <code>CENSUS_API_KEY</code> in Railway env, then re-run <code>/admin → 1d</code>.</>
-                  : `Census ACS returned no ZIP 94553 row this run${data.status.census_acs_zip?.detail ? ` (${data.status.census_acs_zip.detail})` : ''}.`}
+                {(() => {
+                  const detail = data.status.census_acs_zip?.detail ?? '';
+                  if (detail === 'CENSUS_API_KEY not set') {
+                    return <>Census ACS needs a free API key. Sign up at <a href="https://api.census.gov/data/key_signup.html" target="_blank" rel="noopener">api.census.gov</a>, set <code>CENSUS_API_KEY</code> in Railway env, then re-run <code>/admin → 1d</code>.</>;
+                  }
+                  if (/Invalid Key/i.test(detail)) {
+                    return <>Census rejected the API key as <strong>Invalid Key</strong>. Check your email from <code>census.data@census.gov</code> for the activation link — Census keys don&rsquo;t work until you click it. Also verify the env var has no whitespace and is the full 40-char hex string.</>;
+                  }
+                  return `Census ACS returned no ZIP 94553 row this run${detail ? ` (${detail})` : ''}.`;
+                })()}
               </p>
             )}
 
