@@ -2691,6 +2691,41 @@ button.econ-index.clickable.active {
 .train-stale { opacity: 0.55; }
 .train-stale .train-time { color: var(--text-muted); }
 
+/* ---- Outbreaks → Flu tab ------------------------------------------ */
+.flu-panel { margin-top: 8px; }
+.flu-region {
+  padding: 10px 0;
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+.flu-region:first-of-type { border-top: 0; }
+.flu-head {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+}
+.flu-name { font-weight: 600; min-width: 110px; }
+.flu-pct { font-size: 1.4em; font-weight: 700; font-family: var(--mono, monospace); }
+.flu-sev {
+  font-size: .78em; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.flu-sub { font-size: .85em; margin-top: 2px; }
+.flu-delta.up   { color: #e34234; }
+.flu-delta.down { color: var(--accent-green, #4caf50); }
+.flu-delta.flat { color: var(--text-muted); }
+.flu-spark {
+  margin-top: 6px;
+  display: flex; align-items: center; gap: 10px;
+  color: var(--accent);
+}
+
+/* Severity tones — applied to both .flu-pct (text color) and .flu-sev
+   (border + text on the pill). Color tokens picked to match other
+   civic-bar chips. */
+.sev-low      { color: var(--accent-green, #4caf50); }
+.sev-normal   { color: var(--text-muted); }
+.sev-elevated { color: #d4a017; }
+.sev-high     { color: #e34234; }
+.sev-unknown  { color: var(--text-muted); }
+
 /* Rich per-train detail panel (origin→dest, current position, progress) */
 .train-detail-panel {
   margin-top: 8px;

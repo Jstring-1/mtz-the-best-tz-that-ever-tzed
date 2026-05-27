@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool, useUrlEnum } from '@/lib/useUrlState';
-import type { OutbreaksPayload, OutbreakItem, OutbreakSnapshot } from '@/lib/outbreaks';
+import type { OutbreaksPayload, OutbreakItem, OutbreakSnapshot, DelphiIliRow } from '@/lib/outbreaks';
 
 interface Props {
   label: string;
@@ -245,26 +245,7 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                 {data.flu.length === 0 ? (
                   <p className="muted">Delphi Epidata returned no rows. (Pub lag can be 1–2 weeks.)</p>
                 ) : (
-                  <>
-                    <dl className="econ-kv">
-                      {data.flu.map((row) => {
-                        const v = row.wili ?? row.ili;
-                        return (
-                          <div key={row.region} style={{ display: 'contents' }}>
-                            <dt>{row.region === 'NAT' ? 'United States' : row.region} — ILI%</dt>
-                            <dd className="big">{v != null ? `${v.toFixed(2)}%` : '—'}</dd>
-                            <dt>epiweek</dt>
-                            <dd className="muted">{formatEpiweek(row.epiweek)}</dd>
-                          </div>
-                        );
-                      })}
-                    </dl>
-                    <p className="muted" style={{ fontSize: '.72em', marginTop: 6 }}>
-                      ILI = outpatient visits for influenza-like illness, as a
-                      percent of total visits (CDC FluView via Delphi). National
-                      values are weighted; state values may be unweighted.
-                    </p>
-                  </>
+                  <FluPanel rows={data.flu} />
                 )}
               </section>
             )}
@@ -470,8 +451,140 @@ function SnapshotCard({ snap, hint }: { snap: OutbreakSnapshot | null; hint?: st
   );
 }
 
-// Epiweek 202345 -> "Week 45, 2023". Falls back to raw if parse fails.
-function formatEpiweek(ew: string): string {
-  if (!/^\d{6}$/.test(ew)) return ew;
-  return `Week ${Number(ew.slice(4))}, ${ew.slice(0, 4)}`;
+// ---- Flu tab -----------------------------------------------------------
+//
+// Renders the Delphi fluview rows in plain-language terms instead of the
+// raw "ILI%" + "epiweek 202619" shape. For each region (CA, US) shows:
+//   - headline %, color-coded by severity (low / normal / elevated / high)
+//   - week-ending calendar date (e.g. "week of May 10-16, 2026")
+//   - week-over-week change ("↓ 0.18 vs prior week")
+//   - last 8 weeks as a sparkline + range
+// Falls back gracefully when only the latest week is available.
+
+const REGION_NAMES: Record<string, string> = {
+  CA: 'California',
+  NAT: 'United States',
+};
+
+// Rough CDC-baseline-inspired bands for ILI %. Real per-region baselines
+// vary by HHS region, but these brackets are good enough for a
+// civic-dashboard at-a-glance read.
+function severity(v: number | null): { tone: string; label: string } {
+  if (v == null) return { tone: 'unknown', label: 'no data' };
+  if (v < 2.0) return { tone: 'low',      label: 'Low' };
+  if (v < 3.5) return { tone: 'normal',   label: 'Normal' };
+  if (v < 5.0) return { tone: 'elevated', label: 'Elevated' };
+  return                { tone: 'high',     label: 'High' };
+}
+
+// Convert MMWR epiweek (YYYYWW) to the start/end calendar dates of that
+// week. MMWR week 1 is the week containing Jan 4; weeks start Sunday and
+// end Saturday.
+function epiweekToDates(ew: string): { start: Date; end: Date } | null {
+  if (!/^\d{6}$/.test(ew)) return null;
+  const year = Number(ew.slice(0, 4));
+  const week = Number(ew.slice(4));
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const dow = jan4.getUTCDay(); // 0 = Sunday
+  const week1Start = new Date(jan4.getTime() - dow * 86_400_000);
+  const start = new Date(week1Start.getTime() + (week - 1) * 7 * 86_400_000);
+  const end = new Date(start.getTime() + 6 * 86_400_000);
+  return { start, end };
+}
+
+function fmtDateRange(start: Date, end: Date): string {
+  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
+  const mon = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+  const d   = (d: Date) => d.getUTCDate();
+  const yr  = end.getUTCFullYear();
+  return sameMonth
+    ? `${mon(start)} ${d(start)}–${d(end)}, ${yr}`
+    : `${mon(start)} ${d(start)} – ${mon(end)} ${d(end)}, ${yr}`;
+}
+
+function FluPanel({ rows }: { rows: DelphiIliRow[] }) {
+  // Group by region, sort each group newest-first.
+  const byRegion = new Map<string, DelphiIliRow[]>();
+  for (const r of rows) {
+    const list = byRegion.get(r.region) ?? [];
+    list.push(r);
+    byRegion.set(r.region, list);
+  }
+  for (const list of byRegion.values()) {
+    list.sort((a, b) => b.epiweek.localeCompare(a.epiweek));
+  }
+  // Render CA first (local), then nat.
+  const order = ['CA', 'NAT'].filter((r) => byRegion.has(r));
+
+  return (
+    <div className="flu-panel">
+      <p className="muted" style={{ fontSize: '.85em', marginTop: 0 }}>
+        How many people are visiting a doctor for flu-like symptoms, as a
+        percent of all outpatient visits. A typical baseline is around
+        2–3%; sustained values above ~4% indicate elevated flu activity.
+      </p>
+      {order.map((region) => {
+        const list = byRegion.get(region) ?? [];
+        const latest = list[0];
+        const prior = list[1];
+        const v = latest?.wili ?? latest?.ili ?? null;
+        const pv = prior?.wili ?? prior?.ili ?? null;
+        const sev = severity(v);
+        const dates = epiweekToDates(latest?.epiweek ?? '');
+        const delta = (v != null && pv != null) ? (v - pv) : null;
+        return (
+          <div key={region} className="flu-region">
+            <div className="flu-head">
+              <span className="flu-name">{REGION_NAMES[region] ?? region}</span>
+              <span className={`flu-pct sev-${sev.tone}`}>
+                {v != null ? `${v.toFixed(2)}%` : '—'}
+              </span>
+              <span className={`flu-sev sev-${sev.tone}`}>{sev.label}</span>
+            </div>
+            <div className="flu-sub muted">
+              {dates ? `Week of ${fmtDateRange(dates.start, dates.end)}` : `Week ${latest?.epiweek ?? ''}`}
+              {delta != null && (
+                <>
+                  {' · '}
+                  <span className={`flu-delta ${delta < -0.05 ? 'down' : delta > 0.05 ? 'up' : 'flat'}`}>
+                    {delta === 0 ? '→' : delta < 0 ? '↓' : '↑'}{' '}
+                    {Math.abs(delta).toFixed(2)} vs prior week
+                  </span>
+                </>
+              )}
+            </div>
+            {list.length > 1 && <FluSparkline weeks={list} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Tiny inline sparkline showing the last ~8 weeks. Pure SVG, no deps.
+function FluSparkline({ weeks }: { weeks: DelphiIliRow[] }) {
+  // weeks is newest-first; flip for left-to-right time order.
+  const series = [...weeks].reverse().map((w) => w.wili ?? w.ili ?? null);
+  const values = series.filter((v): v is number => v != null);
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const W = 220, H = 32, P = 2;
+  const pts = series.map((v, i) => {
+    if (v == null) return null;
+    const x = P + (i / (series.length - 1)) * (W - 2 * P);
+    const y = H - P - ((v - min) / span) * (H - 2 * P);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).filter(Boolean) as string[];
+  return (
+    <div className="flu-spark">
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Last 8 weeks">
+        <polyline points={pts.join(' ')} fill="none" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+      <span className="muted" style={{ fontSize: '.72em' }}>
+        last {values.length} weeks · range {min.toFixed(1)}–{max.toFixed(1)}%
+      </span>
+    </div>
+  );
 }

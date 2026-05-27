@@ -278,36 +278,37 @@ interface DelphiResp {
 // path-based routing (`/fluview/?…`) — the old URL now returns the API
 // landing-page HTML which fails JSON parse silently. Path-based form
 // also no longer returns a top-level `result` field, just `epidata`.
+//
+// We keep the latest 8 weeks per region (not just the newest) so the
+// UI can show trend / week-over-week change without a separate fetch.
 async function fetchDelphiIli(): Promise<DelphiIliRow[]> {
   const apiKey = process.env.DELPHI_API_KEY ?? '';
   const now = new Date();
   const y = now.getUTCFullYear();
-  // Crude prior-15-week window: take this year minus 1 -> this year.
-  // The API accepts arbitrary date ranges; tighter math is unnecessary.
   const range = `${y - 1}40-${y}52`;
-  const qs = new URLSearchParams({
-    regions: 'nat,ca',
-    epiweeks: range,
-  });
+  const qs = new URLSearchParams({ regions: 'nat,ca', epiweeks: range });
   if (apiKey) qs.set('api_key', apiKey);
   const j = await safeJson<DelphiResp>(`https://api.delphi.cmu.edu/epidata/fluview/?${qs.toString()}`);
   if (!j || !Array.isArray(j.epidata) || j.epidata.length === 0) return [];
-  // Group by region, keep newest week only.
-  const newest = new Map<string, DelphiIliRow>();
+  // Group by region, sort newest-first, take 8 weeks each.
+  const byRegion = new Map<string, DelphiIliRow[]>();
   for (const r of j.epidata) {
     const region = r.region.toUpperCase();
-    const epiweek = String(r.epiweek);
-    const prev = newest.get(region);
-    if (!prev || epiweek > prev.epiweek) {
-      newest.set(region, {
-        region,
-        epiweek,
-        wili: r.wili ?? null,
-        ili: r.ili ?? null,
-      });
-    }
+    const list = byRegion.get(region) ?? [];
+    list.push({
+      region,
+      epiweek: String(r.epiweek),
+      wili: r.wili ?? null,
+      ili: r.ili ?? null,
+    });
+    byRegion.set(region, list);
   }
-  return [...newest.values()];
+  const out: DelphiIliRow[] = [];
+  for (const list of byRegion.values()) {
+    list.sort((a, b) => b.epiweek.localeCompare(a.epiweek));
+    out.push(...list.slice(0, 8));
+  }
+  return out;
 }
 
 // ---- 4. WHO Disease Outbreak News (RSS) ------------------------------
