@@ -11,13 +11,11 @@ interface Props {
   data: OutbreaksPayload | null;
 }
 
-type Tab = 'all' | 'snapshot' | 'food' | 'flu' | 'who';
-const TABS: Tab[] = ['all', 'snapshot', 'food', 'flu', 'who'];
+type Tab = 'all' | 'food' | 'who';
+const TABS: Tab[] = ['all', 'food', 'who'];
 const TAB_LABEL: Record<Tab, string> = {
   all: 'All events',
-  snapshot: 'Snapshot',
   food: 'Food',
-  flu: 'Flu',
   who: 'WHO',
 };
 const SOURCE_LABEL: Record<string, string> = {
@@ -40,16 +38,19 @@ function dedupKey(it: OutbreakItem): string {
     .trim();
 }
 
-// Civic-strip Outbreaks popup. Tabs across four data layers:
-//   Snapshot — disease.sh (global / US / CA COVID counts)
-//   Food     — current CDC outbreak investigations across Listeria,
-//              Salmonella, E. coli, Campylobacter, Hepatitis A
-//              (scraped from each pathogen's /outbreaks/ page —
-//              orders of magnitude fresher than the legacy NORS feed
-//              which has a 2-year publication lag)
-//   Flu      — Delphi Epidata fluview (ILI percent for US + CA)
-//   WHO      — WHO Disease Outbreak News RSS items
-// Each tab gracefully handles "no data" so a single failing source
+// Civic-strip Outbreaks popup. Layout:
+//
+//   [header: cached-at + source credits]
+//   [Vital signs strip: disease.sh COVID snapshot + Delphi flu ILI%]
+//   [Event tabs: All / Food / WHO]
+//
+// The vital-signs strip is always populated (snapshot + flu are
+// continuous surveillance, not event-driven) so it lives above the tabs
+// instead of competing with them. The tabs carry actual outbreak
+// records — CDC foodborne investigations (CSV from /foodborne-outbreaks/)
+// and WHO Disease Outbreak News RSS, merged in the "All" tab.
+//
+// Each section gracefully handles "no data" so a single failing source
 // doesn't blank the popup.
 export default function OutbreaksDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('outbreaks');
@@ -86,9 +87,7 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
 
   const counts = {
     all: allEvents.length,
-    snapshot: [data?.snapshots?.global, data?.snapshots?.unitedStates, data?.snapshots?.california].filter(Boolean).length,
     food: data?.cdcFood?.length ?? 0,
-    flu: data?.flu?.length ?? 0,
     who: data?.whoDon?.length ?? 0,
   };
 
@@ -113,7 +112,25 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
               Cached {new Date(data.scrapedAt).toLocaleString()}.
             </p>
 
-            <div className="news-tabs" style={{ marginTop: 12 }}>
+            {/* Vital signs — always-populated continuous surveillance
+                stats (COVID counts + flu ILI%). Sits above the event
+                tabs so it doesn't compete with them as a peer tab. */}
+            <section className="outbreak-vitals" style={{ marginTop: 12 }}>
+              {(data.snapshots.global || data.snapshots.unitedStates || data.snapshots.california) && (
+                <div className="outbreak-snapshot">
+                  <SnapshotCard snap={data.snapshots.global} hint="disease.sh /all" />
+                  <SnapshotCard snap={data.snapshots.unitedStates} hint="disease.sh /countries/USA" />
+                  <SnapshotCard snap={data.snapshots.california} hint="disease.sh /states/California" />
+                </div>
+              )}
+              {data.flu.length > 0 && <FluPanel rows={data.flu} />}
+              <p className="muted" style={{ fontSize: '.72em', marginTop: 4 }}>
+                COVID counts decayed since many states stopped daily reporting;
+                treat snapshot deltas as directional, not exact.
+              </p>
+            </section>
+
+            <div className="news-tabs" style={{ marginTop: 16 }}>
               {TABS.map((t) => (
                 <button
                   key={t}
@@ -174,25 +191,7 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                 )}
                 <p className="muted" style={{ fontSize: '.72em', marginTop: 8 }}>
                   Unified, deduplicated event feed combining current CDC
-                  outbreak investigations (Listeria / Salmonella / E. coli /
-                  Campylobacter / Hepatitis A) and WHO Disease Outbreak News.
-                  Snapshot + Flu tabs carry aggregate stats and don&rsquo;t
-                  merge in here.
-                </p>
-              </section>
-            )}
-
-            {tab === 'snapshot' && (
-              <section className="outbreak-snapshot">
-                <SnapshotCard snap={data.snapshots.global} hint="disease.sh /all" />
-                <SnapshotCard snap={data.snapshots.unitedStates} hint="disease.sh /countries/USA" />
-                <SnapshotCard snap={data.snapshots.california} hint="disease.sh /states/California" />
-                {!data.snapshots.global && !data.snapshots.unitedStates && !data.snapshots.california && (
-                  <p className="muted">disease.sh returned no data this run.</p>
-                )}
-                <p className="muted" style={{ fontSize: '.72em', marginTop: 8 }}>
-                  COVID surveillance has decayed since many states stopped daily
-                  reporting; treat snapshot deltas as directional, not exact.
+                  foodborne outbreak investigations and WHO Disease Outbreak News.
                 </p>
               </section>
             )}
@@ -236,16 +235,6 @@ export default function OutbreaksDetail({ label, tooltip, data }: Props) {
                       );
                     })}
                   </ul>
-                )}
-              </section>
-            )}
-
-            {tab === 'flu' && (
-              <section>
-                {data.flu.length === 0 ? (
-                  <p className="muted">Delphi Epidata returned no rows. (Pub lag can be 1–2 weeks.)</p>
-                ) : (
-                  <FluPanel rows={data.flu} />
                 )}
               </section>
             )}
