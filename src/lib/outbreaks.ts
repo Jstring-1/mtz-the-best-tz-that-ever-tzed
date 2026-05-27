@@ -170,12 +170,18 @@ interface NorsRow {
   setting?: string;
 }
 
-// NORS dataset id on data.cdc.gov is `j5jx-3hes`. Returns one row per
-// reported foodborne outbreak. We sort by year+month desc and keep the
-// 25 most recent.
+// NORS dataset on data.cdc.gov. CDC retired the foodborne-only dataset
+// `j5jx-3hes` and replaced it with the broader `5xkq-dg7x` ("NORS")
+// which includes all transmission modes (foodborne + person-to-person
+// + waterborne + animal contact + environmental + unknown). We sort by
+// year+month desc and keep the 25 most recent.
+//
+// Publication lag is ~2 years — the newest rows are typically Dec 2023
+// as of this comment. That's normal; NORS is a slow surveillance feed,
+// not a real-time signal.
 async function fetchCdcFood(): Promise<OutbreakItem[]> {
   const token = process.env.CDC_APP_TOKEN ?? '';
-  const url = 'https://data.cdc.gov/resource/j5jx-3hes.json'
+  const url = 'https://data.cdc.gov/resource/5xkq-dg7x.json'
     + '?$order=year DESC,month DESC&$limit=25';
   const init: RequestInit = token ? { headers: { 'X-App-Token': token } } : {};
   const rows = await safeJson<NorsRow[]>(url, 12000, init);
@@ -221,6 +227,11 @@ interface DelphiResp {
 // California state, `nat` for the national line. We ask for the past
 // ~15 epiweeks so we always have data even when the latest week hasn't
 // posted yet (publication usually lags ~1 week).
+//
+// Delphi migrated from query-param routing (`?source=fluview&…`) to
+// path-based routing (`/fluview/?…`) — the old URL now returns the API
+// landing-page HTML which fails JSON parse silently. Path-based form
+// also no longer returns a top-level `result` field, just `epidata`.
 async function fetchDelphiIli(): Promise<DelphiIliRow[]> {
   const apiKey = process.env.DELPHI_API_KEY ?? '';
   const now = new Date();
@@ -229,13 +240,12 @@ async function fetchDelphiIli(): Promise<DelphiIliRow[]> {
   // The API accepts arbitrary date ranges; tighter math is unnecessary.
   const range = `${y - 1}40-${y}52`;
   const qs = new URLSearchParams({
-    source: 'fluview',
     regions: 'nat,ca',
     epiweeks: range,
   });
   if (apiKey) qs.set('api_key', apiKey);
-  const j = await safeJson<DelphiResp>(`https://api.delphi.cmu.edu/epidata/?${qs.toString()}`);
-  if (!j || j.result !== 1 || !Array.isArray(j.epidata)) return [];
+  const j = await safeJson<DelphiResp>(`https://api.delphi.cmu.edu/epidata/fluview/?${qs.toString()}`);
+  if (!j || !Array.isArray(j.epidata) || j.epidata.length === 0) return [];
   // Group by region, keep newest week only.
   const newest = new Map<string, DelphiIliRow>();
   for (const r of j.epidata) {
