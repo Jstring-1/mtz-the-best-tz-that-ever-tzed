@@ -47,6 +47,8 @@ export default async function HourlyStrip() {
 }
 
 function fmtHour(ms: number, tz: string) {
+  // "4 AM" → "4a" / "11 PM" → "11p" — drop the trailing "m" so the strip
+  // can fit more cells without wrapping.
   return new Date(ms).toLocaleString('en-US', { timeZone: tz, hour: 'numeric' })
-    .replace(' ', '').toLowerCase();
+    .replace(' ', '').toLowerCase().replace(/m$/, '');
 }
