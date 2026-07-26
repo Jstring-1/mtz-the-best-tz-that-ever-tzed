@@ -1011,6 +1011,100 @@ function pacificDateTimeToEpoch(dateStr: string, timeStr: string): number | null
   return Math.floor((naive - offsetMs) / 1000);
 }
 
+// ----- Lucca Bar & Grill (public Google Calendar ICS) ------------------
+// The site's /custom/page/events is just a shell that embeds a Google
+// Calendar iframe (src=luccabarbenicia@gmail.com). We hit that calendar's
+// public ICS endpoint and parse the VEVENT blocks directly.
+
+const LUCCA_ICS = 'https://calendar.google.com/calendar/ical/luccabarbenicia%40gmail.com/public/basic.ics';
+const LUCCA_PAGE = 'https://www.luccabar.com/custom/page/events';
+
+// Unfold RFC-5545 continuation lines (any line starting with a space or
+// tab is a continuation of the previous logical line) and split into
+// VEVENT blocks.
+function parseIcsEvents(ics: string): Array<Map<string, string>> {
+  const unfolded = ics.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '');
+  const events: Array<Map<string, string>> = [];
+  let cur: Map<string, string> | null = null;
+  for (const line of unfolded.split('\n')) {
+    if (line === 'BEGIN:VEVENT') { cur = new Map(); continue; }
+    if (line === 'END:VEVENT') { if (cur) events.push(cur); cur = null; continue; }
+    if (!cur) continue;
+    const colon = line.indexOf(':');
+    if (colon <= 0) continue;
+    // key can carry params, e.g. `DTSTART;VALUE=DATE`. Keep the full
+    // left-hand side so callers can inspect params.
+    cur.set(line.slice(0, colon), line.slice(colon + 1));
+  }
+  return events;
+}
+
+// Unescape RFC-5545 TEXT values (\n, \N, \\, \,, \;).
+function icsUnescape(s: string): string {
+  return s
+    .replace(/\\n/gi, '\n')
+    .replace(/\\,/g, ',')
+    .replace(/\\;/g, ';')
+    .replace(/\\\\/g, '\\');
+}
+
+// Find a property whose name matches `base` regardless of any `;PARAM=…`
+// suffixes. Returns [key, value] or null.
+function icsFind(ev: Map<string, string>, base: string): [string, string] | null {
+  for (const [k, v] of ev) {
+    if (k === base || k.startsWith(base + ';')) return [k, v];
+  }
+  return null;
+}
+
+// Convert an ICS date/date-time value to epoch seconds. Handles:
+//   YYYYMMDDTHHMMSSZ            → UTC
+//   YYYYMMDDTHHMMSS (TZID=…)    → treat as Pacific-local
+//   YYYYMMDD (VALUE=DATE)       → all-day, treat as Pacific noon
+function icsToEpoch(key: string, val: string): number | null {
+  const isAllDay = /;VALUE=DATE(?:;|$)/.test(key);
+  if (isAllDay) {
+    const m = val.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (!m) return null;
+    return ptEpoch(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0);
+  }
+  const m = val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]) - 1, d = Number(m[3]);
+  const h = Number(m[4]), mi = Number(m[5]);
+  if (m[7] === 'Z') return Math.floor(Date.UTC(y, mo, d, h, mi) / 1000);
+  return ptEpoch(y, mo, d, h, mi);
+}
+
+async function scrapeLuccaBar(): Promise<LocalEvent[]> {
+  const ics = await safeFetch(LUCCA_ICS);
+  if (!ics) return [];
+  const out: LocalEvent[] = [];
+  for (const ev of parseIcsEvents(ics)) {
+    const startPair = icsFind(ev, 'DTSTART');
+    if (!startPair) continue;
+    const start_at = icsToEpoch(startPair[0], startPair[1]);
+    if (start_at == null) continue;
+    const endPair = icsFind(ev, 'DTEND');
+    const end_at = endPair ? icsToEpoch(endPair[0], endPair[1]) : null;
+    const uid = ev.get('UID') ?? `${startPair[1]}-${ev.get('SUMMARY') ?? ''}`;
+    const title = icsUnescape(ev.get('SUMMARY') ?? 'Event').trim() || 'Event';
+    const description = stripHtml(icsUnescape(ev.get('DESCRIPTION') ?? ''));
+    out.push({
+      id: `luccabar-${slugForId(uid)}`,
+      source: 'luccabar',
+      source_label: 'Lucca Bar & Grill',
+      title,
+      start_at,
+      end_at,
+      venue: 'Lucca Bar & Grill',
+      url: LUCCA_PAGE,
+      description,
+    });
+  }
+  return out;
+}
+
 // ----- public entry ----------------------------------------------------
 
 const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
@@ -1027,6 +1121,7 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
   ['farmers',        farmersMarketRecurring],
   ['martinezchamber', scrapeMartinezChamber],
   ['contracosta',    scrapeContraCosta],
+  ['luccabar',       scrapeLuccaBar],
   // cclegistar removed from the Railway-side loop — Granicus null-
   // routes Railway's outbound IP. The GitHub Actions workflow
   // .github/workflows/legistar-ingest.yml fetches the HTML from a
