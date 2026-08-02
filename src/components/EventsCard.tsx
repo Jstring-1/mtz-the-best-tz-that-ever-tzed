@@ -48,6 +48,7 @@ const EVENT_FILTERS = ['all', 'music', 'stage', 'comedy', 'sports'] as const;
 export default function EventsCard({ events, tz }: { events: UEvent[]; tz: string }) {
   const [tab, setTab] = useUrlEnum<Tab>('etab', EVENT_TABS, 'local');
   const [regFilter, setRegFilter] = useUrlEnum<RegFilter>('efilter', EVENT_FILTERS, 'all');
+  const [venue, setVenue] = useUrlString('evenue');
   const [eventId, setEventId] = useUrlString('event');
   const open = useMemo(
     () => (eventId ? events.find((e) => e.id === eventId) ?? null : null),
@@ -58,10 +59,27 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
   const local     = events.filter((e) => e.source === 'local');
   const municipal = events.filter((e) => e.source === 'municipal');
   const regional  = events.filter((e) => e.source === 'ticketmaster');
+  // Local venues, sorted alphabetically with per-venue counts. Use
+  // source_label since every local scraper's source_label is the venue
+  // (Del Cielo Brewing, Roxx on Main, Lucca Bar & Grill, …).
+  const localVenues = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of local) counts.set(e.source_label, (counts.get(e.source_label) ?? 0) + 1);
+    return [...counts.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ name, count }));
+  }, [local]);
+  // Only honor the venue filter on the local tab, and only if the
+  // chosen venue still has rows this render (venue rotates in/out as
+  // the cache refreshes). Otherwise fall through to unfiltered.
+  const activeVenue = tab === 'local' && venue && localVenues.some((v) => v.name === venue)
+    ? venue
+    : null;
+  const localShown = activeVenue ? local.filter((e) => e.source_label === activeVenue) : local;
   const regionalShown = regFilter === 'all'
     ? regional
     : regional.filter((e) => segGroup(e.segment, e.genre) === regFilter);
-  const list = tab === 'local' ? local : tab === 'municipal' ? municipal : regionalShown;
+  const list = tab === 'local' ? localShown : tab === 'municipal' ? municipal : regionalShown;
   const visible = list;
 
   const regCount = (f: RegFilter) =>
@@ -108,6 +126,22 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
               {f[0].toUpperCase() + f.slice(1)} <span className="count">{regCount(f)}</span>
             </button>
           ))}
+        </div>
+      )}
+      {tab === 'local' && localVenues.length > 1 && (
+        <div className="event-tabs reg-filter" aria-label="Venue filter">
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.72em', color: 'var(--text-muted)' }}>
+            Venue:{' '}
+            <select
+              value={activeVenue ?? ''}
+              onChange={(e) => setVenue(e.target.value || null)}
+            >
+              <option value="">All ({local.length})</option>
+              {localVenues.map((v) => (
+                <option key={v.name} value={v.name}>{v.name} ({v.count})</option>
+              ))}
+            </select>
+          </label>
         </div>
       )}
       {list.length === 0 ? (

@@ -166,7 +166,12 @@ async function scrapeDelCielo(): Promise<LocalEvent[]> {
     // Fallback to start_date (naive local) without Z.
     start_at: tsFromIso(toTribeIso(e.utc_start_date, true) ?? toTribeIso(e.start_date, false)),
     end_at:   tsFromIso(toTribeIso(e.utc_end_date,   true) ?? toTribeIso(e.end_date,   false)),
-    venue: decodeEntities(e.venue?.venue || 'Del Cielo Brewing'),
+    // Tribe's per-event venue string wobbles between "Del Cielo
+    // Brewing", "Del Cielo Brewery – MTZ", etc., which then rendered
+    // as duplicated venue lines ("Del Cielo Brewing · Del Cielo
+    // Brewery – MTZ"). Hard-code the canonical name so it matches
+    // source_label and the duplicate suffix drops out.
+    venue: 'Del Cielo Brewing',
     url: e.url,
     description: stripHtml(e.description || ''),
     image: e.image?.url,
