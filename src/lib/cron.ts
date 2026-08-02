@@ -405,6 +405,27 @@ async function localEvents(json: Record<string, unknown>) {
     please_note: null,
     payload: e,
   })));
+
+  // Reap orphans: for every source that returned at least one event
+  // this run, delete DB rows whose id ISN'T in the fresh set. Handles
+  // two symptoms the user saw as "stale event on old date":
+  //   1. Venue rescheduled a show to a new date, and the scraper's id
+  //      embeds start_at (JSON-LD fallback, some Contra Costa rows) —
+  //      new date = new id, upsert added a fresh row, old row lingered.
+  //   2. Venue removed a show entirely — upsert never re-touched the
+  //      row, so it stayed visible until its own start_at aged past
+  //      listUpcomingEvents' 6h cutoff.
+  // Only reap when the scraper returned >0 rows, so a transient scrape
+  // failure (Discogs 502, network blip) can't nuke a whole venue.
+  const freshBySource = new Map<string, string[]>();
+  for (const e of events) {
+    const arr = freshBySource.get(e.source);
+    if (arr) arr.push(`local-${e.id}`);
+    else freshBySource.set(e.source, [`local-${e.id}`]);
+  }
+  for (const [src, ids] of freshBySource) {
+    await sql`DELETE FROM events WHERE source = ${src} AND id <> ALL(${ids})`;
+  }
 }
 
 async function govLocal(json: Record<string, unknown>) {
