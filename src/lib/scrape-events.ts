@@ -1110,6 +1110,96 @@ async function scrapeLuccaBar(): Promise<LocalEvent[]> {
   return out;
 }
 
+// ----- Foopee "The List" — Bay Area punk/indie concert calendar --------
+// Static HTML, one concert per <LI>, grouped under day-anchor headings
+// (<LI><A NAME="aug_18"><B>Tue Aug 18</B></A><UL>…</UL>). Ten paginated
+// by-date.N.html pages cover ~2 months out. Tagged source='foopee' so
+// the cron mirror routes them to the Regional tab (Music sub-filter).
+
+const FOOPEE_BASE = 'http://www.foopee.com/punk/the-list/';
+const FOOPEE_PAGE_COUNT = 10;
+
+async function scrapeFoopee(): Promise<LocalEvent[]> {
+  const out: LocalEvent[] = [];
+  for (let i = 0; i < FOOPEE_PAGE_COUNT; i++) {
+    const url = `${FOOPEE_BASE}by-date.${i}.html`;
+    const html = await safeFetch(url);
+    if (!html) continue;
+    out.push(...parseFoopeePage(html, url));
+  }
+  return out;
+}
+
+export function parseFoopeePage(html: string, pageUrl: string): LocalEvent[] {
+  const out: LocalEvent[] = [];
+  let curMonth: number | null = null;
+  let curDay: number | null = null;
+  let curAnchor = '';
+  for (const line of html.split(/\r?\n/)) {
+    // Day header: "<LI><A NAME="aug_18"><B>Tue Aug 18</B></A><UL>"
+    const dayM = line.match(/^<LI><A NAME="([a-z]+)_(\d+)"><B>[^<]+<\/B><\/A>/i);
+    if (dayM) {
+      const mi = monthIdx(dayM[1]);
+      if (mi < 0) { curMonth = null; curDay = null; continue; }
+      curMonth = mi;
+      curDay = Number(dayM[2]);
+      curAnchor = `${dayM[1].toLowerCase()}_${dayM[2]}`;
+      continue;
+    }
+    // Concert row: "<LI><B><A HREF="by-club…">Venue</A></B> …bands… extras"
+    const cM = line.match(/^<LI><B><A HREF="by-club[^"]*">([^<]+)<\/A><\/B>\s*(.*)$/i);
+    if (!cM || curMonth === null || curDay === null) continue;
+    const venue = decodeEntities(cM[1]).trim();
+    const rest = cM[2];
+    const bands: string[] = [];
+    const bandRe = /<A HREF="by-band[^"]*">([^<]+)<\/A>/gi;
+    let bm: RegExpExecArray | null;
+    let lastEnd = 0;
+    while ((bm = bandRe.exec(rest))) {
+      bands.push(decodeEntities(bm[1]).trim());
+      lastEnd = bandRe.lastIndex;
+    }
+    if (bands.length === 0) continue;
+    // Drop shows whose first billing is a cancellation marker.
+    if (/^cancelled\b/i.test(bands[0])) continue;
+    const extras = stripHtml(rest.slice(lastEnd)).trim();
+    const title = bands.join(', ');
+    const start_at = foopeeDateTs(curMonth, curDay, extras);
+    if (start_at == null) continue;
+    out.push({
+      id: `foopee-${curAnchor}-${slugForId(`${venue}-${bands[0]}`).slice(0, 60)}`,
+      source: 'foopee',
+      source_label: 'Foopee Punk List',
+      title,
+      start_at,
+      end_at: null,
+      venue,
+      url: `${pageUrl}#${curAnchor}`,
+      description: extras || undefined,
+    });
+  }
+  return out;
+}
+
+// Foopee shows a date + free-form extras like "$12/$15 6:30pm/7pm".
+// Take the first h(:mm)?[ap]m as door time; default 8pm if none present.
+// Roll forward if the resulting Pacific-local moment is >7 days in the
+// past (so Dec listings read in Jan land on the correct following year).
+function foopeeDateTs(month: number, day: number, extras: string): number | null {
+  const tm = extras.match(/(\d{1,2})(?::(\d{2}))?\s*([ap])m\b/i);
+  let hour = 20, minute = 0;
+  if (tm) {
+    hour = Number(tm[1]) % 12;
+    if (/p/i.test(tm[3])) hour += 12;
+    minute = tm[2] ? Number(tm[2]) : 0;
+  }
+  const yr = new Date().getFullYear();
+  let ts = ptEpoch(yr, month, day, hour, minute);
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (ts < nowSec - 7 * 24 * 3600) ts = ptEpoch(yr + 1, month, day, hour, minute);
+  return ts;
+}
+
 // ----- public entry ----------------------------------------------------
 
 const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
@@ -1127,6 +1217,7 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
   ['martinezchamber', scrapeMartinezChamber],
   ['contracosta',    scrapeContraCosta],
   ['luccabar',       scrapeLuccaBar],
+  ['foopee',         scrapeFoopee],
   // cclegistar removed from the Railway-side loop — Granicus null-
   // routes Railway's outbound IP. The GitHub Actions workflow
   // .github/workflows/legistar-ingest.yml fetches the HTML from a

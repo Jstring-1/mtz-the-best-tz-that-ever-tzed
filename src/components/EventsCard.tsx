@@ -16,8 +16,8 @@ export interface UEvent {
   url?: string;
   description?: string;
   image?: string;
-  source: 'ticketmaster' | 'local' | 'municipal';
-  source_label: string;          // "Ticketmaster" | "Del Cielo Brewing" | "Contra Costa County" | etc.
+  source: 'ticketmaster' | 'local' | 'municipal' | 'regional';
+  source_label: string;          // "Ticketmaster" | "Foopee Punk List" | "Del Cielo Brewing" | "Contra Costa County" | etc.
   segment?: string;
   genre?: string;
   pleaseNote?: string;
@@ -58,7 +58,8 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
 
   const local     = events.filter((e) => e.source === 'local');
   const municipal = events.filter((e) => e.source === 'municipal');
-  const regional  = events.filter((e) => e.source === 'ticketmaster');
+  // Regional tab = Ticketmaster + Foopee (Bay Area punk/indie calendar).
+  const regional  = events.filter((e) => e.source === 'ticketmaster' || e.source === 'regional');
   // Local venues, sorted alphabetically with per-venue counts. Use
   // source_label since every local scraper's source_label is the venue
   // (Del Cielo Brewing, Roxx on Main, Lucca Bar & Grill, …).
