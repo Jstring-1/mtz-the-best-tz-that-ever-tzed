@@ -175,7 +175,7 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
                   <>
                     <span className="name">{e.title}</span>
                     <span className="venue">
-                      {e.source === 'ticketmaster'
+                      {e.source === 'ticketmaster' || e.source === 'regional'
                         ? [e.venue, e.city].filter(Boolean).join(' · ')
                         : `${e.source_label}${e.venue && e.venue !== e.source_label ? ` · ${e.venue}` : ''}`}
                     </span>
