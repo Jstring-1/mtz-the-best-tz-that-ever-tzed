@@ -237,5 +237,8 @@ export function staticStateOfficials(): Rep[] {
     electedDate: o.dateAssumed,
     bio: o.bio ?? bioFor(o.name),
     bioKey: o.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+    // Registry fallback — statewideOfficers() in reps.ts stamps
+    // STATIC_VERIFIED_AT on these before merging with live sources.
+    // Left undefined here to avoid a circular import.
   }));
 }

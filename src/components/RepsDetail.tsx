@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal';
 import RepBioModal from './RepBioModal';
 import { useUrlBool, useUrlString } from '@/lib/useUrlState';
+import { relativeFromIso } from '@/lib/time';
 import type { Rep, RepsPayload } from '@/lib/reps';
 
 interface Props { label: string; tooltip?: string }
@@ -47,6 +48,15 @@ function RepCard({ r, onOpen }: { r: Rep; onOpen: (r: Rep) => void }) {
           {r.district && !r.office.includes(r.district) && <span className="muted"> · {r.district}</span>}
         </div>
         {r.notes && <div className="rep-notes muted">{r.notes}</div>}
+        {r.verifiedAt && (
+          <div
+            className="rep-verified muted"
+            style={{ fontSize: '.72em', marginTop: 2 }}
+            title={`Verified ${r.verifiedAt}`}
+          >
+            verified {relativeFromIso(`${r.verifiedAt}T00:00:00Z`)}
+          </div>
+        )}
       </div>
     </>
   );

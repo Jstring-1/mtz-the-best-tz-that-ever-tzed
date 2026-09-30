@@ -74,6 +74,50 @@ async function safeText(url: string, init?: RequestInit, timeoutMs = 5000): Prom
   try { return await r.text(); } catch { return null; }
 }
 
+// Sentinel: last date the hand-maintained registries in
+// state-officials-data.ts and reps-bios.ts were touched. Bump this
+// whenever you edit either file. Live-sourced reps overwrite it with
+// their own fetch timestamp; static-fallback reps carry it through so
+// the modal can show "verified <date>" honestly.
+export const STATIC_VERIFIED_AT = '2026-05-25';
+
+// Today, as an ISO date (YYYY-MM-DD). Live-sourced reps stamp this
+// so the modal shows a fresh "verified" line each cron run.
+const nowIsoDate = () => new Date().toISOString().slice(0, 10);
+
+// Wikipedia article titles for California's constitutional offices.
+// Approach: one batched MediaWiki `action=query` request pulls all
+// eight wikitexts, then we regex `|incumbent = [[Name]]` out of each
+// infobox. Beats Wikidata for this use case — WD's P1308 claims for CA
+// offices are riddled with stale (no-end-date) statements from decades
+// ago, while the Wikipedia infoboxes are kept current by editors.
+// Office strings intentionally mirror the static registry
+// (state-officials-data.ts) so the canon()-based merge in
+// statewideOfficers() dedupes cleanly rather than emitting parallel rows.
+const CA_STATEWIDE_WP: Array<{ title: string; office: string; url: string }> = [
+  { title: 'Governor of California',                                 office: 'Governor',                     url: 'https://www.gov.ca.gov/' },
+  { title: 'Lieutenant Governor of California',                      office: 'Lieutenant Governor',          url: 'https://ltg.ca.gov/' },
+  { title: 'California Attorney General',                            office: 'Attorney General',             url: 'https://oag.ca.gov/' },
+  { title: 'Secretary of State of California',                       office: 'Secretary of State',           url: 'https://www.sos.ca.gov/' },
+  { title: 'California State Controller',                            office: 'Controller',                   url: 'https://www.sco.ca.gov/' },
+  { title: 'California State Treasurer',                             office: 'Treasurer',                    url: 'https://www.treasurer.ca.gov/' },
+  { title: 'California Insurance Commissioner',                      office: 'Insurance Commissioner',       url: 'https://www.insurance.ca.gov/' },
+  { title: 'California State Superintendent of Public Instruction',  office: 'Supt. of Public Instruction',  url: 'https://www.cde.ca.gov/' },
+];
+
+const GOV_CABINET_URL = 'https://www.gov.ca.gov/about/cabinet/';
+
+// Cloudflare browser-check headers. gov.ca.gov 403s a bare curl UA;
+// this profile gets 200 → 301 → /about/cabinet/.
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+};
+
 // =====================================================================
 // Types
 // =====================================================================
@@ -98,6 +142,11 @@ export interface Rep {
   appointedDate?: string;
   termExpires?: string;
   bioKey?: string;           // lowercase last-name slug (e.g. 'zorn')
+  // ISO date of when this specific rep was last confirmed against a
+  // live upstream (Wikidata, Congress.gov, OpenStates, gov.ca.gov).
+  // For hand-maintained static entries this holds the STATIC_VERIFIED_AT
+  // sentinel date — the last time someone edited the registry file.
+  verifiedAt?: string;
 }
 
 export interface RepsPayload {
@@ -204,6 +253,7 @@ async function federalReps(diag: Record<string, string>): Promise<Rep[]> {
       url: mem?.officialWebsiteUrl ?? `https://www.congress.gov/member/${m.bioguideId}`,
       phone: mem?.addressInformation?.phoneNumber,
       photoUrl: mem?.depiction?.imageUrl ?? m.depiction?.imageUrl,
+      verifiedAt: nowIsoDate(),
     };
   }));
   const out = enriched.filter((r): r is Rep => r !== null);
@@ -269,6 +319,7 @@ async function stateLegislature(diag: Record<string, string>): Promise<Rep[]> {
       email: p.email,
       phone: p.offices?.[0]?.voice,
       photoUrl: p.image,
+      verifiedAt: nowIsoDate(),
     };
     // Enrich with hand-curated bio if there's a last-name match in the
     // REP_BIOS registry (handles accents — findBio strips them).
@@ -305,16 +356,173 @@ function decodeEntities(s: string): string {
 }
 function stripTags(s: string): string { return s.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' '); }
 
-async function statewideOfficers(diag: Record<string, string>): Promise<Rep[]> {
-  // Now sourced from the hand-maintained registry in
-  // src/lib/state-officials-data.ts (10 constitutional officers + 18
-  // cabinet members). The previous Ballotpedia scrape was unreliable
-  // — table parsing kept producing empty rows — and the data is
-  // semi-static so a curated list is easier to keep correct.
-  const { staticStateOfficials } = await import('./state-officials-data');
-  const out = staticStateOfficials();
-  diag.statewideRows = `${out.length} from static registry`;
+// Batched MediaWiki fetch for the CA_STATEWIDE_WP offices. Returns one
+// Rep per Wikipedia article whose infobox has an `|incumbent = [[Name]]`
+// line. Falls back to [] on any network/parse failure — statewideOfficers()
+// merges what it got with the static registry.
+interface WpPage {
+  title?: string;
+  revisions?: Array<{ slots?: { main?: { content?: string } } }>;
+}
+interface WpBatchResp { query?: { pages?: WpPage[] } }
+
+// Strip Wikipedia markup fragments from an infobox value.
+function stripWikitext(s: string): string {
+  return (s || '')
+    .replace(/\[\[([^\]|]+?)(?:\|[^\]]+?)?\]\]/g, '$1')  // [[Name]] or [[Slug|Display]]
+    .replace(/'{2,}/g, '')                                // '' or '''
+    .replace(/<ref[\s\S]*?<\/ref>/g, '')                  // <ref>…</ref>
+    .replace(/\{\{[^}]*?\}\}/g, '')                       // {{template}}
+    .replace(/<[^>]+>/g, '')                              // stray HTML
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Pull a top-level infobox field `| name = value` where value runs
+// until the next line that begins with `|` or `}`. Returns '' if not
+// present. Case-insensitive on field name.
+function infoboxField(wikitext: string, name: string): string {
+  const re = new RegExp(`\\|\\s*${name}\\s*=\\s*([^\\n]*?)(?=\\n\\||\\n})`, 'i');
+  const m = wikitext.match(re);
+  return m?.[1]?.trim() ?? '';
+}
+
+async function wikipediaStatewide(diag: Record<string, string>): Promise<Rep[]> {
+  const titles = CA_STATEWIDE_WP.map((o) => o.title).join('|');
+  const url = 'https://en.wikipedia.org/w/api.php?'
+    + `action=query&prop=revisions&rvprop=content&rvslots=main&format=json&formatversion=2&redirects=1`
+    + `&titles=${encodeURIComponent(titles)}`;
+  const j = await safeJson<WpBatchResp>(url, {
+    headers: { 'User-Agent': 'mtz.city/1.0 (kylejester@gmail.com; reps refresh)' },
+  }, 8000);
+  const pages = j?.query?.pages ?? [];
+  diag.wikipediaPages = `${pages.length}/${CA_STATEWIDE_WP.length} pages returned`;
+
+  const today = nowIsoDate();
+  const out: Rep[] = [];
+  for (const p of pages) {
+    const wt = p.revisions?.[0]?.slots?.main?.content ?? '';
+    if (!wt || !p.title) continue;
+    const name = stripWikitext(infoboxField(wt, 'incumbent'));
+    if (!name) continue;
+    // Match by (case-insensitive) title, allowing MediaWiki's redirect
+    // resolution to have rewritten our request.
+    const cfg = CA_STATEWIDE_WP.find(
+      (o) => o.title.toLowerCase() === p.title!.toLowerCase(),
+    );
+    if (!cfg) continue;
+    out.push({
+      level: 'state',
+      office: cfg.office,
+      name,
+      url: cfg.url,
+      bioKey: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+      verifiedAt: today,
+    });
+  }
   return out;
+}
+
+// Parse gov.ca.gov's cabinet card grid. Each cabinet member is a
+// <li class="arrow-leaving-blue"> containing an <h2><a>Agency Name</a></h2>
+// and a <p class="title">Title Firstname Lastname</p>, plus a headshot
+// <img>. Returns one Rep per parsed card; empty list on any failure.
+async function scrapeCabinetLive(diag: Record<string, string>): Promise<Rep[]> {
+  const html = await safeText(GOV_CABINET_URL, { headers: BROWSER_HEADERS }, 8000);
+  if (!html) { diag.cabinetLive = 'gov.ca.gov cabinet fetch failed'; return []; }
+  const cardRe = /<li class="arrow-leaving-blue">([\s\S]*?)<\/li>/g;
+  const today = nowIsoDate();
+  const out: Rep[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = cardRe.exec(html)) !== null) {
+    const card = m[1];
+    const hrefM = card.match(/<h2[^>]*>\s*<a\s+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+    const titleM = card.match(/<p class="title">([\s\S]*?)<\/p>/i);
+    if (!hrefM || !titleM) continue;
+    const agency = decodeEntities(stripTags(hrefM[2])).trim();
+    const rawTitle = decodeEntities(stripTags(titleM[1])).trim();
+    // "Secretary Rohit Chopra" → role="Secretary", name="Rohit Chopra".
+    // Multi-word titles first so "Executive Director" matches before
+    // "Director". Case-sensitive on the title so a lowercase suffix
+    // never eats a capitalized first name.
+    const tm = rawTitle.match(/^(Executive Director|Chief Service Officer|Adjutant General|Chairperson|Chair|Commissioner|Director|Secretary)\s+(.+)$/);
+    const role = tm ? tm[1] : '';
+    const name = (tm ? tm[2] : rawTitle).trim();
+    if (!name) continue;
+    // Trim leading "California " so the office string reads like the
+    // static registry ("Sec., Department of Corrections", not
+    // "Secretary California Department of Corrections and Rehabilitation").
+    const agencyShort = agency.replace(/^California\s+/i, '');
+    const office = role ? `${role}, ${agencyShort}` : agencyShort;
+    const imgM = card.match(/<img[^>]+src="([^"]+)"/i);
+    // Relative image srcs (/wp-content/...) need absolutizing before
+    // mtz.city serves them.
+    const imgRel = imgM?.[1] ?? '';
+    const photoUrl = imgRel.startsWith('/') ? `https://www.gov.ca.gov${imgRel}` : (imgRel || undefined);
+    out.push({
+      level: 'state',
+      office,
+      name,
+      url: hrefM[1],
+      photoUrl,
+      bioKey: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+      verifiedAt: today,
+    });
+  }
+  diag.cabinetLive = `${out.length} cabinet cards parsed from gov.ca.gov`;
+  return out;
+}
+
+async function statewideOfficers(diag: Record<string, string>): Promise<Rep[]> {
+  // Three-layer merge, freshest wins:
+  //   1. Wikipedia infobox extract for 8 constitutional offices — the
+  //      MediaWiki API returns all wikitexts in one batched request and
+  //      the `|incumbent = [[Name]]` line is kept current by editors.
+  //   2. gov.ca.gov/about/cabinet scrape for the ~18 cabinet secretaries.
+  //   3. Hand-maintained registry in src/lib/state-officials-data.ts as
+  //      the fallback backbone for anything the live sources missed
+  //      (e.g. State Auditor, State Board of Equalization members).
+  //
+  // Merger dedupes by canonical office string. Live entries win on
+  // name/party/url; static entries win on photoUrl + bio (curated
+  // assets that the live sources don't publish).
+  const { staticStateOfficials } = await import('./state-officials-data');
+  // Stamp the registry-sentinel here (avoids circular import).
+  const staticList: Rep[] = staticStateOfficials().map((r) => ({ ...r, verifiedAt: STATIC_VERIFIED_AT }));
+  const [wp, cabinet] = await Promise.all([
+    wikipediaStatewide(diag).catch((e) => { diag.wikipediaErr = String(e); return []; }),
+    scrapeCabinetLive(diag).catch((e) => { diag.cabinetErr = String(e); return []; }),
+  ]);
+
+  const canon = (office: string) =>
+    office.toLowerCase()
+      .replace(/\bsecretary\b/g, 'sec')
+      .replace(/\bdepartment\b/g, 'dept')
+      .replace(/\bagency\b/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+  const byKey = new Map<string, Rep>();
+  for (const r of staticList) byKey.set(canon(r.office), r);
+  for (const r of [...wp, ...cabinet]) {
+    const key = canon(r.office);
+    const prior = byKey.get(key);
+    // Merge: live values dominate, but keep static photo/bio when the
+    // live scrape didn't publish one and the name matches (last-name).
+    const sameName = prior && prior.name && r.name
+      && prior.name.split(/\s+/).pop()?.toLowerCase() === r.name.split(/\s+/).pop()?.toLowerCase();
+    byKey.set(key, sameName ? {
+      ...prior,
+      ...r,
+      photoUrl: r.photoUrl ?? prior.photoUrl,
+      bio:      r.bio      ?? prior.bio,
+      party:    r.party    ?? prior.party,
+    } : r);
+  }
+  const merged = [...byKey.values()];
+  const liveCount = merged.filter((r) => r.verifiedAt === nowIsoDate()).length;
+  diag.statewideRows = `${merged.length} total (${liveCount} live, ${merged.length - liveCount} from static registry)`;
+  return merged;
 }
 
 // =====================================================================
@@ -361,7 +569,7 @@ async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
   const staticD5 = REP_BIOS['scales-preston'];
   if (staticD5) {
     diag.countySource = 'static (scales-preston from REP_BIOS)';
-    return [bioToRep('scales-preston', staticD5, 'county', d5Url)];
+    return [{ ...bioToRep('scales-preston', staticD5, 'county', d5Url), verifiedAt: STATIC_VERIFIED_AT }];
   }
 
   // Fallback (only if REP_BIOS lacks an entry) — scrape the .gov page.
@@ -407,6 +615,9 @@ async function countyReps(diag: Record<string, string>): Promise<Rep[]> {
     name,
     district: `BOS Dist ${COUNTY_BOS_DISTRICT}`,
     url: usedUrl,
+    // Only stamp fresh when a live source actually resolved a name;
+    // an empty-name fallback row is a "we couldn't reach anyone" state.
+    verifiedAt: name ? nowIsoDate() : undefined,
   };
   // Enrich from REP_BIOS if there's a match (same pattern as cityReps).
   if (name) {
@@ -504,7 +715,10 @@ async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
   const ordered = councilOrdered();
   if (ordered.length > 0) {
     diag.citySource = `static (${ordered.length} from REP_BIOS)`;
-    return ordered.map(({ slug, bio }) => bioToRep(slug, bio, 'city', COUNCIL_PAGE_URL));
+    return ordered.map(({ slug, bio }) => ({
+      ...bioToRep(slug, bio, 'city', COUNCIL_PAGE_URL),
+      verifiedAt: STATIC_VERIFIED_AT,
+    }));
   }
 
   // Fallback path retained only in case REP_BIOS is empty — we'd never
@@ -540,8 +754,9 @@ async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
     const dm = after.match(/District\s+(\d)/i);
     if (dm) district = dm[1];
 
+    const today = nowIsoDate();
     if (b.office === 'Mayor') {
-      reps.push({ level: 'city', office: 'Mayor', name: b.name, url: COUNCIL_PAGE_URL });
+      reps.push({ level: 'city', office: 'Mayor', name: b.name, url: COUNCIL_PAGE_URL, verifiedAt: today });
       continue;
     }
     if (b.office === 'Vice Mayor') {
@@ -551,6 +766,7 @@ async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
         name: b.name,
         district: district ? `District ${district}` : undefined,
         url: COUNCIL_PAGE_URL,
+        verifiedAt: today,
       });
       continue;
     }
@@ -561,6 +777,7 @@ async function cityReps(diag: Record<string, string>): Promise<Rep[]> {
       name: b.name,
       district: district ? `District ${district}` : undefined,
       url: COUNCIL_PAGE_URL,
+      verifiedAt: today,
     });
   }
 
