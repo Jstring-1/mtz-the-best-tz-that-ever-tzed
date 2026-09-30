@@ -67,22 +67,24 @@ export default async function MainPage() {
   }));
 
 
-  // Alerts: card type wants NoaaAlert shape (epoch numbers etc).
-  const localAlerts: NoaaAlert[] = storedAlerts
-    .filter((a) => a.scope === 'LOCAL')
-    .map((a) => ({
-      event: a.event ?? undefined,
-      severity: a.severity ?? undefined,
-      urgency: a.urgency ?? undefined,
-      certainty: a.certainty ?? undefined,
-      status: a.status ?? undefined,
-      NWSheadline: a.headline ?? undefined,
-      areaDesc: a.area_desc ?? undefined,
-      description: a.description ?? undefined,
-      sent: a.sent_at ?? undefined,
-      effective: a.effective_at ?? undefined,
-      expires: a.expires_at ?? undefined,
-    }));
+  // Alerts: card type wants NoaaAlert shape (epoch numbers etc). Local
+  // rows go to AlertsCard; regional (NOT-LOCAL) rows go to RadarCard as
+  // chips under the alert map, since the mtr.png covers the wider area.
+  const toNoaaAlert = (a: (typeof storedAlerts)[number]): NoaaAlert => ({
+    event: a.event ?? undefined,
+    severity: a.severity ?? undefined,
+    urgency: a.urgency ?? undefined,
+    certainty: a.certainty ?? undefined,
+    status: a.status ?? undefined,
+    NWSheadline: a.headline ?? undefined,
+    areaDesc: a.area_desc ?? undefined,
+    description: a.description ?? undefined,
+    sent: a.sent_at ?? undefined,
+    effective: a.effective_at ?? undefined,
+    expires: a.expires_at ?? undefined,
+  });
+  const localAlerts: NoaaAlert[]    = storedAlerts.filter((a) => a.scope === 'LOCAL').map(toNoaaAlert);
+  const regionalAlerts: NoaaAlert[] = storedAlerts.filter((a) => a.scope === 'NOT-LOCAL').map(toNoaaAlert);
 
   const storyImgs = misc.filter((m) => m.text === 'true' && m.id.startsWith('WeatherStory')).map((m) => m.id);
   const radarImgs: RadarImg[] = [
@@ -104,7 +106,7 @@ export default async function MainPage() {
       <PetsCard   pets={storedPets} />
       <div className="col-stack">
         <AlertsCard alerts={localAlerts} quakes={quakeAlerts} tz={loc.timezone} />
-        <RadarCard  imgs={radarImgs} />
+        <RadarCard  imgs={radarImgs} regionalAlerts={regionalAlerts} tz={loc.timezone} />
       </div>
     </div>
   );
