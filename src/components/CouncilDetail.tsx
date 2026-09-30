@@ -110,6 +110,14 @@ export default function CouncilDetail({ label, tooltip }: { label: string; toolt
           ))}
         </div>
 
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/img/martinez-council-districts.webp"
+          alt="Martinez city-council district boundaries"
+          className="d5-map-img"
+          style={{ marginTop: 10, marginBottom: 4 }}
+        />
+
         {loading && <p className="muted">Loading meetings…</p>}
         {error   && <p className="muted">Couldn’t load: {error}</p>}
         {data && data.meetings.length === 0 && (
