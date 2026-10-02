@@ -15,13 +15,15 @@ import {
 export type Bucket = '1m' | '2m' | '5m' | '15m' | '1h' | '4h' | '12h' | '1d' | 'all';
 export const BUCKETS: Bucket[] = ['1m', '2m', '5m', '15m', '1h', '4h', '12h', '1d', 'all'];
 
-const NOAA_LOCAL_CODES = new Set([
-  'CAC001','CAC013','CAC033','CAC041','CAC055','CAC067','CAC075','CAC077',
-  'CAC081','CAC085','CAC087','CAC095','CAC097','CAC113',
-  'CAZ006','CAZ017','CAZ018','CAZ019','CAZ112','CAZ113','CAZ115',
-  'CAZ502','CAZ503','CAZ504','CAZ505','CAZ506','CAZ508','CAZ509',
-  'CAZ510','CAZ512','CAZ513','CAZ514','CAZ515','CAZ529',
-]);
+// Zones that count as "local": Contra Costa County (CAC013) and the NWS
+// forecast zones covering it — CAZ510 (Martinez / most of the county),
+// CAZ508 (Richmond shoreline), CAZ515 (Mt. Diablo area). Verified from
+// api.weather.gov/points for cities across the county. Override with a
+// comma-separated NOAA_LOCAL_ZONES env var for a different location.
+const NOAA_LOCAL_CODES = new Set(
+  process.env.NOAA_LOCAL_ZONES?.split(',').map((s) => s.trim()).filter(Boolean)
+    ?? ['CAC013', 'CAZ508', 'CAZ510', 'CAZ515'],
+);
 
 interface RunResult {
   ok: string[];

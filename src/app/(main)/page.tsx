@@ -4,13 +4,12 @@ import type { NewsScopePayload } from '@/lib/news-aggregator';
 import type { HazardsPayload } from '@/lib/hazards';
 import {
   listUpcomingEvents, listActiveAlerts,
-  listAvailablePets, listRecentQuakes,
+  listRecentQuakes,
 } from '@/lib/store';
 import type { NoaaAlert } from '@/lib/types';
 import AlertsCard, { type QuakeLite } from '@/components/AlertsCard';
 import NewsCard from '@/components/NewsCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
-import PetsCard from '@/components/PetsCard';
 import RadarCard, { type RadarImg } from '@/components/RadarCard';
 
 export const dynamic = 'force-dynamic';
@@ -21,12 +20,11 @@ export default async function MainPage() {
 
   const [
     storedEvents, storedAlerts,
-    storedPets, storedQuakes, feeds, misc,
+    storedQuakes, feeds, misc,
     newsWorld, hazards,
   ] = await Promise.all([
     listUpcomingEvents(),
     listActiveAlerts(),
-    listAvailablePets(),
     listRecentQuakes(10),
     getFeeds(1000),
     getMisc(),
@@ -34,7 +32,7 @@ export default async function MainPage() {
     getJson<HazardsPayload>('regional_hazards').catch(() => null),
   ]);
 
-  // Quakes only from the last 7 days; AlertsCard hides itself when empty.
+  // Quakes only from the last 7 days; AlertsCard lists whatever is active.
   const oneWeekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
   const quakeAlerts: QuakeLite[] = storedQuakes
     .filter((q) => q.occurred_at >= oneWeekAgo)
@@ -69,9 +67,9 @@ export default async function MainPage() {
   }));
 
 
-  // Alerts: card type wants NoaaAlert shape (epoch numbers etc). Local
-  // rows go to AlertsCard; regional (NOT-LOCAL) rows go to RadarCard as
-  // chips under the alert map, since the mtr.png covers the wider area.
+  // Alerts: card type wants NoaaAlert shape (epoch numbers etc). Only
+  // alerts for Contra Costa / Martinez (scope LOCAL) are shown; the rest
+  // of the WFO's alerts stay in the table but off the page.
   const toNoaaAlert = (a: (typeof storedAlerts)[number]): NoaaAlert => ({
     event: a.event ?? undefined,
     severity: a.severity ?? undefined,
@@ -85,8 +83,7 @@ export default async function MainPage() {
     effective: a.effective_at ?? undefined,
     expires: a.expires_at ?? undefined,
   });
-  const localAlerts: NoaaAlert[]    = storedAlerts.filter((a) => a.scope === 'LOCAL').map(toNoaaAlert);
-  const regionalAlerts: NoaaAlert[] = storedAlerts.filter((a) => a.scope === 'NOT-LOCAL').map(toNoaaAlert);
+  const localAlerts: NoaaAlert[] = storedAlerts.filter((a) => a.scope === 'LOCAL').map(toNoaaAlert);
 
   const storyImgs = misc.filter((m) => m.text === 'true' && m.id.startsWith('WeatherStory')).map((m) => m.id);
   const radarImgs: RadarImg[] = [
@@ -105,10 +102,14 @@ export default async function MainPage() {
         local={feeds}
         world={newsWorld?.items ?? []}
       />
-      <PetsCard   pets={storedPets} />
+      <AlertsCard
+        alerts={localAlerts}
+        quakes={quakeAlerts}
+        hazards={hazards?.groups ?? []}
+        tz={loc.timezone}
+      />
       <div className="col-stack">
-        <AlertsCard alerts={localAlerts} quakes={quakeAlerts} tz={loc.timezone} />
-        <RadarCard  imgs={radarImgs} regionalAlerts={regionalAlerts} hazards={hazards?.groups ?? []} tz={loc.timezone} />
+        <RadarCard imgs={radarImgs} />
       </div>
     </div>
   );

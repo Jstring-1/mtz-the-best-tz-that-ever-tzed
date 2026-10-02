@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import PetsNav from './PetsNav';
 
 const NAV = [
   { href: '/weather', label: 'Weather' },
@@ -24,6 +25,7 @@ export default function Nav() {
           {n.label}
         </Link>
       ))}
+      <PetsNav />
     </nav>
   );
 }
