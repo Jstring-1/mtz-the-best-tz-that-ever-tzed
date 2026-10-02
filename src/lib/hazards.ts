@@ -310,15 +310,18 @@ async function chp(): Promise<HazardGroup | null> {
 async function caltrans(): Promise<HazardGroup | null> {
   const loc = getLocation();
   type L = { lcs: {
-    location: { begin: Record<string, string>; end: Record<string, string> };
+    location: { travelFlowDirection: string; begin: Record<string, string>; end: Record<string, string> };
     closure: {
-      typeOfClosure?: string; lanesClosed?: string; totalExistingLanes?: string; typeOfWork?: string;
+      closureID?: string; typeOfClosure?: string; lanesClosed?: string; totalExistingLanes?: string; typeOfWork?: string;
       closureTimestamp: { closureStartEpoch?: string; closureEndEpoch?: string; isClosureEndIndefinite?: string };
     };
   } };
   const j = await getJson<{ data?: L[] }>('https://cwwp2.dot.ca.gov/data/d4/lcs/lcsStatusD04.json');
   const now = Date.now() / 1000;
-  const rows: { km: number; item: HazardItem }[] = [];
+  // Caltrans files one record per direction of travel for the same work
+  // (SR-4 EB and WB, same closure ID and endpoints) — fold those into one row.
+  const byKey = new Map<string, { km: number; item: HazardItem; dirs: string[]; base: string }>();
+  const dirAbbr: Record<string, string> = { East: 'EB', West: 'WB', North: 'NB', South: 'SB' };
   for (const { lcs } of j.data ?? []) {
     const b = lcs.location.begin;
     if (b.beginCounty !== 'Contra Costa' && lcs.location.end.endCounty !== 'Contra Costa') continue;
@@ -334,10 +337,22 @@ async function caltrans(): Promise<HazardGroup | null> {
     const d = Number.isFinite(lat) && Number.isFinite(lon) ? km(loc.lat, loc.lon, lat, lon) : 999;
     const c = lcs.closure;
     const full = /full/i.test(c.typeOfClosure ?? '') || /all/i.test(c.lanesClosed ?? '');
-    rows.push({
+    // Shoulder-only work doesn't touch traffic lanes — not worth an alert.
+    if (!full && /shoulder/i.test(c.lanesClosed ?? '')) continue;
+    const key = [c.closureID, ...[b.beginLocationName, lcs.location.end.endLocationName].sort()].join('|');
+    const dir = lcs.location.travelFlowDirection;
+    const prior = byKey.get(key);
+    if (prior) {
+      const abbr = dirAbbr[dir] ?? dir;
+      if (abbr && !prior.dirs.includes(abbr)) prior.dirs.push(abbr);
+      continue;
+    }
+    byKey.set(key, {
       km: d,
+      dirs: [dirAbbr[dir] ?? dir].filter(Boolean),
+      base: `${b.beginRoute ?? 'Road'} ${full ? 'full closure' : 'lane closure'} — ${b.beginNearbyPlace || b.beginLocationName}`,
       item: {
-        title: `${b.beginRoute ?? 'Road'} ${full ? 'full closure' : 'lane closure'} — ${b.beginNearbyPlace || b.beginLocationName}`,
+        title: '',
         detail: [
           `${b.beginLocationName} to ${lcs.location.end.endLocationName}`,
           /^all$/i.test(c.lanesClosed ?? '') ? 'all lanes'
@@ -352,6 +367,8 @@ async function caltrans(): Promise<HazardGroup | null> {
       },
     });
   }
+  const rows = [...byKey.values()];
+  for (const r of rows) r.item.title = r.dirs.length ? `${r.base} (${r.dirs.join(' + ')})` : r.base;
   if (!rows.length) return null;
   rows.sort((a, b) => a.km - b.km);
   return {
