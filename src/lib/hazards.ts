@@ -7,6 +7,7 @@
 // day renders no chips at all.
 
 import { getLocation } from './location';
+import { CC_BOUNDARY, CC_TOWNS } from './cc-geo';
 
 export interface HazardItem {
   title: string;
@@ -192,22 +193,47 @@ async function wildfires(): Promise<HazardGroup | null> {
 
 // ---- PG&E outages -------------------------------------------------------
 
+function inContraCosta(lat: number, lon: number): boolean {
+  let inside = false;
+  for (let i = 0, j = CC_BOUNDARY.length - 1; i < CC_BOUNDARY.length; j = i++) {
+    const [xi, yi] = CC_BOUNDARY[i];
+    const [xj, yj] = CC_BOUNDARY[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// "Oakley" / "near Oakley (3 mi)" — nearest known town to a coordinate.
+function placeName(lat: number, lon: number): string {
+  let best = '';
+  let bestKm = Infinity;
+  for (const [name, tl, tg] of CC_TOWNS) {
+    const d = km(lat, lon, tl, tg);
+    if (d < bestKm) { bestKm = d; best = name; }
+  }
+  return bestKm < 2.5 ? best : `near ${best} (${Math.max(1, mi(bestKm))} mi)`;
+}
+
 async function pgeOutages(): Promise<HazardGroup | null> {
   const qs = new URLSearchParams({
-    where: '1=1',
+    where: 'EST_CUSTOMERS >= 25',
     geometry: '-122.43,37.72,-121.53,38.10',
     geometryType: 'esriGeometryEnvelope', inSR: '4326', spatialRel: 'esriSpatialRelIntersects',
     outFields: 'OUTAGE_ID,EST_CUSTOMERS,OUTAGE_CAUSE,CREW_CURRENT_STATUS,OUTAGE_START_TEXT,CURRENT_ETOR_TEXT',
-    returnGeometry: 'false', f: 'json',
+    returnGeometry: 'true', outSR: '4326', f: 'json',
   });
   type A = {
     OUTAGE_ID?: string; EST_CUSTOMERS?: number | null; OUTAGE_CAUSE?: string | null;
     CREW_CURRENT_STATUS?: string | null; OUTAGE_START_TEXT?: string | null; CURRENT_ETOR_TEXT?: string | null;
   };
-  const j = await getJson<{ features?: { attributes: A }[] }>(
+  const j = await getJson<{ features?: { attributes: A; geometry?: { x?: number; y?: number } }[] }>(
     `https://ags.pge.esriemcs.com/arcgis/rest/services/43/outages/MapServer/4/query?${qs}`
   );
-  const big = (j.features ?? []).map((f) => f.attributes).filter((a) => (a.EST_CUSTOMERS ?? 0) >= 25);
+  // The query box also overlaps Alameda/Solano; keep only points inside the
+  // county line.
+  const big = (j.features ?? [])
+    .filter((f) => f.geometry?.x != null && f.geometry?.y != null && inContraCosta(f.geometry.y, f.geometry.x))
+    .map((f) => ({ ...f.attributes, lat: f.geometry!.y as number, lon: f.geometry!.x as number }));
   if (!big.length) return null;
   big.sort((a, b) => (b.EST_CUSTOMERS ?? 0) - (a.EST_CUSTOMERS ?? 0));
   const total = big.reduce((s, a) => s + (a.EST_CUSTOMERS ?? 0), 0);
@@ -216,7 +242,7 @@ async function pgeOutages(): Promise<HazardGroup | null> {
     return Number.isNaN(ms) ? undefined : Math.floor(ms / 1000);
   };
   const items: HazardItem[] = big.slice(0, 10).map((a) => ({
-    title: `${(a.EST_CUSTOMERS ?? 0).toLocaleString('en-US')} customers without power`,
+    title: `${(a.EST_CUSTOMERS ?? 0).toLocaleString('en-US')} customers without power — ${placeName(a.lat, a.lon)}`,
     detail: [
       a.OUTAGE_CAUSE,
       a.CREW_CURRENT_STATUS,
@@ -224,9 +250,10 @@ async function pgeOutages(): Promise<HazardGroup | null> {
     ].filter(Boolean).join(' · ') || undefined,
     severity: (a.EST_CUSTOMERS ?? 0) >= 1000 ? 'alert' : (a.EST_CUSTOMERS ?? 0) >= 100 ? 'warn' : 'info',
     at: iso(a.OUTAGE_START_TEXT),
+    url: `https://www.google.com/maps?q=${a.lat.toFixed(5)},${a.lon.toFixed(5)}`,
   }));
   return {
-    kind: 'pge', label: 'PG&E outages (Contra Costa area)', chip: `Outages (${total.toLocaleString('en-US')})`,
+    kind: 'pge', label: 'PG&E outages in Contra Costa', chip: `Outages (${total.toLocaleString('en-US')})`,
     source: 'PG&E outage map — outages of 25+ customers', url: 'https://pgealerts.alerts.pge.com/outage-tools/outage-map/', items,
   };
 }
