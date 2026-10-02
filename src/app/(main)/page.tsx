@@ -106,6 +106,8 @@ export default async function MainPage() {
         alerts={localAlerts}
         quakes={quakeAlerts}
         hazards={hazards?.groups ?? []}
+        clear={hazards?.clear ?? []}
+        unavailable={hazards?.failed ?? []}
         tz={loc.timezone}
       />
       <div className="col-stack">

@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import Modal from './Modal';
 import type { NoaaAlert } from '@/lib/types';
-import type { HazardGroup } from '@/lib/hazards';
+import type { HazardGroup, HazardClear } from '@/lib/hazards';
 import { relativeFromUnixSeconds } from '@/lib/time';
 import { useUrlString } from '@/lib/useUrlState';
 
@@ -91,11 +91,13 @@ function bucketize(g: AlertGroup): AlertBucket[] {
 }
 
 export default function AlertsCard({
-  alerts, quakes = [], hazards = [], tz,
+  alerts, quakes = [], hazards = [], clear = [], unavailable = [], tz,
 }: {
   alerts: NoaaAlert[];
   quakes?: QuakeLite[];
   hazards?: HazardGroup[];
+  clear?: HazardClear[];
+  unavailable?: string[];
   tz: string;
 }) {
   const [alertKey, setAlertKey] = useUrlString('alert');
@@ -115,13 +117,17 @@ export default function AlertsCard({
   );
   const total = groups.length + quakes.length + hazards.length;
 
+  // Everything that checked in and has nothing to report. NWS and quakes
+  // come from our own tables; the rest from the hazards payload.
+  const allClear: { label: string; note: string }[] = [
+    ...(groups.length === 0 ? [{ label: 'Weather alerts', note: 'none for Contra Costa County' }] : []),
+    ...(quakes.length === 0 ? [{ label: 'Earthquakes', note: 'none significant this week' }] : []),
+    ...clear,
+  ];
+
   return (
     <section className="card-section alerts-card">
-      <h2>Alerts {total > 0 && <span className="count">{total}</span>}</h2>
-      {total === 0 ? (
-        <p className="empty">No active alerts.</p>
-      ) : (
-        <div className="stack-sm">
+      <div className="stack-sm">
           {groups.map((g) => (
             <button
               key={g.key}
@@ -166,8 +172,21 @@ export default function AlertsCard({
               </div>
             </button>
           ))}
+
+          {(allClear.length > 0 || unavailable.length > 0) && (
+            <div className="card all-clear">
+              <h3>{total === 0 ? 'All clear' : 'Also checked — all clear'}</h3>
+              <ul>
+                {allClear.map((c) => (
+                  <li key={c.label}><span className="what">{c.label}</span> <span className="note">{c.note}</span></li>
+                ))}
+              </ul>
+              {unavailable.length > 0 && (
+                <p className="meta unavailable">Couldn’t check right now: {unavailable.join(', ')}</p>
+              )}
+            </div>
+          )}
         </div>
-      )}
 
       <Modal open={!!open} onClose={() => setAlertKey(null)} title={open?.event ?? 'Alert'} size="lg">
         {open && (

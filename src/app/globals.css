@@ -2329,6 +2329,20 @@ button.econ-index.clickable.active {
 .alerts-card .card.alert.not-local.clickable:hover { background: #1a1007; }
 .alerts-card .card.alert.clickable h3 { margin: 0 0 4px; font-size: 1em; color: gold; }
 .alerts-card .card.alert.clickable .meta { font-size: .82em; color: var(--text-muted); }
+/* "All clear" card — sources that checked in with nothing to report. */
+.alerts-card .card.all-clear {
+  background: #07120a;
+  border: 1px solid var(--border);
+  border-left: 4px solid #2a7a3b;
+  padding: 8px 12px;
+}
+.alerts-card .card.all-clear h3 { margin: 0 0 4px; font-size: 1em; color: #6fcf86; }
+.alerts-card .card.all-clear ul { list-style: none; margin: 0; padding: 0; }
+.alerts-card .card.all-clear li { font-size: .82em; padding: 1px 0; }
+.alerts-card .card.all-clear .what { color: var(--text); }
+.alerts-card .card.all-clear .note { color: var(--text-muted); }
+.alerts-card .card.all-clear .note::before { content: '\2014\00a0'; }
+.alerts-card .card.all-clear .unavailable { margin: 6px 0 0; font-size: .78em; color: var(--text-muted); font-style: italic; }
 .alerts-card .alert-foot { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; }
 .alerts-card .alert-foot .tag {
   text-transform: lowercase; letter-spacing: .4px; font-size: .9em;

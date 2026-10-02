@@ -25,9 +25,18 @@ export interface HazardGroup {
   items: HazardItem[];
 }
 
+// A source that answered and has nothing to report.
+export interface HazardClear {
+  kind: string;
+  label: string;
+  note: string;
+}
+
 export interface HazardsPayload {
   fetchedAt: string;
   groups: HazardGroup[];
+  clear?: HazardClear[];        // absent in payloads cached before this field existed
+  failed?: string[];            // labels of sources that errored this run
   errors: Record<string, string>;
 }
 
@@ -198,7 +207,7 @@ async function pgeOutages(): Promise<HazardGroup | null> {
   const j = await getJson<{ features?: { attributes: A }[] }>(
     `https://ags.pge.esriemcs.com/arcgis/rest/services/43/outages/MapServer/4/query?${qs}`
   );
-  const big = (j.features ?? []).map((f) => f.attributes).filter((a) => (a.EST_CUSTOMERS ?? 0) >= 100);
+  const big = (j.features ?? []).map((f) => f.attributes).filter((a) => (a.EST_CUSTOMERS ?? 0) >= 25);
   if (!big.length) return null;
   big.sort((a, b) => (b.EST_CUSTOMERS ?? 0) - (a.EST_CUSTOMERS ?? 0));
   const total = big.reduce((s, a) => s + (a.EST_CUSTOMERS ?? 0), 0);
@@ -213,12 +222,12 @@ async function pgeOutages(): Promise<HazardGroup | null> {
       a.CREW_CURRENT_STATUS,
       a.CURRENT_ETOR_TEXT ? `restoration est. ${new Date(a.CURRENT_ETOR_TEXT).toLocaleTimeString('en-US', { timeZone: getLocation().timezone, hour: 'numeric', minute: '2-digit' })}` : null,
     ].filter(Boolean).join(' · ') || undefined,
-    severity: (a.EST_CUSTOMERS ?? 0) >= 1000 ? 'alert' : 'warn',
+    severity: (a.EST_CUSTOMERS ?? 0) >= 1000 ? 'alert' : (a.EST_CUSTOMERS ?? 0) >= 100 ? 'warn' : 'info',
     at: iso(a.OUTAGE_START_TEXT),
   }));
   return {
     kind: 'pge', label: 'PG&E outages (Contra Costa area)', chip: `Outages (${total.toLocaleString('en-US')})`,
-    source: 'PG&E outage map — outages of 100+ customers', url: 'https://pgealerts.alerts.pge.com/outage-tools/outage-map/', items,
+    source: 'PG&E outage map — outages of 25+ customers', url: 'https://pgealerts.alerts.pge.com/outage-tools/outage-map/', items,
   };
 }
 
@@ -227,7 +236,7 @@ async function pgeOutages(): Promise<HazardGroup | null> {
 async function chp(): Promise<HazardGroup | null> {
   const loc = getLocation();
   const xml = await getText('https://media.chp.ca.gov/sa_xml/sa.xml');
-  const interesting = /SIG Alert|CLOSURE|FIRE|1179|1181|1183|20001|SPINOUT|HAZMAT|1144|1141/i;
+  const interesting = /SIG Alert|CLOSURE|FIRE|1179|1181|1183|20001|SPINOUT|HAZMAT|1144|1141|1125-Traffic Hazard|TADV/i;
   const rows: { km: number; item: HazardItem }[] = [];
   for (const m of xml.matchAll(/<Log ID = "[^"]*">([\s\S]*?)<\/Log>/g)) {
     const b = m[1];
@@ -239,7 +248,7 @@ async function chp(): Promise<HazardGroup | null> {
     const lon = -Number(ll[1]) / 1e6;
     if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat === 0) continue;
     const d = km(loc.lat, loc.lon, lat, lon);
-    if (d > 25) continue;
+    if (d > 30) continue;
     const t = g('LogTime').match(/(\w{3})\s+(\d+)\s+(\d{4})\s+(\d+):(\d+)(AM|PM)/);
     let at: number | undefined;
     if (t) {
@@ -292,7 +301,7 @@ async function caltrans(): Promise<HazardGroup | null> {
     if (!(start <= now)) continue;
     if (ts.isClosureEndIndefinite !== 'true' && !(end >= now)) continue;
     // Multi-month construction closures are background, not news.
-    if (ts.isClosureEndIndefinite === 'true' || end - start > 14 * 86400) continue;
+    if (ts.isClosureEndIndefinite === 'true' || end - start > 60 * 86400) continue;
     const lat = Number(b.beginLatitude);
     const lon = Number(b.beginLongitude);
     const d = Number.isFinite(lat) && Number.isFinite(lon) ? km(loc.lat, loc.lon, lat, lon) : 999;
@@ -370,7 +379,7 @@ async function refineryReports(): Promise<HazardGroup | null> {
   const data = await getJson<{ Data?: { Date?: string; DocumentFile?: string }[] }>(
     `https://www.baaqmd.gov/en/api/admin/table/data/${m[1]}/${ds}/${m[3]}?limit=20&offset=0`
   );
-  const cutoff = Date.now() - 45 * 86400_000;
+  const cutoff = Date.now() - 90 * 86400_000;
   const items: HazardItem[] = [];
   for (const r of data.Data ?? []) {
     const doc = r.DocumentFile ?? '';
@@ -391,33 +400,41 @@ async function refineryReports(): Promise<HazardGroup | null> {
   if (!items.length) return null;
   return {
     kind: 'refinery', label: 'Refinery / air-quality incident reports', chip: `Refinery reports (${items.length})`,
-    source: 'Bay Area Air Quality Management District — posted in the last 45 days', url: page, items,
+    source: 'Bay Area Air Quality Management District — posted in the last 90 days', url: page, items,
   };
 }
 
 // ---- Public entry -------------------------------------------------------
 
-const SOURCES: [string, () => Promise<HazardGroup | null>][] = [
-  ['cws', cws],
-  ['refinery', refineryReports],
-  ['wildfire', wildfires],
-  ['spare-the-air', spareTheAir],
-  ['pge', pgeOutages],
-  ['chp', chp],
-  ['caltrans', caltrans],
-  ['bart', bart],
+// [id, label, "all clear" note, fetcher]. A source that responds with
+// nothing to report is listed in the panel's All clear card; one that
+// fails is listed as unavailable rather than silently looking clear.
+const SOURCES: [string, string, string, () => Promise<HazardGroup | null>][] = [
+  ['cws',           'Community Warning System', 'no active alerts',                    cws],
+  ['refinery',      'Refinery incident reports', 'none posted in the last 90 days',    refineryReports],
+  ['wildfire',      'Wildfires',                 'none active within ~120 mi',         wildfires],
+  ['spare-the-air', 'Spare the Air',             'no alert today',                     spareTheAir],
+  ['pge',           'PG&E outages',              'no outages over 25 customers',       pgeOutages],
+  ['chp',           'CHP incidents',             'no notable incidents nearby',        chp],
+  ['caltrans',      'Caltrans closures',         'no short-term closures in progress', caltrans],
+  ['bart',          'BART',                      'no service advisories',              bart],
 ];
 
 export const SOURCE_COUNT = SOURCES.length;
 
 export async function fetchRegionalHazards(): Promise<HazardsPayload> {
-  const results = await Promise.allSettled(SOURCES.map(([, fn]) => fn()));
+  const results = await Promise.allSettled(SOURCES.map(([, , , fn]) => fn()));
   const groups: HazardGroup[] = [];
+  const clear: HazardClear[] = [];
+  const failed: string[] = [];
   const errors: Record<string, string> = {};
   results.forEach((r, i) => {
-    const id = SOURCES[i][0];
-    if (r.status === 'fulfilled') { if (r.value) groups.push(r.value); }
-    else errors[id] = r.reason instanceof Error ? r.reason.message : String(r.reason);
+    const [id, label, note] = SOURCES[i];
+    if (r.status === 'rejected') {
+      errors[id] = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      failed.push(label);
+    } else if (r.value) groups.push(r.value);
+    else clear.push({ kind: id, label, note });
   });
-  return { fetchedAt: new Date().toISOString(), groups, errors };
+  return { fetchedAt: new Date().toISOString(), groups, clear, failed, errors };
 }
