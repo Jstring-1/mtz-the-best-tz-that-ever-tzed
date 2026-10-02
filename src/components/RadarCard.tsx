@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import Modal from './Modal';
 import type { NoaaAlert } from '@/lib/types';
 import { useUrlString } from '@/lib/useUrlState';
+import type { HazardGroup } from '@/lib/hazards';
 
 export interface RadarImg {
   src: string;
@@ -19,10 +20,11 @@ function fmtEpoch(sec?: number, tz = 'America/Los_Angeles'): string {
 }
 
 export default function RadarCard({
-  imgs, regionalAlerts = [], tz = 'America/Los_Angeles',
+  imgs, regionalAlerts = [], hazards = [], tz = 'America/Los_Angeles',
 }: {
   imgs: RadarImg[];
   regionalAlerts?: NoaaAlert[];
+  hazards?: HazardGroup[];
   tz?: string;
 }) {
   // Encode by index — the radar img list is server-rendered in a stable
@@ -52,6 +54,14 @@ export default function RadarCard({
     setRAlertIdx(i >= 0 ? String(i) : null);
   };
 
+  // Non-NWS hazard groups (wildfire, outages, CHP, BART, CWS, …). One chip
+  // per group; the popup lists that group's items. Keyed by group kind.
+  const [hazKind, setHazKind] = useUrlString('rhaz');
+  const openHaz = useMemo(
+    () => (hazKind ? hazards.find((g) => g.kind === hazKind) ?? null : null),
+    [hazKind, hazards],
+  );
+
   return (
     <section className="card-section radar-card">
       <div className="radar-grid">
@@ -68,8 +78,8 @@ export default function RadarCard({
         ))}
       </div>
 
-      {regionalAlerts.length > 0 && (
-        <div className="event-tabs" aria-label="Regional NWS alerts" style={{ marginTop: 8 }}>
+      {(regionalAlerts.length > 0 || hazards.length > 0) && (
+        <div className="event-tabs" aria-label="Regional alerts" style={{ marginTop: 8 }}>
           {regionalAlerts.map((a, i) => (
             <button
               key={`ra-${i}`}
@@ -81,6 +91,17 @@ export default function RadarCard({
               {a.event ?? 'Alert'}
             </button>
           ))}
+          {hazards.map((g) => (
+            <button
+              key={`hz-${g.kind}`}
+              type="button"
+              className="event-tab"
+              onClick={() => setHazKind(g.kind)}
+              title={g.label}
+            >
+              {g.chip}
+            </button>
+          ))}
         </div>
       )}
 
@@ -89,6 +110,29 @@ export default function RadarCard({
           <div style={{ textAlign: 'center' }}>
             <img src={open.src} alt={open.caption} style={{ maxWidth: '100%', height: 'auto' }} />
           </div>
+        )}
+      </Modal>
+
+      <Modal open={!!openHaz} onClose={() => setHazKind(null)} title={openHaz?.label ?? ''} size="lg">
+        {openHaz && (
+          <>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {openHaz.items.map((it, i) => (
+                <li key={i} style={{ padding: '8px 0', borderTop: i ? '1px solid var(--border, rgba(128,128,128,.25))' : 'none' }}>
+                  <div>
+                    <b>{it.title}</b>
+                    {it.at ? <span className="muted" style={{ marginLeft: 8, fontSize: '.85em' }}>{fmtEpoch(it.at, tz)}</span> : null}
+                  </div>
+                  {it.detail && <div className="meta" style={{ whiteSpace: 'pre-line', lineHeight: 1.45, marginTop: 2 }}>{it.detail}</div>}
+                  {it.url && <a href={it.url} target="_blank" rel="noopener" style={{ fontSize: '.85em' }}>Details →</a>}
+                </li>
+              ))}
+            </ul>
+            <p className="muted" style={{ fontSize: '.78em', marginTop: 12 }}>
+              Source: {openHaz.source}
+              {openHaz.url && <> · <a href={openHaz.url} target="_blank" rel="noopener">open source</a></>}
+            </p>
+          </>
         )}
       </Modal>
 

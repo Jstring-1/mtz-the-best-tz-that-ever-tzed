@@ -177,6 +177,18 @@ async function noaaAlerts(json: Record<string, unknown>) {
   }
 }
 
+// Non-NWS regional hazards (wildfire, outages, CHP/Caltrans, BART, air,
+// CWS/refinery). Per-source failures are reported in `errors` inside the
+// payload; only a total wipe-out is treated as a job failure.
+async function regionalHazards(json: Record<string, unknown>) {
+  const { fetchRegionalHazards, SOURCE_COUNT } = await import('./hazards');
+  const payload = await fetchRegionalHazards();
+  const failed = Object.keys(payload.errors).length;
+  if (failed) console.warn('[regional_hazards] source errors:', payload.errors);
+  if (failed >= SOURCE_COUNT) throw new Error(`all ${SOURCE_COUNT} hazard sources failed`);
+  json['regional_hazards'] = payload;
+}
+
 async function weatherapiCurrent(json: Record<string, unknown>) {
   const key = process.env.WEATHERAPI_KEY ?? '';
   const loc = getLocation();
@@ -1088,6 +1100,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     // is a polite cadence and matches how often Amtrak's underlying
     // feed materially changes anyway.
     await safe('trains_mtz', () => trainsMtz(json), ok, errors, timings);
+    await safe('regional_hazards', () => regionalHazards(json), ok, errors, timings);
   }
 
   if (bucket === '1h' || all) {
