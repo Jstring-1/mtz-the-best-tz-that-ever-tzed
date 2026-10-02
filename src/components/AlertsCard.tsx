@@ -4,16 +4,7 @@ import { useMemo } from 'react';
 import Modal from './Modal';
 import type { NoaaAlert } from '@/lib/types';
 import type { HazardGroup, HazardClear } from '@/lib/hazards';
-import { relativeFromUnixSeconds } from '@/lib/time';
 import { useUrlString } from '@/lib/useUrlState';
-
-export interface QuakeLite {
-  id?: string;
-  magnitude: number | null;
-  place: string;
-  occurred_at: number;
-  url: string;
-}
 
 function fmtEpoch(sec?: number, tz = 'America/Los_Angeles'): string {
   if (!sec) return '';
@@ -91,37 +82,30 @@ function bucketize(g: AlertGroup): AlertBucket[] {
 }
 
 export default function AlertsCard({
-  alerts, quakes = [], hazards = [], clear = [], unavailable = [], tz,
+  alerts, hazards = [], clear = [], unavailable = [], tz,
 }: {
   alerts: NoaaAlert[];
-  quakes?: QuakeLite[];
   hazards?: HazardGroup[];
   clear?: HazardClear[];
   unavailable?: string[];
   tz: string;
 }) {
   const [alertKey, setAlertKey] = useUrlString('alert');
-  const [quakeId, setQuakeId] = useUrlString('quake');
   const [hazKind, setHazKind] = useUrlString('hazard');
 
   const groups = useMemo(() => groupAlerts(alerts), [alerts]);
   const open = useMemo(() => (alertKey ? groups.find((g) => g.key === alertKey) ?? null : null), [alertKey, groups]);
   const buckets = useMemo(() => (open ? bucketize(open) : []), [open]);
-  const openQuake = useMemo(
-    () => (quakeId ? quakes.find((q) => q.id === quakeId) ?? null : null),
-    [quakeId, quakes],
-  );
   const openHaz = useMemo(
     () => (hazKind ? hazards.find((g) => g.kind === hazKind) ?? null : null),
     [hazKind, hazards],
   );
-  const total = groups.length + quakes.length + hazards.length;
+  const total = groups.length + hazards.length;
 
-  // Everything that checked in and has nothing to report. NWS and quakes
-  // come from our own tables; the rest from the hazards payload.
+  // Everything that checked in and has nothing to report. NWS comes from
+  // our own table; the rest from the hazards payload.
   const allClear: { label: string; note: string }[] = [
     ...(groups.length === 0 ? [{ label: 'Weather alerts', note: 'none for Contra Costa County' }] : []),
-    ...(quakes.length === 0 ? [{ label: 'Earthquakes', note: 'none significant this week' }] : []),
     ...clear,
   ];
 
@@ -159,20 +143,6 @@ export default function AlertsCard({
               </button>
             );
           })}
-          {quakes.map((q, i) => (
-            <button
-              key={`q-${q.id ?? i}`}
-              type="button"
-              className="card alert not-local clickable"
-              onClick={() => setQuakeId(q.id ?? null)}
-            >
-              <h3>M{q.magnitude != null ? q.magnitude.toFixed(1) : '—'} Earthquake</h3>
-              <div className="meta alert-headline">
-                {q.place} · {relativeFromUnixSeconds(q.occurred_at)}
-              </div>
-            </button>
-          ))}
-
           {(allClear.length > 0 || unavailable.length > 0) && (
             <div className="card all-clear">
               <h3>{total === 0 ? 'All clear' : 'Also checked — all clear'}</h3>
@@ -242,31 +212,6 @@ export default function AlertsCard({
               Source: {openHaz.source}
               {openHaz.url && <> · <a href={openHaz.url} target="_blank" rel="noopener">open source</a></>}
             </p>
-          </>
-        )}
-      </Modal>
-
-      <Modal
-        open={!!openQuake}
-        onClose={() => setQuakeId(null)}
-        title={openQuake ? `M${openQuake.magnitude != null ? openQuake.magnitude.toFixed(1) : '—'} earthquake` : 'Earthquake'}
-        size="lg"
-      >
-        {openQuake && (
-          <>
-            <div className="meta" style={{ marginBottom: 10 }}><b>{openQuake.place}</b></div>
-            <div className="meta" style={{ marginBottom: 10 }}>
-              {fmtEpoch(openQuake.occurred_at, tz)} · {relativeFromUnixSeconds(openQuake.occurred_at)}
-            </div>
-            {openQuake.url && (
-              <a
-                className="event-modal-btn primary"
-                href={openQuake.url}
-                target="_blank"
-                rel="noopener"
-                style={{ marginTop: 14, display: 'inline-block' }}
-              >USGS event page →</a>
-            )}
           </>
         )}
       </Modal>

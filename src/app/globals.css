@@ -2356,6 +2356,43 @@ button.econ-index.clickable.active {
   overflow: hidden;
 }
 
+/* Info column — compact summaries of data that otherwise sits behind
+   civic-strip popups (trains, markets, local indicators, food recalls /
+   outbreaks, quakes). Block headings open the matching popup. */
+.info-block { gap: 0; padding-bottom: 10px; }
+.info-block h3 { margin: 0 0 6px; font-size: .95em; font-weight: 600; }
+.info-h, .info-more {
+  background: none; border: 0; padding: 0; font: inherit; font-weight: 600;
+  color: var(--accent); cursor: pointer; text-align: left;
+}
+.info-h:hover, .info-more:hover { text-decoration: underline; }
+.info-list { list-style: none; margin: 0; padding: 0; }
+.info-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 2px 0; font-size: .82em; min-width: 0;
+}
+.info-row .info-main { min-width: 0; overflow-wrap: anywhere; }
+.info-row .info-side { flex: none; color: var(--text-muted); white-space: nowrap; }
+.info-row .info-side b { color: var(--text); font-weight: 600; }
+.info-item { display: flex; flex-direction: column; padding: 3px 0; font-size: .82em; min-width: 0; }
+.info-item + .info-item { border-top: 1px solid var(--border); }
+.info-title {
+  color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+a.info-title:hover { color: var(--accent); }
+.info-note { color: var(--text-muted); font-size: .88em; }
+.info-empty { color: var(--text-muted); font-size: .82em; font-style: italic; margin: 0; }
+.info-block .dir-up   { color: var(--accent-green); }
+.info-block .dir-down { color: var(--accent-warm); }
+.info-block .dir-flat { color: var(--text-muted); }
+.info-block .quake-mag.major    { color: #e34234; }
+.info-block .quake-mag.moderate { color: orange; }
+.info-block .quake-mag.minor    { color: var(--text-muted); }
+
+/* Radar loop leads the column, full width; any story thumbs sit below. */
+.radar-card .radar-grid .radar-thumb:first-child { grid-column: 1 / -1; }
+
 /* Radar grid + thumbs */
 .radar-card .radar-grid {
   display: grid;

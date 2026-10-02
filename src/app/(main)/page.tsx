@@ -2,12 +2,10 @@ import { getLocation } from '@/lib/location';
 import { getFeeds, getMisc, getJson } from '@/lib/cache';
 import type { NewsScopePayload } from '@/lib/news-aggregator';
 import type { HazardsPayload } from '@/lib/hazards';
-import {
-  listUpcomingEvents, listActiveAlerts,
-  listRecentQuakes,
-} from '@/lib/store';
+import { listUpcomingEvents, listActiveAlerts } from '@/lib/store';
 import type { NoaaAlert } from '@/lib/types';
-import AlertsCard, { type QuakeLite } from '@/components/AlertsCard';
+import AlertsCard from '@/components/AlertsCard';
+import InfoColumn from '@/components/InfoColumn';
 import NewsCard from '@/components/NewsCard';
 import EventsCard, { type UEvent } from '@/components/EventsCard';
 import RadarCard, { type RadarImg } from '@/components/RadarCard';
@@ -20,31 +18,16 @@ export default async function MainPage() {
 
   const [
     storedEvents, storedAlerts,
-    storedQuakes, feeds, misc,
+    feeds, misc,
     newsWorld, hazards,
   ] = await Promise.all([
     listUpcomingEvents(),
     listActiveAlerts(),
-    listRecentQuakes(10),
     getFeeds(1000),
     getMisc(),
     getJson<NewsScopePayload>('news_world').catch(() => null),
     getJson<HazardsPayload>('regional_hazards').catch(() => null),
   ]);
-
-  // Quakes only from the last 7 days; AlertsCard lists whatever is active.
-  const oneWeekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
-  const quakeAlerts: QuakeLite[] = storedQuakes
-    .filter((q) => q.occurred_at >= oneWeekAgo)
-    .slice()
-    .sort((a, b) => b.occurred_at - a.occurred_at)
-    .map((q) => ({
-      id: q.id,
-      magnitude: q.magnitude ?? null,
-      place: q.place,
-      occurred_at: q.occurred_at,
-      url: q.url ?? '',
-    }));
 
   // Map structured rows back into the UI shapes the cards already expect.
   const events: UEvent[] = storedEvents.map((e) => ({
@@ -86,13 +69,14 @@ export default async function MainPage() {
   const localAlerts: NoaaAlert[] = storedAlerts.filter((a) => a.scope === 'LOCAL').map(toNoaaAlert);
 
   const storyImgs = misc.filter((m) => m.text === 'true' && m.id.startsWith('WeatherStory')).map((m) => m.id);
+  // Radar loop leads (shown full-width); the NWS alert map is gone — the
+  // alerts panel covers that.
   const radarImgs: RadarImg[] = [
+    { src: 'https://radar.weather.gov/ridge/standard/KDAX_loop.gif', caption: 'KDAX radar loop' },
     ...storyImgs.map((img) => ({
       src: `https://www.weather.gov/images/mtr/WxStory/${img}`,
       caption: 'WFO Monterey Story',
     })),
-    { src: 'https://radar.weather.gov/ridge/standard/KDAX_loop.gif', caption: 'KDAX radar loop' },
-    { src: 'https://www.weather.gov/wwamap/png/mtr.png',              caption: 'WFO Monterey alert map' },
   ];
 
   return (
@@ -102,17 +86,17 @@ export default async function MainPage() {
         local={feeds}
         world={newsWorld?.items ?? []}
       />
-      <AlertsCard
-        alerts={localAlerts}
-        quakes={quakeAlerts}
-        hazards={hazards?.groups ?? []}
-        clear={hazards?.clear ?? []}
-        unavailable={hazards?.failed ?? []}
-        tz={loc.timezone}
-      />
       <div className="col-stack">
         <RadarCard imgs={radarImgs} />
+        <AlertsCard
+          alerts={localAlerts}
+          hazards={hazards?.groups ?? []}
+          clear={hazards?.clear ?? []}
+          unavailable={hazards?.failed ?? []}
+          tz={loc.timezone}
+        />
       </div>
+      <InfoColumn />
     </div>
   );
 }

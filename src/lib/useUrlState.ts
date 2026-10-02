@@ -20,7 +20,7 @@ function readParam(key: string): string | null {
   return new URLSearchParams(window.location.search).get(key);
 }
 
-function writeParam(key: string, value: string | null): void {
+export function writeParam(key: string, value: string | null): void {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
   if (value == null || value === '') url.searchParams.delete(key);
