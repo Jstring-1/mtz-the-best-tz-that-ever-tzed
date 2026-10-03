@@ -2368,11 +2368,11 @@ button.econ-index.clickable.active {
 .info-h:hover, .info-more:hover { text-decoration: underline; }
 .info-list { list-style: none; margin: 0; padding: 0; }
 .info-row {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 8px;
   padding: 2px 0; font-size: .82em; min-width: 0;
 }
-.info-row .info-main { min-width: 0; overflow-wrap: anywhere; }
-.info-row .info-side { flex: none; color: var(--text-muted); white-space: nowrap; }
+.info-row .info-main { min-width: 0; overflow-wrap: break-word; }
+.info-row .info-side { flex: none; margin-left: auto; color: var(--text-muted); white-space: nowrap; }
 .info-row .info-side b { color: var(--text); font-weight: 600; }
 .info-item { display: flex; flex-direction: column; padding: 3px 0; font-size: .82em; min-width: 0; }
 .info-item + .info-item { border-top: 1px solid var(--border); }
@@ -2389,6 +2389,18 @@ a.info-title:hover { color: var(--accent); }
 .info-block .quake-mag.major    { color: #e34234; }
 .info-block .quake-mag.moderate { color: orange; }
 .info-block .quake-mag.minor    { color: var(--text-muted); }
+
+.info-block h3 .info-note { font-weight: 400; margin-left: 4px; }
+.info-hot { color: var(--accent-warm); }
+.info-row .info-side.info-note { color: var(--text-muted); }
+.info-block li.info-note { padding: 2px 0; font-size: .78em; font-style: italic; }
+.bart-station + .bart-station { margin-top: 4px; }
+.bart-name { font-size: .78em; color: var(--text-muted); text-transform: lowercase; letter-spacing: .3px; }
+.bart-t { white-space: nowrap; }
+.bart-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; vertical-align: 0; }
+.res-bar { display: block; height: 4px; background: var(--bg-elev-2); border-radius: 2px; overflow: hidden; margin: 2px 0 3px; }
+.res-bar > span { display: block; height: 100%; background: #4f8fd9; }
+.info-item > .info-row { padding: 0; }
 
 /* Radar loop leads the column, full width; any story thumbs sit below. */
 .radar-card .radar-grid .radar-thumb:first-child { grid-column: 1 / -1; }

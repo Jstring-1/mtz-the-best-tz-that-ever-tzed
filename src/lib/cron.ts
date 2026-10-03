@@ -191,6 +191,30 @@ async function regionalHazards(json: Record<string, unknown>) {
   json['regional_hazards'] = payload;
 }
 
+// Quick-glance bundles for the dashboard info column (tides, scores, fire
+// weather, sun/moon, pollen, reservoirs). Per-source failures are recorded in
+// the payload's errors; only a total wipe-out fails the job.
+async function glanceLive(json: Record<string, unknown>) {
+  const { fetchGlanceLive } = await import('./glance');
+  const p = await fetchGlanceLive();
+  if (Object.keys(p.errors).length) console.warn('[glance_live] source errors:', p.errors);
+  if (!p.tides && !p.sports.length) throw new Error('glance_live: no data');
+  json['glance_live'] = p;
+}
+async function glanceHourly(json: Record<string, unknown>) {
+  const { fetchGlanceHourly } = await import('./glance');
+  const p = await fetchGlanceHourly();
+  if (!p.fire) throw new Error('glance_hourly: ' + JSON.stringify(p.errors));
+  json['glance_hourly'] = p;
+}
+async function glanceDaily(json: Record<string, unknown>) {
+  const { fetchGlanceDaily } = await import('./glance');
+  const p = await fetchGlanceDaily();
+  if (Object.keys(p.errors).length) console.warn('[glance_daily] source errors:', p.errors);
+  if (!p.sky && !p.pollen && !p.reservoirs.length) throw new Error('glance_daily: no data');
+  json['glance_daily'] = p;
+}
+
 async function weatherapiCurrent(json: Record<string, unknown>) {
   const key = process.env.WEATHERAPI_KEY ?? '';
   const loc = getLocation();
@@ -683,7 +707,7 @@ function stripTags(s: string, allow: string[]): string {
 // holdings (GME, PSLV). The civic-bar Economy popup picks out the
 // macro indexes; everything else is available for a future stocks
 // dashboard.
-const STOCK_SYMBOLS = ['^GSPC', '^DJI', '^IXIC', '^RUT', '^VIX', 'GME', 'PSLV'];
+const STOCK_SYMBOLS = ['^GSPC', '^DJI', '^IXIC', '^RUT', '^VIX', 'GME', 'PSLV', 'BTC-USD', 'ETH-USD'];
 
 interface YahooChartMeta {
   symbol?: string;
@@ -1103,6 +1127,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     // feed materially changes anyway.
     await safe('trains_mtz', () => trainsMtz(json), ok, errors, timings);
     await safe('regional_hazards', () => regionalHazards(json), ok, errors, timings);
+    await safe('glance_live', () => glanceLive(json), ok, errors, timings);
   }
 
   if (bucket === '1h' || all) {
@@ -1111,6 +1136,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     // their upstream cadence is 4-6h or better.
     await safe('noaa_hourly',         () => noaaHourly(json),         ok, errors, timings);
     await safe('noaa_buoys',          () => noaaBuoys(json),          ok, errors, timings);
+    await safe('glance_hourly',       () => glanceHourly(json),       ok, errors, timings);
   }
 
   if (bucket === '4h' || all) {
@@ -1135,6 +1161,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
       safe('weatherapi_forecast',() => weatherapiForecast(json),   ok, errors, timings),
       safe('usgs_quakes',        () => usgsQuakes(json),           ok, errors, timings),
       safe('ebird',              () => ebird(json),                ok, errors, timings),
+      safe('glance_daily',       () => glanceDaily(json),          ok, errors, timings),
     ]);
   }
 

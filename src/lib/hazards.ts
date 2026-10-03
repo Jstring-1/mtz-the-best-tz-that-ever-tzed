@@ -7,6 +7,7 @@
 // day renders no chips at all.
 
 import { getLocation } from './location';
+import { zonedEpoch } from './tz';
 import { CC_BOUNDARY, CC_TOWNS } from './cc-geo';
 
 export interface HazardItem {
@@ -70,16 +71,6 @@ function km(lat1: number, lon1: number, lat2: number, lon2: number): number {
   return 12742 * Math.asin(Math.sqrt(a));
 }
 const mi = (k: number) => Math.round(k * 0.621371);
-
-// Epoch seconds for a wall-clock time in the configured timezone.
-function zonedEpoch(y: number, mo: number, d: number, h: number, mn: number, tz: string): number {
-  const guess = Date.UTC(y, mo, d, h, mn);
-  const part = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
-    .formatToParts(new Date(guess)).find((p) => p.type === 'timeZoneName')?.value ?? 'GMT';
-  const m = part.match(/GMT([+-]\d+)(?::(\d+))?/);
-  const offMin = m ? Number(m[1]) * 60 + Math.sign(Number(m[1])) * Number(m[2] ?? 0) : 0;
-  return Math.floor((guess - offMin * 60_000) / 1000);
-}
 
 function decode(s: string): string {
   return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
