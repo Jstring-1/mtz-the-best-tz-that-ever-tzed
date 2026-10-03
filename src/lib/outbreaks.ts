@@ -210,7 +210,12 @@ function parseCdcFoodborneRow(line: string): OutbreakItem | null {
   // germHtml: `<em>E. coli</em> O157:H7` → strip italics, keep full strain.
   const germ = decodeBasic(stripTagsLocal(germHtml)).replace(/\s+/g, ' ').trim();
   // Slug-derived ID + date.
-  const slug = href.replace(/\/index\.html$/, '').split('/').filter(Boolean).slice(-1)[0] ?? title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  let slug = href.replace(/\/index\.html$/, '').split('/').filter(Boolean).slice(-1)[0] ?? title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  // Outbreaks without their own page all link to a generic index.htm —
+  // derive the id from the row itself so ids stay unique (React keys, expand state).
+  if (/^index\.html?$/i.test(slug)) {
+    slug = `${title}-${germ}-${year}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
   const date = dateFromSlug(href, year.trim());
   return {
     id: `cdc-fb-${slug}`,

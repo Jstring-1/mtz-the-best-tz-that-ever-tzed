@@ -439,6 +439,107 @@ async function refineryReports(): Promise<HazardGroup | null> {
   };
 }
 
+// ---- California power grid (CAISO) --------------------------------------
+// "Normal" on a calm day; anything else (Flex Alert, EEA levels, restricted
+// maintenance) is worth surfacing.
+
+async function gridStatus(): Promise<HazardGroup | null> {
+  const j = await getJson<{
+    gridstatus?: string[]; CurrentSystemDemand?: number; todayForecastPeakDemand?: number; Current_reserve?: number;
+  }>('https://www.caiso.com/outlook/current/stats.txt');
+  const status = j.gridstatus?.[0];
+  if (!status) throw new Error('CAISO status missing');
+  if (/^normal$/i.test(status)) return null;
+  const mw = (n?: number) => (typeof n === 'number' ? `${Math.round(n).toLocaleString('en-US')} MW` : '—');
+  return {
+    kind: 'grid', label: 'California power grid', chip: `Grid: ${status}`,
+    source: 'California ISO — Today’s Outlook', url: 'https://www.caiso.com/todays-outlook',
+    items: [{
+      title: status,
+      detail: `Demand ${mw(j.CurrentSystemDemand)} (forecast peak ${mw(j.todayForecastPeakDemand)}) · reserves ${mw(j.Current_reserve)}`,
+      severity: 'alert',
+    }],
+  };
+}
+
+// ---- Airport delays (FAA National Airspace System status) ---------------
+
+const WATCH_AIRPORTS = ['SFO', 'OAK', 'SJC'];
+
+async function airports(): Promise<HazardGroup | null> {
+  const xml = await getText('https://nasstatus.faa.gov/api/airport-status-information');
+  const label: Record<string, string> = {
+    Program: 'Ground stop', Ground_Delay: 'Ground delay program',
+    Delay: 'Arrival/departure delays', Airport: 'Airport closure',
+  };
+  const items: HazardItem[] = [];
+  for (const m of xml.matchAll(/<(Program|Ground_Delay|Delay|Airport)>([\s\S]*?)<\/\1>/g)) {
+    const body = m[2];
+    const code = body.match(/<ARPT>([A-Z]{3})<\/ARPT>/)?.[1];
+    if (!code || !WATCH_AIRPORTS.includes(code)) continue;
+    const field = (tag: string) => body.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`))?.[1]?.trim();
+    // Closure notices that only restrict general-aviation ramps aren't news.
+    if (m[1] === 'Airport' && /GA ACFT|NON SKED|\bPPR\b/i.test(field('Reason') ?? '')) continue;
+    const dir = body.match(/<Arrival_Departure Type="([^"]+)"/)?.[1];
+    items.push({
+      title: `${code} — ${label[m[1]] ?? 'Delay'}${dir ? ` (${dir.toLowerCase()}s)` : ''}`,
+      detail: [
+        field('Reason'),
+        field('Avg') && `avg ${field('Avg')}`,
+        field('Min') && `${field('Min')}${field('Max') ? `–${field('Max')}` : ''}`,
+        field('Trend'),
+        field('End_Time') && `until ${field('End_Time')}`,
+      ].filter(Boolean).join(' · ') || undefined,
+      severity: m[1] === 'Program' || m[1] === 'Airport' ? 'alert' : 'warn',
+      url: 'https://nasstatus.faa.gov/',
+    });
+  }
+  if (!items.length) return null;
+  return {
+    kind: 'airports', label: 'Airport delays (SFO / OAK / SJC)', chip: `Airports (${items.length})`,
+    source: 'FAA National Airspace System status', url: 'https://nasstatus.faa.gov/', items,
+  };
+}
+
+// ---- East Bay Regional Park District alerts -----------------------------
+// The district's news feed mixes events with closures; keep recent items
+// that look like alerts and mention a Contra Costa park or trail. Park
+// pages can carry alerts that never reach the feed, so "clear" here means
+// "nothing in the feed".
+
+const CC_PARKS = /Briones|Carquinez|Martinez|Mt\.? Diablo|Contra Loma|Crockett|Diablo Foothills|Black Diamond|Lafayette|Las Trampas|Sycamore|Morgan Territory|Iron Horse|Contra Costa Canal|Point Pinole|Pinole|Kennedy Grove|Sobrante|Tilden|Wildcat|Roberts|Round Valley|Marsh Creek|Deer Valley|Bay Point|Big Break|Antioch|Oakley|Brooks Island|Point Isabel|San Pablo Bay|Bay Trail|Eastshore/i;
+const ALERT_TITLE = /closure|closed|alert|advisory|restriction|notice|warning|fire|detour/i;
+const NOT_ALERT = /tour|walk|class|explorer|festival|volunteer|camp\b|hike|story|concert|workshop/i;
+
+async function parkAlerts(): Promise<HazardGroup | null> {
+  const xml = await getText('https://www.ebparks.org/rss.xml');
+  const cutoff = Date.now() - 21 * 86400_000;
+  const items: HazardItem[] = [];
+  for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+    const it = m[1];
+    const title = stripTags(it.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? '');
+    const when = Date.parse(it.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] ?? '');
+    if (!title || Number.isNaN(when) || when < cutoff) continue;
+    if (!ALERT_TITLE.test(title) || NOT_ALERT.test(title)) continue;
+    const desc = decode(it.match(/<description>([\s\S]*?)<\/description>/)?.[1] ?? '');
+    const text = stripTags(desc.replace(/<span class="field field--name-(?:title|uid|created)[\s\S]*?<\/span>(?:\s*<\/span>)?/g, ' '));
+    if (!CC_PARKS.test(text) && !CC_PARKS.test(title)) continue;
+    items.push({
+      title,
+      detail: (text.startsWith(title) ? text.slice(title.length) : text).trim().slice(0, 320),
+      severity: /closure|closed/i.test(title) ? 'warn' : 'info',
+      url: it.match(/<link>([^<]+)<\/link>/)?.[1],
+      at: Math.floor(when / 1000),
+    });
+  }
+  if (!items.length) return null;
+  return {
+    kind: 'parks', label: 'Park & trail alerts (East Bay Regional Parks)', chip: `Parks (${items.length})`,
+    source: 'East Bay Regional Park District news feed — last 21 days', url: 'https://www.ebparks.org/alerts-closures',
+    items: items.slice(0, 6),
+  };
+}
+
 // ---- Public entry -------------------------------------------------------
 
 // [id, label, "all clear" note, fetcher]. A source that responds with
@@ -453,6 +554,9 @@ const SOURCES: [string, string, string, () => Promise<HazardGroup | null>][] = [
   ['chp',           'CHP incidents',             'no notable incidents nearby',        chp],
   ['caltrans',      'Caltrans closures',         'no short-term closures in progress', caltrans],
   ['bart',          'BART',                      'no service advisories',              bart],
+  ['grid',          'Power grid (CAISO)',        'grid status normal',                 gridStatus],
+  ['airports',      'Airport delays',            'no FAA delays at SFO, OAK or SJC',   airports],
+  ['parks',         'Park & trail alerts',       'nothing in the EBRPD news feed',     parkAlerts],
 ];
 
 export const SOURCE_COUNT = SOURCES.length;

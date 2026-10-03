@@ -183,6 +183,14 @@ export function InfoView(d: InfoData) {
   // ---- Pollen ----
   const pollen = daily?.pollen ?? null;
 
+  // ---- Grid / space / drought ----
+  const grid = live?.grid ?? null;
+  const gridPct = grid?.demandMW != null && grid.peakForecastMW ? Math.round((grid.demandMW / grid.peakForecastMW) * 100) : null;
+  const space = hourly?.space ?? null;
+  const kpLabel = (kp: number) => (kp < 4 ? 'quiet' : kp < 5 ? 'unsettled' : kp < 7 ? 'storm — aurora possible up north' : 'strong storm — aurora possible here');
+  const nextIss = (space?.issPasses ?? []).find((p) => p.start >= nowSec) ?? null;
+  const drought = daily?.drought ?? null;
+
   // ---- Scores ----
   const teams: SportsTeam[] = live?.sports ?? [];
 
@@ -245,6 +253,52 @@ export function InfoView(d: InfoData) {
           </ul>
         )}
       </section>
+
+      {space && (space.kp != null || space.issPasses.length > 0) && (
+        <section className="card-section info-block">
+          <h3>Space</h3>
+          <ul className="info-list">
+            {space.kp != null && (
+              <li className="info-row">
+                <span className="info-main">Geomagnetic Kp</span>
+                <span className="info-side"><b>{space.kp.toFixed(1)}</b> <span className="info-note">{kpLabel(space.kp)}</span></span>
+              </li>
+            )}
+            <li className="info-row">
+              <span className="info-main">Next visible ISS pass</span>
+              <span className="info-side">
+                {nextIss
+                  ? <>{dayTime(nextIss.start)} <span className="info-note">{nextIss.maxEl}° · {nextIss.from}→{nextIss.to}</span></>
+                  : <span className="info-note">none in 2 weeks</span>}
+              </span>
+            </li>
+          </ul>
+        </section>
+      )}
+
+      {grid && (
+        <section className="card-section info-block">
+          <h3>Power grid <span className="info-note">CAISO</span></h3>
+          <ul className="info-list">
+            <li className="info-row">
+              <span className="info-main">Status</span>
+              <span className="info-side">{/^normal$/i.test(grid.status) ? <b>Normal</b> : <b className="info-hot">{grid.status}</b>}</span>
+            </li>
+            {grid.demandMW != null && (
+              <li className="info-row">
+                <span className="info-main">Demand now</span>
+                <span className="info-side">{Math.round(grid.demandMW).toLocaleString('en-US')} MW{gridPct != null && <span className="info-note"> {gridPct}% of today&apos;s peak fcst</span>}</span>
+              </li>
+            )}
+            {grid.reserveMW != null && (
+              <li className="info-row"><span className="info-main">Reserves</span><span className="info-side">{Math.round(grid.reserveMW).toLocaleString('en-US')} MW</span></li>
+            )}
+            {grid.renewablesPct != null && (
+              <li className="info-row"><span className="info-main">Renewables</span><span className="info-side">{grid.renewablesPct}%</span></li>
+            )}
+          </ul>
+        </section>
+      )}
 
       <section className="card-section info-block">
         <h3>Fire weather <span className="info-note">next 24 h</span></h3>
@@ -332,7 +386,7 @@ export function InfoView(d: InfoData) {
                   {t.live
                     ? <span className="info-side"><b className="info-hot">LIVE</b> {t.live.us ?? '–'}–{t.live.them ?? '–'} {t.live.home ? 'vs' : '@'} {t.live.opp}</span>
                     : t.last
-                      ? <span className="info-side"><b className={t.last.won ? 'dir-up' : 'dir-down'}>{t.last.won ? 'W' : 'L'}</b> {t.last.us}–{t.last.them} {t.last.home ? 'vs' : '@'} {t.last.opp}</span>
+                      ? <span className="info-side"><b className={t.last.tie ? '' : t.last.won ? 'dir-up' : 'dir-down'}>{t.last.tie ? 'T' : t.last.won ? 'W' : 'L'}</b> {t.last.us}–{t.last.them} {t.last.home ? 'vs' : '@'} {t.last.opp}</span>
                       : <span className="info-side info-note">no games yet</span>}
                 </span>
                 {t.live ? <span className="info-note">{t.live.detail}</span>
@@ -344,11 +398,11 @@ export function InfoView(d: InfoData) {
         </section>
       )}
 
-      {(daily?.reservoirs?.length ?? 0) > 0 && (
+      {((daily?.reservoirs?.length ?? 0) > 0 || drought) && (
         <section className="card-section info-block">
-          <h3>Reservoirs <span className="info-note">% full · % of avg</span></h3>
+          <h3>Water &amp; drought <span className="info-note">% full · % of avg</span></h3>
           <ul className="info-list">
-            {daily!.reservoirs.map((r) => (
+            {(daily?.reservoirs ?? []).map((r) => (
               <li key={r.id} className="info-item">
                 <span className="info-row">
                   <span className="info-main">{r.name}</span>
@@ -359,6 +413,16 @@ export function InfoView(d: InfoData) {
                 )}
               </li>
             ))}
+            {drought && (
+              <li className="info-row">
+                <span className="info-main">Drought (Contra Costa)</span>
+                <span className="info-side">
+                  {drought.worst === 'None'
+                    ? <b>None</b>
+                    : <><b className="info-hot">{drought.worst}</b> <span className="info-note">{drought.pctInDrought > 0 ? `${Math.round(drought.pctInDrought)}% of county in drought` : `${Math.round(drought.pctAbnormallyDry)}% abnormally dry`}</span></>}
+                </span>
+              </li>
+            )}
           </ul>
         </section>
       )}

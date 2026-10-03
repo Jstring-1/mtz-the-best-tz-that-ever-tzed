@@ -61,7 +61,7 @@ export default function QuakesDetail({ label, tooltip, data }: Props) {
       <button type="button" className="civic-row-btn" onClick={() => setOpen(true)} title={tooltip}>
         <span dangerouslySetInnerHTML={{ __html: label }} />
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="USGS — significant California earthquakes" size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title="USGS — nearby &amp; significant California earthquakes" size="lg">
         {data.length === 0 ? (
           <p className="muted">No quakes cached. Run /admin → 1h.</p>
         ) : (

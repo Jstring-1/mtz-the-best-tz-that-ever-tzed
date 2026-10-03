@@ -4,6 +4,7 @@
 // never blanks the others; the cron stores the three bundles below.
 
 import { getLocation, getNoaaGridpoint } from './location';
+import * as satellite from 'satellite.js';
 import { tzOffsetMinutes, zonedDate, zonedEpoch } from './tz';
 
 const TIMEOUT_MS = 20000;
@@ -53,7 +54,7 @@ export interface Reservoir {
 
 export interface SportsTeam {
   key: string; name: string; record?: string; standing?: string;
-  last?: { at: number; opp: string; home: boolean; us: number; them: number; won: boolean };
+  last?: { at: number; opp: string; home: boolean; us: number; them: number; won: boolean; tie?: boolean };
   next?: { at: number; opp: string; home: boolean; neutral?: boolean };
   live?: { opp: string; home: boolean; us: number | null; them: number | null; detail: string };
 }
@@ -63,9 +64,29 @@ export interface FireWeather {
   minRh: number | null; maxGustMph: number | null; maxWindMph: number | null; maxTempF: number | null;
 }
 
-export interface GlanceLive   { fetchedAt: string; tides: TidesData | null; sports: SportsTeam[]; errors: Record<string, string> }
-export interface GlanceHourly { fetchedAt: string; fire: FireWeather | null; errors: Record<string, string> }
-export interface GlanceDaily  { fetchedAt: string; sky: SkyData | null; pollen: PollenData | null; reservoirs: Reservoir[]; errors: Record<string, string> }
+export interface GridData {
+  status: string;               // CAISO grid status, "Normal" on a calm day
+  demandMW: number | null; peakForecastMW: number | null;
+  reserveMW: number | null; renewablesPct: number | null;
+  asOf: string | null;          // CAISO slot time, local ("10/03/2026 12:55")
+}
+
+export interface IssPass { start: number; end: number; maxEl: number; from: string; to: string }
+export interface SpaceData {
+  kp: number | null; kpAt: number | null;       // latest planetary K index
+  issPasses: IssPass[];                          // upcoming visible passes
+}
+
+export interface DroughtData {
+  asOf: string;                 // week's valid-start date, YYYY-MM-DD
+  worst: 'None' | 'D0' | 'D1' | 'D2' | 'D3' | 'D4';
+  pctInDrought: number;         // % of county in D1 or worse
+  pctAbnormallyDry: number;     // % in D0 or worse
+}
+
+export interface GlanceLive   { fetchedAt: string; tides: TidesData | null; sports: SportsTeam[]; grid: GridData | null; errors: Record<string, string> }
+export interface GlanceHourly { fetchedAt: string; fire: FireWeather | null; space: SpaceData | null; errors: Record<string, string> }
+export interface GlanceDaily  { fetchedAt: string; sky: SkyData | null; pollen: PollenData | null; reservoirs: Reservoir[]; drought: DroughtData | null; errors: Record<string, string> }
 
 // ---- Tides (NOAA CO-OPS, Martinez-Amorco Pier) --------------------------
 
@@ -202,11 +223,15 @@ async function reservoirs(): Promise<Reservoir[]> {
 // ---- Sports (ESPN public site API) --------------------------------------
 
 const TEAMS: { key: string; name: string; sport: string; slug: string }[] = [
-  { key: 'sf-giants',  name: 'Giants',   sport: 'baseball/mlb',     slug: 'sf' },
-  { key: 'oak-ath',    name: "A's",      sport: 'baseball/mlb',     slug: 'ath' },
-  { key: 'gs-warriors', name: 'Warriors', sport: 'basketball/nba',  slug: 'gs' },
-  { key: 'sf-49ers',   name: '49ers',    sport: 'football/nfl',     slug: 'sf' },
-  { key: 'sj-sharks',  name: 'Sharks',   sport: 'hockey/nhl',       slug: 'sj' },
+  { key: 'sf-giants',  name: 'Giants',      sport: 'baseball/mlb',     slug: 'sf' },
+  { key: 'oak-ath',    name: "A's",         sport: 'baseball/mlb',     slug: 'ath' },
+  { key: 'gs-warriors', name: 'Warriors',   sport: 'basketball/nba',   slug: 'gs' },
+  { key: 'sf-49ers',   name: '49ers',       sport: 'football/nfl',     slug: 'sf' },
+  { key: 'sj-sharks',  name: 'Sharks',      sport: 'hockey/nhl',       slug: 'sj' },
+  { key: 'sj-quakes',  name: 'Earthquakes', sport: 'soccer/usa.1',     slug: '191' },
+  { key: 'sac-kings',  name: 'Kings',       sport: 'basketball/nba',   slug: 'sac' },
+  { key: 'lv-raiders', name: 'Raiders',     sport: 'football/nfl',     slug: 'lv' },
+  { key: 'gs-valkyries', name: 'Valkyries', sport: 'basketball/wnba',  slug: 'gs' },
 ];
 
 interface EspnComp {
@@ -255,7 +280,10 @@ async function team(t: (typeof TEAMS)[number]): Promise<SportsTeam> {
     const us = mine ? scoreOf(mine) : null;
     const them = opp ? scoreOf(opp) : null;
     if (mine && opp && us != null && them != null) {
-      out.last = { at, opp: opp.team?.abbreviation ?? '?', home: mine.homeAway === 'home', us, them, won: us > them };
+      out.last = {
+        at, opp: opp.team?.abbreviation ?? '?', home: mine.homeAway === 'home', us, them,
+        won: us > them, tie: us === them || undefined,
+      };
     }
   }
 
@@ -316,6 +344,115 @@ async function fireWeather(): Promise<FireWeather> {
   };
 }
 
+
+// ---- Power grid (CAISO Today's Outlook) ---------------------------------
+
+async function grid(): Promise<GridData> {
+  const j = await getJson<{
+    gridstatus?: string[]; CurrentSystemDemand?: number; todayForecastPeakDemand?: number;
+    Current_reserve?: number; renewablesPercent?: number; slotDate?: string;
+  }>('https://www.caiso.com/outlook/current/stats.txt');
+  const num = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? n : null);
+  return {
+    status: j.gridstatus?.[0] ?? 'Unknown',
+    demandMW: num(j.CurrentSystemDemand), peakForecastMW: num(j.todayForecastPeakDemand),
+    reserveMW: num(j.Current_reserve), renewablesPct: num(j.renewablesPercent),
+    asOf: j.slotDate ?? null,
+  };
+}
+
+// ---- Drought (US Drought Monitor, Contra Costa County) ------------------
+
+async function drought(): Promise<DroughtData> {
+  const fmt = (d: Date) => `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
+  const now = new Date();
+  const rows = await getJson<{ mapDate: string; none: number; d0: number; d1: number; d2: number; d3: number; d4: number }[]>(
+    `https://usdmdataservices.unl.edu/api/CountyStatistics/GetDroughtSeverityStatisticsByAreaPercent?aoi=${process.env.USDM_FIPS || '06013'}&startdate=${fmt(new Date(now.getTime() - 28 * 86400_000))}&enddate=${fmt(now)}&statisticsType=2`);
+  const latest = [...rows].sort((a, b) => b.mapDate.localeCompare(a.mapDate))[0];
+  if (!latest) throw new Error('no drought rows');
+  const worst = latest.d4 > 0 ? 'D4' : latest.d3 > 0 ? 'D3' : latest.d2 > 0 ? 'D2' : latest.d1 > 0 ? 'D1' : latest.d0 > 0 ? 'D0' : 'None';
+  return { asOf: latest.mapDate.slice(0, 10), worst, pctInDrought: latest.d1, pctAbnormallyDry: latest.d0 };
+}
+
+// ---- Space: geomagnetic Kp + visible ISS passes -------------------------
+
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+const compass = (azRad: number) => COMPASS[Math.round((((azRad * 180) / Math.PI + 360) % 360) / 45) % 8];
+
+// Unit vector toward the Sun in an equatorial frame (low-precision almanac formula).
+function sunUnit(ms: number): [number, number, number] {
+  const n = ms / 86400_000 + 2440587.5 - 2451545.0;
+  const L = (280.46 + 0.9856474 * n) % 360;
+  const g = (((357.528 + 0.9856003 * n) % 360) * Math.PI) / 180;
+  const lam = ((L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * Math.PI) / 180;
+  const eps = ((23.439 - 4e-7 * n) * Math.PI) / 180;
+  return [Math.cos(lam), Math.cos(eps) * Math.sin(lam), Math.sin(eps) * Math.sin(lam)];
+}
+
+async function issPasses(): Promise<IssPass[]> {
+  const loc = getLocation();
+  const tle = (await getText('https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=tle')).trim().split(/\r?\n/);
+  if (tle.length < 3) throw new Error('unexpected TLE format');
+  const rec = satellite.twoline2satrec(tle[1].trim(), tle[2].trim());
+  const obs = { latitude: satellite.degreesToRadians(loc.lat), longitude: satellite.degreesToRadians(loc.lon), height: 0 };
+  const obsEcf = satellite.geodeticToEcf(obs);
+  const obsLen = Math.hypot(obsEcf.x, obsEcf.y, obsEcf.z);
+
+  type Sample = { t: number; el: number; az: number; visible: boolean };
+  const passes: IssPass[] = [];
+  let cur: Sample[] = [];
+  const flush = () => {
+    if (cur.length >= 2) {
+      const maxEl = Math.max(...cur.map((c) => c.el));
+      const visibleSamples = cur.filter((c) => c.visible).length;
+      if (maxEl >= (20 * Math.PI) / 180 && visibleSamples >= 3) {
+        passes.push({
+          start: Math.floor(cur[0].t / 1000), end: Math.floor(cur[cur.length - 1].t / 1000),
+          maxEl: Math.round((maxEl * 180) / Math.PI), from: compass(cur[0].az), to: compass(cur[cur.length - 1].az),
+        });
+      }
+    }
+    cur = [];
+  };
+
+  const start = Date.now();
+  for (let t = start; t < start + 14 * 86400_000 && passes.length < 3; t += 20_000) {
+    const d = new Date(t);
+    const pv = satellite.propagate(rec, d);
+    if (!pv || !pv.position || typeof pv.position === 'boolean') { flush(); continue; }
+    const gmst = satellite.gstime(d);
+    const ecf = satellite.eciToEcf(pv.position, gmst);
+    const look = satellite.ecfToLookAngles(obs, ecf);
+    if (look.elevation > (10 * Math.PI) / 180) {
+      const sun = sunUnit(t);
+      const r = pv.position;
+      const along = r.x * sun[0] + r.y * sun[1] + r.z * sun[2];
+      const perp = Math.hypot(r.x - along * sun[0], r.y - along * sun[1], r.z - along * sun[2]);
+      const sunlit = along > 0 || perp > 6371;
+      // Observer's zenith in the same frame, via ECF to ECI.
+      const obsEci = satellite.ecfToEci(obsEcf, gmst);
+      const sunEl = Math.asin((obsEci.x * sun[0] + obsEci.y * sun[1] + obsEci.z * sun[2]) / obsLen);
+      cur.push({ t, el: look.elevation, az: look.azimuth, visible: sunlit && sunEl < (-6 * Math.PI) / 180 });
+    } else if (cur.length) flush();
+  }
+  flush();
+  return passes;
+}
+
+async function space(): Promise<SpaceData> {
+  const [kp, iss] = await Promise.allSettled([
+    getJson<{ time_tag: string; Kp: number }[]>('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'),
+    issPasses(),
+  ]);
+  if (kp.status === 'rejected' && iss.status === 'rejected') throw kp.reason;
+  const last = kp.status === 'fulfilled' ? kp.value[kp.value.length - 1] : undefined;
+  return {
+    kp: last && Number.isFinite(Number(last.Kp)) ? Number(last.Kp) : null,
+    kpAt: last ? Math.floor(Date.parse(`${last.time_tag}Z`) / 1000) : null,
+    issPasses: iss.status === 'fulfilled' ? iss.value : [],
+  };
+}
+
 // ---- Bundles ------------------------------------------------------------
 
 function settle<T>(r: PromiseSettledResult<T>, id: string, errors: Record<string, string>): T | null {
@@ -326,22 +463,25 @@ function settle<T>(r: PromiseSettledResult<T>, id: string, errors: Record<string
 
 export async function fetchGlanceLive(): Promise<GlanceLive> {
   const errors: Record<string, string> = {};
-  const [t, s] = await Promise.allSettled([tides(), sports()]);
-  return { fetchedAt: new Date().toISOString(), tides: settle(t, 'tides', errors), sports: settle(s, 'sports', errors) ?? [], errors };
+  const [t, s, g] = await Promise.allSettled([tides(), sports(), grid()]);
+  return {
+    fetchedAt: new Date().toISOString(),
+    tides: settle(t, 'tides', errors), sports: settle(s, 'sports', errors) ?? [], grid: settle(g, 'grid', errors), errors,
+  };
 }
 
 export async function fetchGlanceHourly(): Promise<GlanceHourly> {
   const errors: Record<string, string> = {};
-  const [f] = await Promise.allSettled([fireWeather()]);
-  return { fetchedAt: new Date().toISOString(), fire: settle(f, 'fire', errors), errors };
+  const [f, sp] = await Promise.allSettled([fireWeather(), space()]);
+  return { fetchedAt: new Date().toISOString(), fire: settle(f, 'fire', errors), space: settle(sp, 'space', errors), errors };
 }
 
 export async function fetchGlanceDaily(): Promise<GlanceDaily> {
   const errors: Record<string, string> = {};
-  const [s, p, r] = await Promise.allSettled([sky(), pollen(), reservoirs()]);
+  const [s, p, r, d] = await Promise.allSettled([sky(), pollen(), reservoirs(), drought()]);
   return {
     fetchedAt: new Date().toISOString(),
     sky: settle(s, 'sky', errors), pollen: settle(p, 'pollen', errors), reservoirs: settle(r, 'reservoirs', errors) ?? [],
-    errors,
+    drought: settle(d, 'drought', errors), errors,
   };
 }

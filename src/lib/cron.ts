@@ -330,6 +330,26 @@ async function usgsQuakes(json: Record<string, unknown>) {
       lon,
     });
   }
+  // Nearby activity: everything M2.5+ within 100 km of the site over the
+  // last 30 days, so the quakes list is live rather than months old.
+  const loc = getLocation();
+  const since = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
+  const nearby = await fetchJson<Q>(
+    `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=${loc.lat}&longitude=${loc.lon}` +
+    `&maxradiuskm=100&minmagnitude=2.5&starttime=${since}&orderby=time&limit=100`,
+  ).catch(() => null);
+  const seen = new Set(rows.map((r) => r.id));
+  for (const eq of nearby?.features ?? []) {
+    if (seen.has(eq.id)) continue;
+    const place = eq.properties.place ?? '';
+    const occurred_at = Math.round((eq.properties.time ?? 0) / 1000);
+    const coords = eq.geometry?.coordinates;
+    const lon = Array.isArray(coords) && typeof coords[0] === 'number' ? coords[0] : null;
+    const lat = Array.isArray(coords) && typeof coords[1] === 'number' ? coords[1] : null;
+    out[eq.id] = { magnitude: eq.properties.mag, place, occurred_at, url: eq.properties.url ?? '', lat, lon };
+    rows.push({ id: eq.id, magnitude: eq.properties.mag ?? null, place, occurred_at, url: eq.properties.url ?? null, lat, lon });
+    seen.add(eq.id);
+  }
   json.USGS_earthquakes = out;
   if (rows.length) {
     const { upsertQuakes } = await import('./store');
