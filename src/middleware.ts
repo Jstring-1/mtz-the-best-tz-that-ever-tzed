@@ -35,7 +35,7 @@ export function middleware(req: NextRequest) {
   const ip = getClientIp(req);
   if (!allowed.includes(ip)) {
     return new NextResponse(
-      `Forbidden — /overlay is restricted.\n\nYour IP: ${ip || 'unknown'}`,
+      `Forbidden — this route is restricted.\n\nYour IP: ${ip || 'unknown'}`,
       { status: 403, headers: { 'content-type': 'text/plain' } },
     );
   }
@@ -43,5 +43,8 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/overlay', '/overlay/:path*', '/api/overlays', '/api/overlays/:path*'],
+  matcher: [
+    '/overlay', '/overlay/:path*', '/api/overlays', '/api/overlays/:path*',
+    '/admin', '/admin/:path*', '/api/admin/:path*', '/api/cron',
+  ],
 };
