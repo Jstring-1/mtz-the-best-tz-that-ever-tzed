@@ -10,6 +10,7 @@ import { relativeFromUnixSeconds } from '@/lib/time';
 import { zonedDate } from '@/lib/tz';
 import TrainsMini from './TrainsMini';
 import BartMini from './BartMini';
+import TrafficCams from './TrafficCams';
 import PopupLink from './PopupLink';
 
 interface StockQuote {
@@ -204,6 +205,11 @@ export function InfoView(d: InfoData) {
       <section className="card-section info-block">
         <h3>BART <span className="info-note">min · live · * late</span></h3>
         <BartMini />
+      </section>
+
+      <section className="card-section info-block">
+        <h3>Traffic cam <span className="info-note">Caltrans · every 5 min</span></h3>
+        <TrafficCams />
       </section>
 
       <section className="card-section info-block">

@@ -2398,6 +2398,8 @@ a.info-title:hover { color: var(--accent); }
 .bart-name { font-size: .78em; color: var(--text-muted); text-transform: lowercase; letter-spacing: .3px; }
 .bart-t { white-space: nowrap; }
 .bart-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; vertical-align: 0; }
+.cam { padding: 2px 0 0; }
+.cam-img { display: block; width: 100%; height: auto; border-radius: 3px; background: #000; margin-bottom: 3px; }
 .res-bar { display: block; height: 4px; background: var(--bg-elev-2); border-radius: 2px; overflow: hidden; margin: 2px 0 3px; }
 .res-bar > span { display: block; height: 100%; background: #4f8fd9; }
 .info-item > .info-row { padding: 0; }
