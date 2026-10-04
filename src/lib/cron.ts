@@ -582,6 +582,10 @@ async function councilVotes(json: Record<string, unknown>) {
 async function purgeStores() {
   const { purgeOldRows } = await import('./store');
   const r = await purgeOldRows();
+  // Cache keys left behind by retired providers (WeatherStack, OpenWeather,
+  // Foursquare, Google Places, the old parks scrape and per-scope news).
+  // Nothing reads or refreshes them any more.
+  await sql`DELETE FROM apis_json WHERE id = ANY(${['weatherStack', 'OPEN_weather', 'four_sq', 'google_places', 'local_parks', 'news_state', 'news_us']})`;
   const total = (r.events ?? 0) + (r.birds ?? 0) + (r.quakes ?? 0) + (r.alerts ?? 0) + (r.trains ?? 0);
   if (process.env.MTZ_DEBUG === '1' || total > 0) {
     console.log(`[cron] purge: events ${r.events}, birds ${r.birds}, quakes ${r.quakes}, alerts ${r.alerts}, trains ${r.trains}`);
@@ -973,6 +977,7 @@ async function osmPlaces(json: Record<string, unknown>) {
       images: '',
       lat: el?.lat ?? el?.center?.lat ?? null,
       lon: el?.lon ?? el?.center?.lon ?? null,
+      details: osmDetails(t),
     };
   });
 
@@ -988,6 +993,61 @@ async function osmPlaces(json: Record<string, unknown>) {
   // / Google rows have different id prefixes).
   const keepIds = collected.map((c) => c.fsq_id);
   await sql`DELETE FROM places WHERE NOT (fsq_id = ANY(${keepIds}))`;
+
+  // Auto-discovery of new / noteworthy spots (OSM scan + opening news).
+  // Skipped (previous payload kept) if Overpass is unreachable.
+  try {
+    const { discoverSpots, newsMentions } = await import('./places-discovery');
+    type Disc = import('./places-discovery').DiscoveryPayload;
+    const { getJson } = await import('./cache');
+    const prev = await getJson<Disc>('places_discovery').catch(() => null);
+    const curatedRes = CURATED_PLACES.map((c) => new RegExp(c.q, 'i'));
+    const found = await discoverSpots(poly, curatedRes, prev);
+    if (found) {
+      const feedRows = await sql<{ ts: string; title: string; link: string }[]>`
+        SELECT ts, title, link FROM feeds ORDER BY ts::bigint DESC LIMIT 400`;
+      const payload: Disc = {
+        fetchedAt: scrapedAt,
+        seen: found.seen,
+        hidden: prev?.hidden ?? [],
+        spots: found.spots,
+        news: newsMentions(feedRows),
+      };
+      json.places_discovery = payload;
+    }
+  } catch (e) {
+    console.warn('[places] discovery failed:', e instanceof Error ? e.message : e);
+  }
+}
+
+// Pull the visitor-facing bits out of an OSM tag dictionary (hours,
+// phone, website, cuisine and a few yes/no amenities). Returns a compact
+// JSON string, or null when OSM has nothing useful for the place.
+function osmDetails(t: Record<string, string>): string | null {
+  const pick = (...keys: string[]) => keys.map((k) => t[k]).find((v) => v && v.trim())?.trim();
+  const yes = (k: string) => t[k] === 'yes';
+  const website = pick('website', 'contact:website', 'url');
+  const d: Record<string, unknown> = {
+    hours: pick('opening_hours'),
+    phone: pick('phone', 'contact:phone'),
+    website: website && /^https?:\/\//i.test(website) ? website : website ? `https://${website}` : undefined,
+    cuisine: pick('cuisine')?.split(';').map((x) => x.trim().replace(/_/g, ' ')).filter(Boolean),
+    tags: [
+      yes('outdoor_seating') && 'outdoor seating',
+      yes('takeaway') && 'takeout',
+      yes('delivery') && 'delivery',
+      yes('wheelchair') && 'wheelchair accessible',
+      (yes('dog') || t['dog'] === 'leashed') && 'dogs welcome',
+      (yes('internet_access') || t['internet_access'] === 'wlan') && 'wifi',
+      yes('reservation') && 'takes reservations',
+    ].filter(Boolean),
+    checked: pick('check_date', 'check_date:opening_hours'),
+  };
+  for (const k of Object.keys(d)) {
+    const v = d[k];
+    if (v == null || (Array.isArray(v) && !v.length)) delete d[k];
+  }
+  return Object.keys(d).length ? JSON.stringify(d) : null;
 }
 
 function slugify(s: string): string {

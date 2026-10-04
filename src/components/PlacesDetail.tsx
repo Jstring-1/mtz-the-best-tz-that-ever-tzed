@@ -6,11 +6,63 @@ import { useUrlBool, useUrlString } from '@/lib/useUrlState';
 import PinMap, { type PinPoint } from './PinMap';
 import type { PlaceRow } from '@/lib/types';
 import { EBRPD_MAPS, PARK_EXT_LINKS } from '@/lib/park-maps-data';
+import type { DiscoveredSpot, NewsMention } from '@/lib/places-discovery';
+import type { VenueEvent } from '@/lib/place-events';
 
 interface Props {
   label: string;
   tooltip?: string;
   data: PlaceRow[];
+  /** Auto-detected new spots + opening news (see places-discovery.ts). */
+  discovery?: { spots: DiscoveredSpot[]; news: NewsMention[] } | null;
+  /** Upcoming events keyed by place id. */
+  venueEvents?: Record<string, VenueEvent[]>;
+}
+
+interface PlaceDetails {
+  hours?: string;
+  phone?: string;
+  website?: string;
+  cuisine?: string[];
+  tags?: string[];
+  checked?: string;
+}
+
+function parseDetails(raw: string | null | undefined): PlaceDetails | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as PlaceDetails; } catch { return null; }
+}
+
+// OSM opening_hours is terse ("Mo-Fr 11:00-21:00; Sa,Su 09:00-22:00").
+// Not a full parser — just make the common cases readable.
+const DAYS: Record<string, string> = { Mo: 'Mon', Tu: 'Tue', We: 'Wed', Th: 'Thu', Fr: 'Fri', Sa: 'Sat', Su: 'Sun', PH: 'holidays' };
+function prettyHours(h: string): string[] {
+  return h.split(';').map((part) => part.trim()).filter(Boolean).map((part) =>
+    part
+      .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, (d) => DAYS[d] ?? d)
+      .replace(/,/g, ', ')
+      .replace(/(\d{1,2}):(\d{2})/g, (_m, hh: string, mm: string) => {
+        const n = Number(hh);
+        const suffix = n >= 12 && n < 24 ? 'pm' : 'am';
+        const h12 = n % 12 === 0 ? 12 : n % 12;
+        return mm === '00' ? `${h12}${suffix}` : `${h12}:${mm}${suffix}`;
+      })
+      .replace(/-/g, '–'),
+  );
+}
+
+function fmtWhen(sec: number): string {
+  return new Date(sec * 1000).toLocaleString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    timeZone: 'America/Los_Angeles',
+  });
+}
+
+function daysAgo(iso?: string): string {
+  if (!iso) return '';
+  const d = Math.floor((Date.now() - Date.parse(iso)) / 86400000);
+  if (!Number.isFinite(d) || d < 0) return '';
+  return d === 0 ? 'today' : d === 1 ? 'yesterday' : d < 60 ? `${d} days ago` : `${Math.round(d / 30)} months ago`;
 }
 
 // Category string is stored as "<group>|<human label>" by the scraper.
@@ -35,7 +87,7 @@ function shortAddr(a: string | null): string {
 //
 // Click a pin or a row to fly the map to it; the row expands inline
 // with category + distance + address.
-export default function PlacesDetail({ label, tooltip, data }: Props) {
+export default function PlacesDetail({ label, tooltip, data, discovery, venueEvents }: Props) {
   const [open, setOpen] = useUrlBool('places');
   const [openId, setOpenId] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ id: string; nonce: number } | null>(null);
@@ -87,6 +139,31 @@ export default function PlacesDetail({ label, tooltip, data }: Props) {
                 pinColor="#c084fc"
                 ariaLabel="Map of cached Martinez places"
               />
+            )}
+
+            {discovery && (discovery.spots.length > 0 || discovery.news.length > 0) && (
+              <div className="place-new">
+                <div className="meta muted place-new-head">New &amp; noteworthy <span title="Found automatically from OpenStreetMap edits and local news headlines — may be incomplete or wrong.">(auto-detected)</span></div>
+                <ul className="place-new-list">
+                  {discovery.spots.map((x) => (
+                    <li key={x.id}>
+                      <a
+                        href={x.lat != null && x.lon != null
+                          ? `https://www.google.com/maps/?q=${x.lat},${x.lon}`
+                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${x.name}, Martinez, CA`)}`}
+                        target="_blank" rel="noopener"
+                      >{x.name}</a>
+                      <span className="muted"> · {x.label}{x.addr ? ` · ${x.addr}` : ''}{daysAgo(x.osmEdited) ? ` · added to map ${daysAgo(x.osmEdited)}` : ''}</span>
+                    </li>
+                  ))}
+                  {discovery.news.map((n) => (
+                    <li key={n.link}>
+                      <a href={n.link} target="_blank" rel="noopener">{n.title}</a>
+                      <span className="muted"> · news {n.date}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             {/* Park maps & guides — bundled EBRPD PDFs surfaced via a
@@ -143,6 +220,39 @@ export default function PlacesDetail({ label, tooltip, data }: Props) {
                     </button>
                     {expanded && (
                       <div className="recall-reason">
+                        {(() => {
+                          const d = parseDetails(p.details);
+                          const evs = venueEvents?.[p.fsq_id] ?? [];
+                          if (!d && !evs.length) return null;
+                          return (
+                            <div className="place-extra">
+                              {d?.cuisine && d.cuisine.length > 0 && <p style={{ margin: 0 }}><strong>Cuisine:</strong> {d.cuisine.join(', ')}</p>}
+                              {d?.hours && (
+                                <p style={{ margin: '6px 0 0' }}>
+                                  <strong>Hours:</strong>
+                                  {prettyHours(d.hours).map((line) => <span key={line} style={{ display: 'block' }}>{line}</span>)}
+                                  <span className="muted" style={{ fontSize: '.8em' }}>from OpenStreetMap{d.checked ? `, checked ${d.checked}` : ''} — confirm before you go</span>
+                                </p>
+                              )}
+                              {d?.phone && <p style={{ margin: '6px 0 0' }}><strong>Phone:</strong> <a href={`tel:${d.phone.replace(/[^+\d]/g, '')}`}>{d.phone}</a></p>}
+                              {d?.website && <p style={{ margin: '6px 0 0' }}><a href={d.website} target="_blank" rel="noopener">Website →</a></p>}
+                              {d?.tags && d.tags.length > 0 && <p className="muted" style={{ margin: '6px 0 0' }}>{d.tags.join(' · ')}</p>}
+                              {evs.length > 0 && (
+                                <div style={{ margin: '8px 0 0' }}>
+                                  <strong>Coming up here:</strong>
+                                  <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                                    {evs.map((e) => (
+                                      <li key={`${e.start_at}-${e.title}`}>
+                                        {e.url ? <a href={e.url} target="_blank" rel="noopener">{e.title}</a> : e.title}
+                                        <span className="muted"> · {fmtWhen(e.start_at)}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {p.addy && (
                           <p style={{ margin: 0 }}><strong>Address:</strong> {p.addy}</p>
                         )}

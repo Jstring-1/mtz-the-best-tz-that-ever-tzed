@@ -44,8 +44,9 @@ export async function getMisc(): Promise<MiscRow[]> {
 }
 
 export async function getPlaces(): Promise<PlaceRow[]> {
+  await ensurePlacesLastSeen();
   return await sql<PlaceRow[]>`
-    SELECT fsq_id, name, addy, cats, dist, images, lat, lon
+    SELECT fsq_id, name, addy, cats, dist, images, lat, lon, details
     FROM places
     ORDER BY dist ASC NULLS LAST
   `;
@@ -135,6 +136,7 @@ async function ensurePlacesLastSeen(): Promise<void> {
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT NOW()`;
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION`;
   await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS lon DOUBLE PRECISION`;
+  await sql`ALTER TABLE places ADD COLUMN IF NOT EXISTS details TEXT`;
   placesLastSeenEnsured = true;
 }
 
@@ -145,8 +147,8 @@ export async function upsertPlaces(places: PlaceUpsert[]): Promise<void> {
   await ensurePlacesLastSeen();
   for (const p of places) {
     await sql`
-      INSERT INTO places (fsq_id, name, addy, cats, dist, images, lat, lon, last_seen)
-      VALUES (${p.fsq_id}, ${p.name}, ${p.addy}, ${p.cats}, ${p.dist}, ${p.images}, ${p.lat ?? null}, ${p.lon ?? null}, NOW())
+      INSERT INTO places (fsq_id, name, addy, cats, dist, images, lat, lon, details, last_seen)
+      VALUES (${p.fsq_id}, ${p.name}, ${p.addy}, ${p.cats}, ${p.dist}, ${p.images}, ${p.lat ?? null}, ${p.lon ?? null}, ${p.details ?? null}, NOW())
       ON CONFLICT (fsq_id) DO UPDATE SET
         name      = EXCLUDED.name,
         addy      = EXCLUDED.addy,
@@ -155,6 +157,7 @@ export async function upsertPlaces(places: PlaceUpsert[]): Promise<void> {
         images    = EXCLUDED.images,
         lat       = EXCLUDED.lat,
         lon       = EXCLUDED.lon,
+        details   = COALESCE(EXCLUDED.details, places.details),
         last_seen = NOW()
     `;
   }

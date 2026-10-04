@@ -11,6 +11,8 @@ export interface PlaceRow {
   images: string | null;
   lat: string | null;
   lon: string | null;
+  /** JSON blob of OSM-sourced extras (hours, phone, website, cuisine…). */
+  details?: string | null;
 }
 
 export interface FeedRow {

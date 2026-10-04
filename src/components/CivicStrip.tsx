@@ -1,5 +1,7 @@
 import { getJson, getPlaces } from '@/lib/cache';
-import { listRecentBirds, listRecentQuakes, type StoredBird, type StoredQuake } from '@/lib/store';
+import { listRecentBirds, listRecentQuakes, listUpcomingEvents, type StoredBird, type StoredQuake, type StoredEvent } from '@/lib/store';
+import { eventsByPlace } from '@/lib/place-events';
+import type { DiscoveryPayload } from '@/lib/places-discovery';
 import type { PlaceRow } from '@/lib/types';
 import type { GovLocalPayload, GovNationalPayload, GovStripItem } from '@/lib/gov';
 import type { CouncilScrapeResult } from '@/lib/scrape-council';
@@ -41,8 +43,10 @@ export default async function CivicStrip() {
   let cch: CchPayload | null = null;
   let trains: TrainsPayload | null = null;
   let housing: HousingPayload | null = null;
+  let discovery: DiscoveryPayload | null = null;
+  let upcoming: StoredEvent[] = [];
   try {
-    [payload, council, national, stocks, birds, quakes, places, outbreaks, cch, trains, housing] = await Promise.all([
+    [payload, council, national, stocks, birds, quakes, places, outbreaks, cch, trains, housing, discovery, upcoming] = await Promise.all([
       getJson<GovLocalPayload>('gov_local').catch(() => null),
       getJson<CouncilScrapeResult>('gov_council_votes').catch(() => null),
       getJson<GovNationalPayload>('gov_national').catch(() => null),
@@ -62,6 +66,10 @@ export default async function CivicStrip() {
       getJson<TrainsPayload>('trains_mtz').catch(() => null),
       // Martinez housing — Zillow ZORI rent + Census ACS ZIP 94553.
       getJson<HousingPayload>('housing').catch(() => null),
+      // New / noteworthy spots found by the places job (OSM scan + opening news).
+      getJson<DiscoveryPayload>('places_discovery').catch(() => null),
+      // Next ~6 weeks of events, matched to places by venue name.
+      listUpcomingEvents(45).catch(() => [] as StoredEvent[]),
     ]);
   } catch (e) { console.warn('CivicStrip cache read failed:', e); }
 
@@ -142,6 +150,18 @@ export default async function CivicStrip() {
   // with restaurants etc. rather than clumping by source.
   const placesMerged: PlaceRow[] = [...places, ...parkRowsForPlaces]
     .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+  // Only surface spots flagged new, minus anything an admin hid.
+  const hidden = new Set(discovery?.hidden ?? []);
+  const placesDiscovery = discovery
+    ? {
+        spots: discovery.spots
+          .filter((x) => x.isNew && !hidden.has(x.id))
+          .sort((a, b) => (b.osmEdited ?? b.firstSeen).localeCompare(a.osmEdited ?? a.firstSeen))
+          .slice(0, 12),
+        news: discovery.news ?? [],
+      }
+    : null;
+  const venueEvents = eventsByPlace(placesMerged, upcoming);
   const placesLabelHtml = `<span class="civic-strip-val peru">Places</span>`;
   const placesTooltip = placesMerged.length
     ? `${placesMerged.length} Martinez places & parks — click for map + list + park map PDFs.`
@@ -203,7 +223,7 @@ export default async function CivicStrip() {
   // that read better as a group than as peer chips.
   return (
     <section className="civic-strip" aria-label="Civic indicators">
-      <PlacesDetail  tooltip={placesTooltip}  label={placesLabelHtml} data={placesMerged} />
+      <PlacesDetail  tooltip={placesTooltip}  label={placesLabelHtml} data={placesMerged} discovery={placesDiscovery} venueEvents={venueEvents} />
       <TrainsDetail  tooltip={trainsTooltip}  label={trainsLabelHtml}  data={trains} />
       <BirdsDetail   tooltip={birdsTooltip}   label={birdsLabelHtml} data={birds} />
       <CouncilDetail tooltip={councilTooltip} label={councilLabelHtml} />

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { relativeFromIso } from '@/lib/time';
+import type { DiscoveryPayload } from '@/lib/places-discovery';
 
 interface Bucket { id: string; desc: string }
 
@@ -19,10 +20,12 @@ export default function AdminPanel({
   buckets,
   timestamps,
   counts,
+  discovery,
 }: {
   buckets: Bucket[];
   timestamps: Record<string, string>;
   counts: Record<string, number>;
+  discovery?: DiscoveryPayload | null;
 }) {
   // Output accumulates across multiple runs so the user can sequentially
   // fire several buckets and see all results stacked. Newest-first.
@@ -70,6 +73,9 @@ export default function AdminPanel({
         </div>
       ))}
 
+      <h2>Place discoveries</h2>
+      <DiscoveryList discovery={discovery ?? null} />
+
       <h2>Row counts</h2>
       <table className="kv-table">
         <thead><tr><th>table</th><th>rows</th></tr></thead>
@@ -85,6 +91,58 @@ export default function AdminPanel({
 
       <h2>Last updated (apis_json)</h2>
       <SortableTimestamps timestamps={timestamps} />
+    </>
+  );
+}
+
+// Auto-detected new places (src/lib/places-discovery.ts). Hiding one
+// removes it from the public Places popup; it stays hidden across runs.
+function DiscoveryList({ discovery }: { discovery: DiscoveryPayload | null }) {
+  const [hidden, setHidden] = useState<Set<string>>(new Set(discovery?.hidden ?? []));
+  const [err, setErr] = useState('');
+  if (!discovery) return <p className="fade">Nothing yet — run the 12h bucket.</p>;
+  const spots = discovery.spots.filter((s) => s.isNew || hidden.has(s.id));
+
+  const toggle = async (id: string) => {
+    const hide = !hidden.has(id);
+    setErr('');
+    try {
+      const r = await fetch('/api/admin/places-hide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, hide }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setHidden((prev) => { const n = new Set(prev); if (hide) n.add(id); else n.delete(id); return n; });
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+  };
+
+  return (
+    <>
+      <p className="fade">
+        {discovery.spots.length} named spots scanned from OpenStreetMap; {spots.length} flagged new
+        {' '}(updated {relativeFromIso(discovery.fetchedAt)}).
+      </p>
+      {spots.length === 0 && <p className="fade">No new spots right now.</p>}
+      {spots.map((s) => (
+        <div className={`disc-row${hidden.has(s.id) ? ' hidden-row' : ''}`} key={s.id}>
+          <b>{s.name}</b>
+          <span className="fade">{s.label}{s.addr ? ` · ${s.addr}` : ''}</span>
+          <button type="button" onClick={() => toggle(s.id)}>{hidden.has(s.id) ? 'Unhide' : 'Hide'}</button>
+        </div>
+      ))}
+      {discovery.news.length > 0 && (
+        <>
+          <p className="fade" style={{ marginTop: 10 }}>Opening headlines:</p>
+          {discovery.news.map((n) => (
+            <div className="disc-row" key={n.link}>
+              <a href={n.link} target="_blank" rel="noopener">{n.title}</a>
+              <span className="fade">{n.date}</span>
+            </div>
+          ))}
+        </>
+      )}
+      {err && <p style={{ color: '#e34234' }}>{err}</p>}
     </>
   );
 }

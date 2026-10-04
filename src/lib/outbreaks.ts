@@ -11,8 +11,8 @@
 //                  lag (j5jx-3hes retired, 5xkq-dg7x still ~2yr behind).
 //   Delphi Epidata API — CMU's flu/ILI surveillance for CA + national
 //                  (keyless; optional api_key bumps quota)
-//   WHO DON RSS  — Disease Outbreak News, the WHO's early-warning feed
-//                  (RSS, keyless)
+//   WHO DON API  — Disease Outbreak News, the WHO's early-warning feed
+//                  (OData JSON, keyless)
 //
 // All four fetches happen in parallel with per-request timeouts. Any
 // source that fails returns null/[] so the popup still renders
@@ -375,38 +375,8 @@ async function fetchDelphiIli(): Promise<DelphiIliRow[]> {
   return out;
 }
 
-// ---- 4. WHO Disease Outbreak News (RSS) ------------------------------
+// ---- 4. WHO Disease Outbreak News (OData API) ------------------------------
 
-// Inline RSS parser — small enough not to be worth importing or
-// generalizing across modules. Returns most-recent items first.
-function parseRss(xml: string, srcLabel: string, limit = 10): OutbreakItem[] {
-  const items: OutbreakItem[] = [];
-  const blocks = [...xml.matchAll(/<item[\s\S]*?<\/item>/g)];
-  for (const m of blocks) {
-    const block = m[0];
-    const title = decodeEntities(stripCdata(tag(block, 'title')));
-    const link  = decodeEntities(stripCdata(tag(block, 'link')));
-    const desc  = decodeEntities(stripCdata(tag(block, 'description')));
-    const pubDate = stripCdata(tag(block, 'pubDate'));
-    if (!title || !link) continue;
-    const ms = Date.parse(pubDate);
-    items.push({
-      id: `${srcLabel}-${ms || link}`,
-      title,
-      date: ms ? new Date(ms).toISOString().slice(0, 10) : undefined,
-      body: desc.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 400),
-      url: link,
-      category: srcLabel,
-    });
-    if (items.length >= limit) break;
-  }
-  return items;
-}
-function tag(block: string, name: string): string {
-  const re = new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, 'i');
-  return block.match(re)?.[1] ?? '';
-}
-function stripCdata(s: string): string { return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim(); }
 function decodeEntities(s: string): string {
   return s
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
@@ -415,19 +385,22 @@ function decodeEntities(s: string): string {
 }
 
 async function fetchWhoDon(): Promise<OutbreakItem[]> {
-  // WHO's Disease Outbreak News feed. They occasionally rotate the URL;
-  // both paths below have worked historically — try them in order.
-  const candidates = [
-    'https://www.who.int/feeds/entity/csr/don/en/rss.xml',
-    'https://www.who.int/rss-feeds/news-english.xml',
-  ];
-  for (const url of candidates) {
-    const xml = await safeText(url);
-    if (!xml) continue;
-    const items = parseRss(xml, 'WHO', 12);
-    if (items.length) return items;
-  }
-  return [];
+  // WHO retired the old csr/don RSS feed; Disease Outbreak News now lives
+  // behind an OData API on who.int (newest first).
+  interface DonRow { UrlName?: string; Title?: string; PublicationDateAndTime?: string; Summary?: string; Overview?: string }
+  const url = 'https://www.who.int/api/news/diseaseoutbreaknews?sf_culture=en'
+    + '&$orderby=PublicationDateAndTime%20desc&$top=12'
+    + '&$select=UrlName,Title,PublicationDateAndTime,Summary,Overview';
+  const j = await safeJson<{ value?: DonRow[] }>(url);
+  const strip = (h: string) => decodeEntities(h.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+  return (j?.value ?? []).filter((r) => r.Title && r.UrlName).map((r) => ({
+    id: `who-${r.UrlName}`,
+    title: decodeEntities(r.Title ?? ''),
+    date: r.PublicationDateAndTime?.slice(0, 10),
+    body: strip(r.Summary || r.Overview || '').slice(0, 400),
+    url: `https://www.who.int/emergencies/disease-outbreak-news/item/${r.UrlName}`,
+    category: 'WHO DON',
+  }));
 }
 
 // ---- top-level fetcher -----------------------------------------------

@@ -844,14 +844,15 @@ export async function fetchRepVotes(limit = 20): Promise<RepVotesPayload> {
   const out: RepVote[] = [];
   if (!KEY) return { scrapedAt: new Date().toISOString(), votes: out };
 
-  // Scope to the current Congress and sort by updateDate desc so we
-  // actually get *recent* votes (the default ordering returns the
-  // earliest votes of the dataset).
-  const listUrl =
-    `https://api.congress.gov/v3/house-vote/${CURRENT_CONGRESS}` +
-    `?api_key=${KEY}&format=json&limit=${limit}&sort=updateDate+desc`;
-  const list = await safeJson<HouseVoteList>(listUrl);
-  const items = list?.houseRollCallVotes ?? [];
+  // The list endpoint is per session: /house-vote/{congress} alone only
+  // returns session 1, which froze this at Dec 2025. Pull session 2 (the
+  // current year) and session 1, newest first, and keep the freshest.
+  const lists = await Promise.all([2, 1].map((ss) => safeJson<HouseVoteList>(
+    `https://api.congress.gov/v3/house-vote/${CURRENT_CONGRESS}/${ss}` +
+    `?api_key=${KEY}&format=json&limit=${limit}&sort=updateDate+desc`,
+  )));
+  const items = lists.flatMap((l) => l?.houseRollCallVotes ?? [])
+    .sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''));
 
   // For each list item we have to fetch BOTH the vote metadata
   // (question/result/bill) AND the per-member tally — the list

@@ -1,4 +1,5 @@
-import { getAllJsonTimestamps, getRowCounts } from '@/lib/cache';
+import { getAllJsonTimestamps, getRowCounts, getJson } from '@/lib/cache';
+import type { DiscoveryPayload } from '@/lib/places-discovery';
 import AdminPanel from './AdminPanel';
 
 export const dynamic = 'force-dynamic';
@@ -23,11 +24,13 @@ export default async function AdminPage() {
   let counts: Record<string, number> = {};
   try { timestamps = await getAllJsonTimestamps(); } catch { /* DB cold */ }
   try { counts = await getRowCounts(); } catch { /* DB cold */ }
+  let discovery: DiscoveryPayload | null = null;
+  try { discovery = await getJson<DiscoveryPayload>('places_discovery'); } catch { /* DB cold */ }
 
   return (
     <div className="page admin">
       <h1>Admin</h1>
-      <AdminPanel buckets={BUCKETS} timestamps={timestamps} counts={counts} />
+      <AdminPanel buckets={BUCKETS} timestamps={timestamps} counts={counts} discovery={discovery} />
     </div>
   );
 }

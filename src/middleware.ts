@@ -9,7 +9,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 
-const DEFAULT_ALLOWED = '66.234.206.36';
+const DEFAULT_ALLOWED = '76.14.102.205';
 
 const allowed = (process.env.OVERLAY_ALLOWED_IPS ?? DEFAULT_ALLOWED)
   .split(',')

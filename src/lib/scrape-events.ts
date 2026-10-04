@@ -126,56 +126,16 @@ async function safeFetch(url: string, init?: RequestInit): Promise<string | null
   }
 }
 
-// ----- Del Cielo Brewing (WordPress + Events Calendar) -----------------
-
-interface TribeEvent {
-  id: number;
-  title: string;
-  url: string;
-  description?: string;
-  start_date?: string;          // "2026-05-15 18:30:00"
-  end_date?: string;
-  utc_start_date?: string;      // "2026-05-16 01:30:00"
-  utc_end_date?: string;
-  venue?: { venue?: string };
-  image?: { url?: string };
-}
+// ----- Del Cielo Brewing (Squarespace) ---------------------------------
+// Del Cielo moved off WordPress/Tribe to Squarespace; the Martinez
+// taproom has its own events collection (Livermore lives at
+// /livermore-events), so no location filtering is needed any more.
 
 async function scrapeDelCielo(): Promise<LocalEvent[]> {
-  const text = await safeFetch('https://delcielobrewing.com/wp-json/tribe/events/v1/events?per_page=50');
-  if (!text) return [];
-  let j: { events?: TribeEvent[] };
-  try { j = JSON.parse(text); } catch { return []; }
-  return (j.events ?? [])
-    // Drop Livermore-location entries. The LVM marker shows up either in
-    // the title ("… - LVM") or the venue name ("Del Cielo Brewery – LVM"
-    // / "… Livermore"). We only want the Martinez taproom.
-    .filter((e) => {
-      const hay = `${e.title || ''} || ${e.venue?.venue || ''}`;
-      if (/\blivermore\b/i.test(hay)) return false;
-      if (/[-–—]\s*LVM\b/i.test(hay)) return false;
-      if (/\bLVM\b/.test(hay) && !/\bMTZ\b/i.test(hay)) return false;
-      return true;
-    })
-    .map((e) => ({
-    id: `delcielo-${e.id}`,
-    source: 'delcielo',
-    source_label: 'Del Cielo Brewing',
-    title: cleanDelCieloTitle(e.title),
-    // utc_start_date is naive UTC ("2026-05-16 01:30:00") — append Z.
-    // Fallback to start_date (naive local) without Z.
-    start_at: tsFromIso(toTribeIso(e.utc_start_date, true) ?? toTribeIso(e.start_date, false)),
-    end_at:   tsFromIso(toTribeIso(e.utc_end_date,   true) ?? toTribeIso(e.end_date,   false)),
-    // Tribe's per-event venue string wobbles between "Del Cielo
-    // Brewing", "Del Cielo Brewery – MTZ", etc., which then rendered
-    // as duplicated venue lines ("Del Cielo Brewing · Del Cielo
-    // Brewery – MTZ"). Hard-code the canonical name so it matches
-    // source_label and the duplicate suffix drops out.
-    venue: 'Del Cielo Brewing',
-    url: e.url,
-    description: stripHtml(e.description || ''),
-    image: e.image?.url,
-  }));
+  const events = await scrapeSquarespaceCollection(
+    'https://www.delcielobrewing.com/martinez-events', 'delcielo', 'Del Cielo Brewing', 'Del Cielo Brewing',
+  );
+  return events.map((e) => ({ ...e, title: cleanDelCieloTitle(e.title) }));
 }
 
 // Clean a Del Cielo title:
@@ -194,15 +154,6 @@ function cleanDelCieloTitle(raw: string): string {
       '',
     )
     .trim();
-}
-
-// Tribe returns "YYYY-MM-DD HH:MM:SS" (space, no T, no zone). Normalise
-// to ISO 8601 — if isUtc, mark as Z; otherwise leave naive (treated as
-// local by Date.parse).
-function toTribeIso(s: string | undefined, isUtc: boolean): string | null {
-  if (!s) return null;
-  const t = s.includes('T') ? s : s.replace(' ', 'T');
-  return isUtc && !/[Zz]|[+-]\d\d:?\d\d$/.test(t) ? t + 'Z' : t;
 }
 
 // ----- Five Suns Brewing (Squarespace) ---------------------------------
