@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import { useUrlBool, useUrlEnum } from '@/lib/useUrlState';
 import type { TrainsPayload, TrainEntry, TrainDetail, TrainStop } from '@/lib/trains';
+import { withDelay } from '@/lib/train-delay';
 
 interface Props {
   label: string;
@@ -31,8 +32,8 @@ export default function TrainsDetail({ label, tooltip, data }: Props) {
   // between 15-min scrape refreshes. Only ticks while the modal is open.
   const now = useNowTick(open ? 30_000 : null);
 
-  const arriving = data?.arriving ?? [];
-  const departed = data?.departed ?? [];
+  const arriving = (data?.arriving ?? []).map(withDelay);
+  const departed = (data?.departed ?? []).map(withDelay);
   // railrat lists arriving descending (far-future at top, soonest at
   // bottom) — flip so the next imminent arrival is on top, then demote
   // any whose estimated time is already >2 min in the past (the train

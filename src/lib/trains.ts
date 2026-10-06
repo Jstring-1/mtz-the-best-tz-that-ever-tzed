@@ -28,6 +28,8 @@
 // We parse both lists, normalize status badges, and return a typed
 // payload cached under apis_json key `trains_mtz`.
 
+import { withDelay } from './train-delay';
+
 export interface TrainEntry {
   /** Stable per-train-run id (railrat's numeric portion of the
    *  `ReverseDisplay('aXXXX')` toggle, with the a/d prefix stripped).
@@ -579,7 +581,7 @@ function parseEntry(liInner: string): TrainEntry | null {
   // dropping the row.
   const id = railratId || `${anchorM[2]}-${timeM[1]}`;
 
-  return {
+  return withDelay({
     railratId: id,
     time: timeM[1],
     trainNumber: anchorM[2],
@@ -592,7 +594,7 @@ function parseEntry(liInner: string): TrainEntry | null {
     route,
     details,
     scheduledAt: buildScheduledAt(timeM[1], details),
-  };
+  });
 }
 
 // Combine the leading HH:MM with any "MM/DD" we find in the detail

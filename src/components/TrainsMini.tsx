@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { TrainEntry } from '@/lib/trains';
+import { withDelay } from '@/lib/train-delay';
 
 // Next few Amtrak arrivals at MTZ. Client component only so the relative
 // labels ("in 12 min") keep ticking between the 15-minute scrapes.
@@ -15,7 +16,7 @@ export default function TrainsMini({ arriving, limit = 5 }: { arriving: TrainEnt
   // railrat lists arrivals furthest-first; flip so the soonest is on top and
   // drop trains whose time passed more than 2 minutes ago.
   const rows = useMemo(() => {
-    const list = [...arriving].reverse().filter((e) => {
+    const list = [...arriving].reverse().map(withDelay).filter((e) => {
       const t = e.scheduledAt ? Date.parse(e.scheduledAt) : NaN;
       return Number.isNaN(t) || t >= now - 2 * 60_000;
     });
