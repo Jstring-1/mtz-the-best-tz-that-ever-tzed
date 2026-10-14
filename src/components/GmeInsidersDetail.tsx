@@ -36,7 +36,7 @@ export default function GmeInsidersDetail({ data }: { data: GmeInsidersPayload |
             {y && (
               <li>
                 <b>Ownership</b>{' '}
-                Insiders {pct(y.insidersPct, 1)} · Institutions {pct(y.institutionsPct, 1)} · Combined{' '}
+                Insiders {pct(y.insidersPct, 1)} · Institutions {pct(y.institutionsPct, 1)} · Total{' '}
                 {pct(y.insidersPct != null && y.institutionsPct != null ? y.insidersPct + y.institutionsPct : null, 1)}
                 <span className="muted"> (Yahoo Finance)</span>
               </li>

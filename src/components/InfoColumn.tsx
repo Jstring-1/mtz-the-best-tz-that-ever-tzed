@@ -32,7 +32,7 @@ const MARKETS: { symbol: string; label: string }[] = [
 const OTHER_QUOTES: { symbol: string; label: string }[] = [
   { symbol: 'BTC-USD', label: 'Bitcoin' },
   { symbol: 'ETH-USD', label: 'Ethereum' },
-  { symbol: 'GME',     label: 'GameStop (GME)' },
+  { symbol: 'GME',     label: 'GME' },
 ];
 
 // Annual meteor-shower peaks [name, month 1-12, day].
@@ -377,7 +377,7 @@ export function InfoView(d: InfoData) {
               <li key={m.symbol} className="info-row">
                 <span className="info-main">
                   {m.symbol === 'GME' && gme
-                    ? <PopupLink params={{ gme: '1' }} className="info-more" title="GameStop insiders, ownership and short interest">{m.label} ›</PopupLink>
+                    ? <PopupLink params={{ gme: '1' }} className="info-more" title="GameStop insiders, ownership and short interest">{m.label}</PopupLink>
                     : m.label}
                 </span>
                 <span className="info-side">
@@ -386,16 +386,6 @@ export function InfoView(d: InfoData) {
                 </span>
               </li>
             ))}
-            {gme?.yahoo && gme.yahoo.insidersPct != null && gme.yahoo.institutionsPct != null && (
-              <li className="info-item">
-                <span className="info-note">
-                  GME owned by: insiders <b>{gme.yahoo.insidersPct.toFixed(1)}%</b> · institutions <b>{gme.yahoo.institutionsPct.toFixed(1)}%</b> · total <b>{(gme.yahoo.insidersPct + gme.yahoo.institutionsPct).toFixed(1)}%</b>
-                </span>
-                {gme.yahoo.shortPctFloat != null && (
-                  <span className="info-note">short interest {gme.yahoo.shortPctFloat.toFixed(1)}% of float{gme.yahoo.shortRatio != null ? ` · ${gme.yahoo.shortRatio.toFixed(1)} days to cover` : ''}</span>
-                )}
-              </li>
-            )}
           </ul>
           <GmeInsidersDetail data={gme} />
         </section>
