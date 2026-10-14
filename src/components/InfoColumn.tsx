@@ -202,6 +202,43 @@ export function InfoView(d: InfoData) {
 
   return (
     <div className="col-stack info-col">
+      {(marketRows.length > 0 || tenYear || otherRows.length > 0) && (
+        <section className="card-section info-block">
+          <h3><PopupLink params={{ indicators: '1', itab: 'economy' }} className="info-h">Markets</PopupLink></h3>
+          <ul className="info-list">
+            {marketRows.map((m) => (
+              <li key={m.symbol} className="info-row">
+                <span className="info-main">{m.label}</span>
+                <span className="info-side">
+                  {fmtPrice(m.q.close)}{' '}
+                  <span className={`dir-${pctClass(m.q.percent_change)}`}>{fmtPct(m.q.percent_change)}</span>
+                </span>
+              </li>
+            ))}
+            {tenYear && (
+              <li className="info-row">
+                <span className="info-main">10-yr Treasury</span>
+                <span className="info-side">{tenYear.rate}</span>
+              </li>
+            )}
+            {otherRows.map((m) => (
+              <li key={m.symbol} className="info-row">
+                <span className="info-main">
+                  {m.symbol === 'GME' && gme
+                    ? <PopupLink params={{ gme: '1' }} className="info-more" title="GameStop insiders, ownership and short interest">{m.label}</PopupLink>
+                    : m.label}
+                </span>
+                <span className="info-side">
+                  ${fmtPrice(m.q.close)}{' '}
+                  <span className={`dir-${pctClass(m.q.percent_change)}`}>{fmtPct(m.q.percent_change)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <GmeInsidersDetail data={gme} />
+        </section>
+      )}
+
       <section className="card-section info-block">
         <h3><PopupLink params={{ trains: '1' }} className="info-h">Next trains at Martinez</PopupLink></h3>
         {trains ? <TrainsMini arriving={trains.arriving ?? []} /> : <p className="info-empty">Train data not cached yet.</p>}
@@ -353,43 +390,6 @@ export function InfoView(d: InfoData) {
           </ul>
         )}
       </section>
-
-      {(marketRows.length > 0 || tenYear || otherRows.length > 0) && (
-        <section className="card-section info-block">
-          <h3><PopupLink params={{ indicators: '1', itab: 'economy' }} className="info-h">Markets</PopupLink></h3>
-          <ul className="info-list">
-            {marketRows.map((m) => (
-              <li key={m.symbol} className="info-row">
-                <span className="info-main">{m.label}</span>
-                <span className="info-side">
-                  {fmtPrice(m.q.close)}{' '}
-                  <span className={`dir-${pctClass(m.q.percent_change)}`}>{fmtPct(m.q.percent_change)}</span>
-                </span>
-              </li>
-            ))}
-            {tenYear && (
-              <li className="info-row">
-                <span className="info-main">10-yr Treasury</span>
-                <span className="info-side">{tenYear.rate}</span>
-              </li>
-            )}
-            {otherRows.map((m) => (
-              <li key={m.symbol} className="info-row">
-                <span className="info-main">
-                  {m.symbol === 'GME' && gme
-                    ? <PopupLink params={{ gme: '1' }} className="info-more" title="GameStop insiders, ownership and short interest">{m.label}</PopupLink>
-                    : m.label}
-                </span>
-                <span className="info-side">
-                  ${fmtPrice(m.q.close)}{' '}
-                  <span className={`dir-${pctClass(m.q.percent_change)}`}>{fmtPct(m.q.percent_change)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <GmeInsidersDetail data={gme} />
-        </section>
-      )}
 
       {teams.length > 0 && (
         <section className="card-section info-block">
