@@ -12,6 +12,8 @@ import TrainsMini from './TrainsMini';
 import BartMini from './BartMini';
 import TrafficCams from './TrafficCams';
 import PopupLink from './PopupLink';
+import GmeInsidersDetail from './GmeInsidersDetail';
+import type { GmeInsidersPayload } from '@/lib/gme-insiders';
 
 interface StockQuote {
   symbol: string;
@@ -92,7 +94,7 @@ function nextShower(now: Date): { name: string; days: number } | null {
 // (tides, sky, fire weather, pollen, scores, reservoirs). Block headings
 // that map to a popup open it.
 async function load() {
-  const [trains, stocks, national, local, housing, outbreaks, quakes, live, hourly, daily, alerts] = await Promise.all([
+  const [trains, stocks, national, local, housing, outbreaks, quakes, live, hourly, daily, alerts, gmeRaw] = await Promise.all([
     getJson<TrainsPayload>('trains_mtz').catch(() => null),
     getJson<Record<string, StockQuote>>('12D_stocks').catch(() => null),
     getJson<GovNationalPayload>('gov_national').catch(() => null),
@@ -104,8 +106,11 @@ async function load() {
     getJson<GlanceHourly>('glance_hourly').catch(() => null),
     getJson<GlanceDaily>('glance_daily').catch(() => null),
     listActiveAlerts().catch(() => []),
+    getJson<GmeInsidersPayload>('gme_insiders').catch(() => null),
   ]);
-  return { trains, stocks, national, local, housing, outbreaks, quakes, live, hourly, daily, alerts };
+  // The parsed-filings store is only for the cron's incremental fetch; keep it out of the page payload.
+  const gme = gmeRaw ? { ...gmeRaw, filings: {} } : null;
+  return { trains, stocks, national, local, housing, outbreaks, quakes, live, hourly, daily, alerts, gme };
 }
 
 export type InfoData = Awaited<ReturnType<typeof load>>;
@@ -117,7 +122,7 @@ export default async function InfoColumn() {
 export function InfoView(d: InfoData) {
   const loc = getLocation();
   const tz = loc.timezone;
-  const { trains, stocks, national, local, housing, outbreaks, quakes, live, hourly, daily, alerts } = d;
+  const { trains, stocks, national, local, housing, outbreaks, quakes, live, hourly, daily, alerts, gme } = d;
 
   const nowMs = Date.now();
   const nowSec = Math.floor(nowMs / 1000);
@@ -370,14 +375,29 @@ export function InfoView(d: InfoData) {
             )}
             {otherRows.map((m) => (
               <li key={m.symbol} className="info-row">
-                <span className="info-main">{m.label}</span>
+                <span className="info-main">
+                  {m.symbol === 'GME' && gme
+                    ? <PopupLink params={{ gme: '1' }} className="info-more" title="GameStop insiders, ownership and short interest">{m.label} ›</PopupLink>
+                    : m.label}
+                </span>
                 <span className="info-side">
                   ${fmtPrice(m.q.close)}{' '}
                   <span className={`dir-${pctClass(m.q.percent_change)}`}>{fmtPct(m.q.percent_change)}</span>
                 </span>
               </li>
             ))}
+            {gme?.yahoo && gme.yahoo.insidersPct != null && gme.yahoo.institutionsPct != null && (
+              <li className="info-item">
+                <span className="info-note">
+                  GME owned by: insiders <b>{gme.yahoo.insidersPct.toFixed(1)}%</b> · institutions <b>{gme.yahoo.institutionsPct.toFixed(1)}%</b> · total <b>{(gme.yahoo.insidersPct + gme.yahoo.institutionsPct).toFixed(1)}%</b>
+                </span>
+                {gme.yahoo.shortPctFloat != null && (
+                  <span className="info-note">short interest {gme.yahoo.shortPctFloat.toFixed(1)}% of float{gme.yahoo.shortRatio != null ? ` · ${gme.yahoo.shortRatio.toFixed(1)} days to cover` : ''}</span>
+                )}
+              </li>
+            )}
           </ul>
+          <GmeInsidersDetail data={gme} />
         </section>
       )}
 

@@ -207,6 +207,15 @@ async function glanceHourly(json: Record<string, unknown>) {
   if (!p.fire) throw new Error('glance_hourly: ' + JSON.stringify(p.errors));
   json['glance_hourly'] = p;
 }
+async function gmeInsiders(json: Record<string, unknown>) {
+  const { fetchGmeInsiders } = await import('./gme-insiders');
+  const { getJson } = await import('./cache');
+  type P = import('./gme-insiders').GmeInsidersPayload;
+  const prev = await getJson<P>('gme_insiders').catch(() => null);
+  const p = await fetchGmeInsiders(prev);
+  if (Object.keys(p.errors).length) console.warn('[gme_insiders] source errors:', p.errors);
+  json['gme_insiders'] = p;
+}
 async function glanceDaily(json: Record<string, unknown>) {
   const { fetchGlanceDaily } = await import('./glance');
   const p = await fetchGlanceDaily();
@@ -1217,6 +1226,7 @@ export async function runBucket(bucket: Bucket): Promise<RunResult> {
     await safe('noaa_hourly',         () => noaaHourly(json),         ok, errors, timings);
     await safe('noaa_buoys',          () => noaaBuoys(json),          ok, errors, timings);
     await safe('glance_hourly',       () => glanceHourly(json),       ok, errors, timings);
+    await safe('gme_insiders',        () => gmeInsiders(json),        ok, errors, timings);
   }
 
   if (bucket === '4h' || all) {

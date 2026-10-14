@@ -2916,3 +2916,16 @@ a.info-title:hover { color: var(--accent); }
 .place-extra { margin-bottom: 8px; }
 .disc-row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin: 4px 0; }
 .disc-row.hidden-row { opacity: .5; text-decoration: line-through; }
+
+/* GameStop insiders popup */
+.gme-stats { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; }
+.gme-wrap { overflow-x: auto; }
+.gme-table { width: 100%; border-collapse: collapse; font-size: .92em; }
+.gme-table th, .gme-table td { padding: 6px 8px; border-bottom: 1px solid rgba(128,128,128,.25); vertical-align: top; text-align: left; }
+.gme-table th.num, .gme-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gme-table tfoot td { border-top: 2px solid rgba(128,128,128,.4); border-bottom: 0; }
+.gme-role { display: block; font-size: .82em; opacity: .65; font-weight: normal; }
+.gme-h { margin: 16px 0 6px; }
+.gme-tx { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: .92em; }
+.gme-date { opacity: .65; font-variant-numeric: tabular-nums; }
+.gme-foot { margin-top: 12px; font-size: .85em; line-height: 1.5; }
