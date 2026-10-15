@@ -463,14 +463,14 @@ async function localEvents(json: Record<string, unknown>) {
     start_at: e.start_at,
     end_at: e.end_at ?? null,
     venue: e.venue,
-    city: null,
+    city: e.city ?? null,
     url: e.url,
     description: e.description ?? null,
     image: e.image ?? null,
     // Foopee events are all live music — tag them so the Regional
     // tab's Music sub-filter picks them up (segGroup checks segment).
-    segment: e.source === 'foopee' ? 'Music' : null,
-    genre: null,
+    segment: e.segment ?? (e.source === 'foopee' ? 'Music' : null),
+    genre: e.genre ?? null,
     please_note: null,
     payload: e,
   })));

@@ -151,6 +151,10 @@ export interface LocalEvent {
   url: string;
   description?: string;
   image?: string;
+  /** Optional extras for regional rows (the Regional tab filters on segment). */
+  city?: string;
+  segment?: string;
+  genre?: string;
 }
 
 export type ApisJsonId =

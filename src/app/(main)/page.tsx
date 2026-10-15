@@ -13,6 +13,9 @@ import RadarCard, { type RadarImg } from '@/components/RadarCard';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Event sources shown on the Regional tab (everything else non-municipal is Local).
+const REGIONAL_SOURCES = new Set(['foopee', 'nicasio', 'empress', 'openmic']);
+
 export default async function MainPage() {
   const loc = getLocation();
 
@@ -41,7 +44,7 @@ export default async function MainPage() {
     image: e.image ?? undefined,
     source: e.source === 'ticketmaster' ? 'ticketmaster'
            : (e.source === 'contracosta' || e.source === 'cclegistar') ? 'municipal'
-           : e.source === 'foopee' ? 'regional'
+           : REGIONAL_SOURCES.has(e.source) ? 'regional'
            : 'local',
     source_label: e.source_label,
     segment: e.segment ?? undefined,

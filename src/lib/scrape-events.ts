@@ -11,6 +11,7 @@
 // the sites 403 on bot UAs.
 
 import type { LocalEvent } from './types';
+import { RECURRING_SPECS } from './recurring-specs';
 
 const UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -656,14 +657,14 @@ async function luigiRecurring(): Promise<LocalEvent[]> {
     const tuesday = nextWeekday(todayPT, 2, w);          // Tuesdays
     out.push(makeLuigiEvent(monday, 18, 0, {
       id: `luigi-mon-${ymd(monday)}`,
-      title: 'Open Mic Night',
+      title: 'Open Mic Night (weekly)',
       description: 'Hosted by Roy Jeans with sound by Jay Olson. Sign-ups 5:30 PM, music starts 6:00 PM.',
       url: 'https://luigismartinezmusic.weebly.com/monday-open-mic.html',
     }));
     out.push(makeLuigiEvent(tuesday, 18, 30, {
       id: `luigi-tue-${ymd(tuesday)}`,
-      title: 'Nob Hill Billies',
-      description: 'Live music with the Nob Hill Billies, 6:30–8:30 PM.',
+      title: "Live @ Luigi's: Bluegrass & Blues Jam (weekly)",
+      description: 'Bluegrass & blues jam, 6:30–8:30 PM, hosted by Brian Walker, Patrick Martin & Stacy Samuels.',
       url: 'https://luigismartinezmusic.weebly.com/tuesday---nob-hill-billies.html',
     }, 20, 30),
     );
@@ -742,7 +743,7 @@ async function farmersMarketRecurring(): Promise<LocalEvent[]> {
       id: `farmers-${ymd(sun)}`,
       source: 'farmers',
       source_label: 'Martinez Farmers Market',
-      title: 'Martinez Farmers Market',
+      title: 'Martinez Farmers Market (weekly)',
       start_at: ptEpoch(sun.getFullYear(), sun.getMonth(), sun.getDate(), 9, 0),
       end_at:   ptEpoch(sun.getFullYear(), sun.getMonth(), sun.getDate(), 13, 0),
       venue: 'Main Street, Martinez, CA',
@@ -1151,6 +1152,205 @@ function foopeeDateTs(month: number, day: number, extras: string): number | null
   return ts;
 }
 
+
+// ----- Weekly / monthly recurring listings -----------------------------------
+// Venues with no scrapeable calendar (see recurring-specs.ts). Each spec is
+// expanded into dated occurrences for the next ~10 weeks. Titles carry a tag so
+// readers can tell a standing night from a one-off: "(weekly)", "(1st & 3rd Thu)",
+// or "(Wed & Fri)".
+
+const RECUR_DAYS_AHEAD = 70;
+const DOW_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const ORD = ['', '1st', '2nd', '3rd', '4th', '5th'];
+
+export function recurrenceTag(s: { dow: number[]; nth?: number[] }): string {
+  if (s.nth?.length) return `(${s.nth.map((n) => ORD[n]).join(' & ')} ${DOW_ABBR[s.dow[0]]})`;
+  if (s.dow.length > 1) return `(${s.dow.map((d) => DOW_ABBR[d]).join(' & ')})`;
+  return '(weekly)';
+}
+
+async function recurringOpenMics(): Promise<LocalEvent[]> {
+  const out: LocalEvent[] = [];
+  const todayPT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+  for (const s of RECURRING_SPECS) {
+    const tag = recurrenceTag(s);
+    const where = s.address ?? `${s.venue}, ${s.city}, CA`;
+    for (let i = 0; i < RECUR_DAYS_AHEAD; i++) {
+      const d = new Date(todayPT.getFullYear(), todayPT.getMonth(), todayPT.getDate() + i);
+      if (!s.dow.includes(d.getDay())) continue;
+      if (s.nth && !s.nth.includes(Math.ceil(d.getDate() / 7))) continue;
+      const start = ptEpoch(d.getFullYear(), d.getMonth(), d.getDate(), s.start[0], s.start[1]);
+      let end: number | null = null;
+      if (s.end) {
+        end = ptEpoch(d.getFullYear(), d.getMonth(), d.getDate(), s.end[0], s.end[1]);
+        if (end <= start) end += 86400;       // runs past midnight
+      }
+      out.push({
+        id: `openmic-${s.key}-${ymd(d)}`,
+        source: s.local ? 'openmic_local' : 'openmic',
+        source_label: s.venue,
+        title: `${s.title} ${tag}`,
+        start_at: start,
+        end_at: end,
+        venue: s.venue,
+        city: s.city,
+        url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(where)}`,
+        description: `${s.desc} Standing weekly/monthly listing from a community jam list — confirm before you go.`,
+        segment: 'Music',
+        genre: 'Open mic / jam',
+      });
+    }
+  }
+  return out;
+}
+
+// ----- Rancho Nicasio (WordPress + The Events Calendar) ----------------------
+// The calendar publishes dates only (all-day entries, no show times), so the
+// start time is a nominal evening slot — the description says so.
+
+interface TribeNicasio {
+  title?: string; url?: string; website?: string; description?: string; cost?: string;
+  start_date?: string; image?: { url?: string } | false;
+}
+
+async function scrapeRanchoNicasio(): Promise<LocalEvent[]> {
+  const out: LocalEvent[] = [];
+  for (let page = 1; page <= 3; page++) {
+    const text = await safeFetch(`https://ranchonicasio.com/wp-json/tribe/events/v1/events?per_page=50&page=${page}&start_date=now`);
+    if (!text) break;
+    let j: { events?: TribeNicasio[]; total_pages?: number };
+    try { j = JSON.parse(text); } catch { break; }
+    for (const e of j.events ?? []) {
+      const m = (e.start_date ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m || !e.url) continue;
+      const [y, mo, d] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])];
+      const dow = new Date(Date.UTC(y, mo, d)).getUTCDay();
+      const hour = dow === 0 ? 16 : 20;               // Sunday shows are afternoons
+      const body = stripHtml(e.description ?? '');
+      const idSlug = e.url.replace(/\/+$/, '').split('/').pop() ?? '';
+      out.push({
+        id: `nicasio-${idSlug}-${m[1]}${m[2]}${m[3]}`,
+        source: 'nicasio',
+        source_label: 'Rancho Nicasio',
+        title: decodeEntities(e.title ?? 'Show'),
+        start_at: ptEpoch(y, mo, d, hour, 0),
+        end_at: null,
+        venue: 'Rancho Nicasio',
+        city: 'Nicasio',
+        url: e.url,
+        description: `${body.slice(0, 600)}${body.length > 600 ? '…' : ''}${e.website ? ` Tickets: ${e.website}` : ''} (Showtime not published on the calendar — time shown is approximate.)`.trim(),
+        image: e.image ? e.image.url : undefined,
+        segment: 'Music',
+      });
+    }
+    if (page >= (j.total_pages ?? 1)) break;
+  }
+  return out;
+}
+
+// ----- Empress Theatre, Vallejo (both rooms) ---------------------------------
+// The venue site blocks non-browser clients; its ticketing provider (tix.com)
+// serves the full list — Empress Theatre and Empress Marquee Club — as JSON.
+
+interface TixEvent {
+  EventId: number; EventDate: string; ActiveFlag?: boolean; ProductionName?: string; VenueName?: string;
+  MinPrice?: number | null; MaxPrice?: number | null; ProductionImage?: string | null;
+  ProductionDescription?: string | null; CanSell?: boolean;
+}
+
+async function scrapeEmpress(): Promise<LocalEvent[]> {
+  const text = await safeFetch('https://www.tix.com/api_ots/onlinesales/events/organization/7268');
+  if (!text) return [];
+  let j: { payload?: { groupedEvents?: unknown } };
+  try { j = JSON.parse(text); } catch { return []; }
+  const flat: TixEvent[] = [];
+  const walk = (v: unknown) => {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      if (typeof o.EventId === 'number' && typeof o.EventDate === 'string') flat.push(o as unknown as TixEvent);
+      else Object.values(o).forEach(walk);
+    }
+  };
+  walk(j.payload?.groupedEvents);
+  const out: LocalEvent[] = [];
+  for (const e of flat) {
+    if (e.ActiveFlag === false) continue;
+    const m = e.EventDate.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!m) continue;
+    const room = /marquee/i.test(e.VenueName ?? '') ? 'Empress Marquee Club' : 'Empress Theatre';
+    const price = e.MinPrice != null
+      ? ` Tickets from $${e.MinPrice.toFixed(2)}${e.MaxPrice && e.MaxPrice > e.MinPrice ? ` to $${e.MaxPrice.toFixed(2)}` : ''}.`
+      : '';
+    out.push({
+      id: `empress-${e.EventId}`,
+      source: 'empress',
+      source_label: room,
+      title: decodeEntities(e.ProductionName ?? 'Show'),
+      start_at: ptEpoch(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5])),
+      end_at: null,
+      venue: room,
+      city: 'Vallejo',
+      url: `https://www.tix.com/ticket-sales/GDead/7268/event/${e.EventId}`,
+      description: `${stripHtml(e.ProductionDescription ?? '')}${price}`.trim(),
+      image: e.ProductionImage ?? undefined,
+      segment: 'Music',
+    });
+  }
+  return out;
+}
+
+// ----- Martinez Campbell Theater (Wix Events) --------------------------------
+// Every event page carries schema.org Event JSON-LD; the sitemap lists them all
+// (history included), so only future-dated slugs plus undated ones are fetched.
+
+async function scrapeCampbellTheater(): Promise<LocalEvent[]> {
+  const sm = await safeFetch('https://www.campbelltheater.com/event-pages-sitemap.xml');
+  if (!sm) return [];
+  const urls = [...sm.matchAll(/<loc>([^<]*\/event-details\/[^<]+)<\/loc>/g)].map((m) => m[1]);
+  const todayKey = ymd(new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })));
+  const wanted = urls.filter((u) => {
+    const m = u.match(/(\d{4}-\d{2}-\d{2})(?:-\d{2}-\d{2})?$/);
+    return !m || m[1] >= todayKey;
+  });
+  const out: LocalEvent[] = [];
+  const queue = [...wanted];
+  const worker = async () => {
+    for (let u = queue.shift(); u; u = queue.shift()) {
+      const html = await safeFetch(u);
+      if (!html) continue;
+      for (const m of html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)) {
+        let node: unknown;
+        try { node = JSON.parse(m[1]); } catch { continue; }
+        for (const rec of (Array.isArray(node) ? node : [node]) as Array<Record<string, unknown>>) {
+          if (!rec || rec['@type'] !== 'Event' || typeof rec.startDate !== 'string') continue;
+          const start = Date.parse(rec.startDate);
+          if (Number.isNaN(start) || start < Date.now() - 6 * 3600_000) continue;
+          if (/cancel/i.test(String(rec.eventStatus ?? ''))) continue;
+          const end = typeof rec.endDate === 'string' ? Date.parse(rec.endDate) : NaN;
+          const offers = rec.offers as { lowPrice?: string; highPrice?: string } | undefined;
+          const price = offers?.lowPrice ? ` Tickets from $${offers.lowPrice}${offers.highPrice && offers.highPrice !== offers.lowPrice ? ` to $${offers.highPrice}` : ''}.` : '';
+          const img = Array.isArray(rec.image) ? rec.image[0] : rec.image;
+          out.push({
+            id: `campbell-${u.split('/').pop()}`,
+            source: 'campbell',
+            source_label: 'Martinez Campbell Theater',
+            title: decodeEntities(String(rec.name ?? 'Event')),
+            start_at: Math.floor(start / 1000),
+            end_at: Number.isNaN(end) ? null : Math.floor(end / 1000),
+            venue: 'Martinez Campbell Theater',
+            url: u,
+            description: `${decodeEntities(String(rec.description ?? '')).replace(/&#0?10;|\n/g, ' ').trim()}${price}`.trim(),
+            image: typeof img === 'string' ? img : undefined,
+          });
+        }
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return out;
+}
+
 // ----- public entry ----------------------------------------------------
 
 const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
@@ -1166,6 +1366,10 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
   ['luigi',          luigiRecurring],
   ['farmers',        farmersMarketRecurring],
   ['martinezchamber', scrapeMartinezChamber],
+  ['campbell',       scrapeCampbellTheater],
+  ['nicasio',        scrapeRanchoNicasio],
+  ['empress',        scrapeEmpress],
+  ['openmic',        recurringOpenMics],
   ['contracosta',    scrapeContraCosta],
   ['luccabar',       scrapeLuccaBar],
   ['foopee',         scrapeFoopee],
