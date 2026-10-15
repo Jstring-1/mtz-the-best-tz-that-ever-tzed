@@ -14,7 +14,9 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // Event sources shown on the Regional tab (everything else non-municipal is Local).
-const REGIONAL_SOURCES = new Set(['foopee', 'nicasio', 'empress', 'openmic']);
+// Rancho Nicasio, Empress, Campbell Theater and the jam/open-mic listings are all Local
+// (filter by venue on the Local tab).
+const REGIONAL_SOURCES = new Set(['foopee']);
 
 export default async function MainPage() {
   const loc = getLocation();
