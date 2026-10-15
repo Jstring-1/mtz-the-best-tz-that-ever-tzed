@@ -12,6 +12,7 @@
 
 :root {
   --bg:           #000;
+  --bar-bg:       #181818;       /* top bars: lighter than the black page and the content boxes */
   --bg-elev:      #0d0d0d;
   --bg-elev-2:    #1a1a1a;
   --border:       #222;
@@ -105,7 +106,7 @@ p { margin: 0; }
 .site-hdr {
   position: fixed; top: var(--top-stack-h); left: 0; width: 100%;
   height: var(--hdr-h);
-  background: #000;
+  background: var(--bar-bg);
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 24px;
@@ -242,7 +243,7 @@ main { padding-top: var(--top-stack-h); display: block; }
 .wx-strip {
   position: fixed; top: 0; left: 0; width: 100%;
   height: var(--strip-h);
-  background: #000;
+  background: var(--bar-bg);
   z-index: 1001;
   display: flex; flex-wrap: nowrap;
   align-items: center;
@@ -284,7 +285,7 @@ main { padding-top: var(--top-stack-h); display: block; }
 .wx-row-2 {
   position: fixed; left: 0; width: 100%;
   top: var(--strip-h); height: var(--row2-h);
-  background: #000;
+  background: var(--bar-bg);
   z-index: 1001;
   display: flex; flex-wrap: nowrap;
   align-items: center;
@@ -304,7 +305,7 @@ main { padding-top: var(--top-stack-h); display: block; }
 .civic-strip {
   position: fixed; left: 0; width: 100%;
   top: calc(var(--strip-h) + var(--row2-h)); height: var(--civic-h);
-  background: #000;
+  background: var(--bar-bg);
   z-index: 1001;
   display: flex; flex-wrap: nowrap;
   align-items: center; justify-content: center;
@@ -362,7 +363,7 @@ main { padding-top: var(--top-stack-h); display: block; }
   position: fixed; left: 0; width: 100%;
   top: calc(var(--strip-h) + var(--row2-h));
   height: var(--gov-h);
-  background: #000;
+  background: var(--bar-bg);
   z-index: 1001;
   display: flex; align-items: center;
   gap: 8px; padding: 0 16px;
@@ -1638,7 +1639,7 @@ main { padding-top: var(--top-stack-h); display: block; }
   margin-bottom: 8px;
 }
 
-.event-row { display: grid !important; grid-template-columns: 66px 1fr; row-gap: 1px; }
+.event-row { display: grid !important; grid-template-columns: 78px 1fr; column-gap: 6px; row-gap: 1px; }
 .event-row .when  { color: var(--accent); font-family: var(--mono); font-size: .82em; white-space: nowrap; }
 .event-row .name  { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .event-row .venue { grid-column: 2; font-size: .8em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
