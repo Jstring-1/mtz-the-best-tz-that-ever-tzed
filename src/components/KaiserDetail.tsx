@@ -88,7 +88,7 @@ export default function KaiserDetail({ label, tooltip }: Props) {
 
         <section style={{ marginTop: 18 }}>
           <h3 className="rep-h">Documents</h3>
-          <p className="muted" style={{ fontSize: '.78em', marginTop: -2 }}>Click a document to read it here; press Ctrl+F inside the viewer to search.</p>
+          <p className="muted" style={{ fontSize: '.78em', marginTop: -2 }}>Click a document to read it here; press Ctrl+F inside the viewer to search. The County hasn&apos;t posted 2027 plan documents yet, so the plan files are the 2026 versions (Teamsters: March 2026 – February 2027).</p>
           {groups.map((g) => (
             <div key={g} className="cch-doc-group">
               <h4 className="cch-doc-group-h">{g}</h4>

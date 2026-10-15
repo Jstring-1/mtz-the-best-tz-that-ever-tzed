@@ -105,9 +105,41 @@ export interface KaiserDoc { slug: string; group: string; label: string; file: s
 
 // Documents bundled under /public so they open in-page (with Ctrl+F). Kaiser's
 // plan documents are the County's own copies; the County had not yet posted
-// 2027 versions when these were added, so most are the 2026 plan-year files.
+// 2027 versions when these were added (Oct 2026), so they are 2026 plan-year files
+// (Teamsters: Mar 2025 – Feb 2027). Swap in the 2027 files when the County posts them.
 export const KAISER_DOCS: KaiserDoc[] = [
   { slug: 'guide-2027', group: 'County guide', label: '2027 Employee Benefits Guide (Blue Book)',
     file: KAISER_GUIDE_FILE,
     note: 'County-wide 2027 open-enrollment guide: eligibility, dental, vision, FSA, plan comparison charts.' },
+
+  { slug: 'a-highlights', group: 'Plan A — Traditional HMO', label: 'Plan Highlights (2026)',
+    file: '/img/kaiser/kaiser-plan-a-highlights-2026.pdf', note: 'Two-page benefit summary for Contra Costa County Kaiser Plan A.' },
+  { slug: 'a-sbc', group: 'Plan A — Traditional HMO', label: 'Summary of Benefits & Coverage (2026)',
+    file: '/img/kaiser/kaiser-plan-a-sbc-2026.pdf', note: 'Standard SBC: what the plan covers and what you pay, with cost examples.' },
+  { slug: 'a-eoc', group: 'Plan A — Traditional HMO', label: 'Evidence of Coverage (2026)',
+    file: '/img/kaiser/kaiser-plan-a-eoc-2026.pdf', note: 'Full plan contract (EOC #3): covered services, exclusions, appeals. 107 pages.' },
+
+  { slug: 'b-highlights', group: 'Plan B — Deductible HMO', label: 'Plan Highlights (2026)',
+    file: '/img/kaiser/kaiser-plan-b-highlights-2026.pdf', note: 'Two-page benefit summary for Contra Costa County Kaiser Plan B.' },
+  { slug: 'b-sbc', group: 'Plan B — Deductible HMO', label: 'Summary of Benefits & Coverage (2026)',
+    file: '/img/kaiser/kaiser-plan-b-sbc-2026.pdf', note: 'Standard SBC: what the plan covers and what you pay, with cost examples.' },
+  { slug: 'b-eoc', group: 'Plan B — Deductible HMO', label: 'Evidence of Coverage (2026)',
+    file: '/img/kaiser/kaiser-plan-b-eoc-2026.pdf', note: 'Full plan contract (EOC #20): covered services, exclusions, appeals. 107 pages.' },
+
+  { slug: 'hdhp-highlights', group: 'HDHP — HSA-qualified', label: 'Plan Highlights (2026)',
+    file: '/img/kaiser/kaiser-hdhp-highlights-2026.pdf', note: 'Two-page benefit summary for the Kaiser High-Deductible Health Plan.' },
+  { slug: 'hdhp-sbc', group: 'HDHP — HSA-qualified', label: 'Summary of Benefits & Coverage (2026)',
+    file: '/img/kaiser/kaiser-hdhp-sbc-2026.pdf', note: 'Standard SBC: what the plan covers and what you pay, with cost examples.' },
+  { slug: 'hdhp-eoc', group: 'HDHP — HSA-qualified', label: 'Evidence of Coverage (2026)',
+    file: '/img/kaiser/kaiser-hdhp-eoc-2026.pdf', note: 'Full plan contract (EOC #33, HSA-qualified): covered services, exclusions, appeals. 108 pages.' },
+
+  { slug: 'tm-highlights', group: 'Teamsters 856 Trust Fund plan', label: 'Plan Highlights (Mar 2025 – Feb 2026)',
+    file: '/img/kaiser/teamsters-kaiser-highlights-2025.pdf', note: 'Two-page benefit summary for the Teamsters Local 856 Kaiser plan.' },
+  { slug: 'tm-sbc', group: 'Teamsters 856 Trust Fund plan', label: 'Summary of Benefits & Coverage (Mar 2026 – Feb 2027)',
+    file: '/img/kaiser/teamsters-kaiser-sbc-2026.pdf', note: 'Standard SBC for the plan year that runs March 1, 2026 to February 28, 2027.' },
+  { slug: 'tm-eoc', group: 'Teamsters 856 Trust Fund plan', label: 'Evidence of Coverage (2026)',
+    file: '/img/kaiser/teamsters-kaiser-eoc-2026.pdf', note: 'Full plan contract (EOC #29): covered services, exclusions, appeals. 118 pages.' },
+
+  { slug: 'fee-list', group: 'Costs', label: 'Kaiser 2026 Sample Fee List (Northern California)',
+    file: '/img/kaiser/kaiser-sample-fee-list-2026.pdf', note: 'Sample prices for common services, useful for estimating costs before the deductible is met (HDHP, Plan B).' },
 ];
