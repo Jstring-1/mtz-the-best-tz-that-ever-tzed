@@ -107,7 +107,7 @@ p { margin: 0; }
   position: fixed; top: var(--top-stack-h); left: 0; width: 100%;
   height: var(--hdr-h);
   background: var(--bar-bg);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--bg);
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 24px;
   z-index: 1000;
@@ -249,7 +249,7 @@ main { padding-top: var(--top-stack-h); display: block; }
   align-items: center;
   justify-content: space-between;
   gap: 10px; padding: 0 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--bg);
   font-size: .68em;
   line-height: 1;
   overflow-x: auto;
@@ -291,7 +291,7 @@ main { padding-top: var(--top-stack-h); display: block; }
   align-items: center;
   justify-content: space-between;
   gap: 8px; padding: 0 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--bg);
   font-size: .68em;
   line-height: 1;
   white-space: nowrap;
@@ -310,7 +310,7 @@ main { padding-top: var(--top-stack-h); display: block; }
   display: flex; flex-wrap: nowrap;
   align-items: center; justify-content: center;
   gap: 40px; padding: 0 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--bg);
   /* Match the weather strips' typography (sans family, .68em). */
   font-size: .68em;
   line-height: 1;
@@ -367,7 +367,7 @@ main { padding-top: var(--top-stack-h); display: block; }
   z-index: 1001;
   display: flex; align-items: center;
   gap: 8px; padding: 0 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--bg);
   font-size: .68em;
   line-height: 1;
   white-space: nowrap;
