@@ -72,9 +72,15 @@ export interface GridData {
 }
 
 export interface IssPass { start: number; end: number; maxEl: number; from: string; to: string }
+export interface NamedPass extends IssPass { name: string }
+// Vandenberg launch; sunEl = Sun's elevation (deg) at Martinez at launch time
+// (between about -12 and 0 is twilight — the best time to see a plume).
+export interface Launch { rocket: string; mission: string; net: number; status: string; sunEl: number }
 export interface SpaceData {
   kp: number | null; kpAt: number | null;       // latest planetary K index
   issPasses: IssPass[];                          // upcoming visible passes
+  otherPasses?: NamedPass[];                     // next visible Tiangong / Hubble pass
+  launches?: Launch[];                           // upcoming Vandenberg launches
 }
 
 export interface DroughtData {
@@ -389,9 +395,10 @@ function sunUnit(ms: number): [number, number, number] {
   return [Math.cos(lam), Math.cos(eps) * Math.sin(lam), Math.sin(eps) * Math.sin(lam)];
 }
 
-async function issPasses(): Promise<IssPass[]> {
+// Visible passes for any CelesTrak catalog number (ISS 25544, Tiangong 48274, Hubble 20580).
+async function satPasses(catnr: number, maxPasses = 3): Promise<IssPass[]> {
   const loc = getLocation();
-  const tle = (await getText('https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=tle')).trim().split(/\r?\n/);
+  const tle = (await getText(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${catnr}&FORMAT=tle`)).trim().split(/\r?\n/);
   if (tle.length < 3) throw new Error('unexpected TLE format');
   const rec = satellite.twoline2satrec(tle[1].trim(), tle[2].trim());
   const obs = { latitude: satellite.degreesToRadians(loc.lat), longitude: satellite.degreesToRadians(loc.lon), height: 0 };
@@ -416,7 +423,7 @@ async function issPasses(): Promise<IssPass[]> {
   };
 
   const start = Date.now();
-  for (let t = start; t < start + 14 * 86400_000 && passes.length < 3; t += 20_000) {
+  for (let t = start; t < start + 14 * 86400_000 && passes.length < maxPasses; t += 20_000) {
     const d = new Date(t);
     const pv = satellite.propagate(rec, d);
     if (!pv || !pv.position || typeof pv.position === 'boolean') { flush(); continue; }
@@ -439,17 +446,66 @@ async function issPasses(): Promise<IssPass[]> {
   return passes;
 }
 
+
+// ---- Rocket launches from Vandenberg (Launch Library 2) -------------------
+// Vandenberg launches are the ones that can be seen from the Bay Area (best at
+// twilight, when the exhaust plume is sunlit against a dark sky). Free API,
+// ~15 requests/hour unauthenticated — one call per hourly run is well inside it.
+
+// Sun elevation (degrees) at the observer at a given moment.
+function sunElevationDeg(ms: number): number {
+  const loc = getLocation();
+  const obs = { latitude: satellite.degreesToRadians(loc.lat), longitude: satellite.degreesToRadians(loc.lon), height: 0 };
+  const d = new Date(ms);
+  const eci = satellite.ecfToEci(satellite.geodeticToEcf(obs), satellite.gstime(d));
+  const sun = sunUnit(ms);
+  const len = Math.hypot(eci.x, eci.y, eci.z);
+  return (Math.asin((eci.x * sun[0] + eci.y * sun[1] + eci.z * sun[2]) / len) * 180) / Math.PI;
+}
+
+async function launches(): Promise<Launch[]> {
+  type LL = { results?: { name: string; net: string; status?: { abbrev?: string } }[] };
+  const j = await getJson<LL>(
+    'https://ll.thespacedevs.com/2.2.0/launch/upcoming/?limit=12&location__ids=11&mode=list&format=json');
+  const horizon = Date.now() + 21 * 86400_000;
+  const out: Launch[] = [];
+  for (const r of j.results ?? []) {
+    const status = r.status?.abbrev ?? '';
+    const net = Date.parse(r.net);
+    // TBD entries are placeholders (a date with no real time).
+    if (!Number.isFinite(net) || /^tbd$/i.test(status) || net > horizon || net < Date.now() - 3600_000) continue;
+    const [rocketRaw, ...rest] = r.name.split('|');
+    out.push({
+      rocket: rocketRaw.replace(/\s*Block\s*\d+/i, '').trim(),
+      mission: rest.join('|').trim() || rocketRaw.trim(),
+      net: Math.floor(net / 1000),
+      status,
+      sunEl: Math.round(sunElevationDeg(net)),
+    });
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
 async function space(): Promise<SpaceData> {
-  const [kp, iss] = await Promise.allSettled([
+  const [kp, iss, tiangong, hubble, launch] = await Promise.allSettled([
     getJson<{ time_tag: string; Kp: number }[]>('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'),
-    issPasses(),
+    satPasses(25544, 3),
+    satPasses(48274, 1),
+    satPasses(20580, 1),
+    launches(),
   ]);
   if (kp.status === 'rejected' && iss.status === 'rejected') throw kp.reason;
+  const other: NamedPass[] = [];
+  if (tiangong.status === 'fulfilled' && tiangong.value[0]) other.push({ name: 'Tiangong', ...tiangong.value[0] });
+  if (hubble.status === 'fulfilled' && hubble.value[0]) other.push({ name: 'Hubble', ...hubble.value[0] });
   const last = kp.status === 'fulfilled' ? kp.value[kp.value.length - 1] : undefined;
   return {
     kp: last && Number.isFinite(Number(last.Kp)) ? Number(last.Kp) : null,
     kpAt: last ? Math.floor(Date.parse(`${last.time_tag}Z`) / 1000) : null,
     issPasses: iss.status === 'fulfilled' ? iss.value : [],
+    otherPasses: other,
+    launches: launch.status === 'fulfilled' ? launch.value : [],
   };
 }
 

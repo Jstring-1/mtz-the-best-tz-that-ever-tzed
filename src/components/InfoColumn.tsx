@@ -302,7 +302,7 @@ export function InfoView(d: InfoData) {
         )}
       </section>
 
-      {space && (space.kp != null || space.issPasses.length > 0) && (
+      {space && (space.kp != null || space.issPasses.length > 0 || (space.launches?.length ?? 0) > 0) && (
         <section className="card-section info-block">
           <h3>Space</h3>
           <ul className="info-list">
@@ -320,6 +320,26 @@ export function InfoView(d: InfoData) {
                   : <span className="info-note">none in 2 weeks</span>}
               </span>
             </li>
+            {(space.otherPasses ?? []).filter((p) => p.start >= nowSec).map((p) => (
+              <li key={p.name} className="info-row">
+                <span className="info-main">Next {p.name} pass</span>
+                <span className="info-side">{dayTime(p.start)} <span className="info-note">{p.maxEl}° · {p.from}→{p.to}</span></span>
+              </li>
+            ))}
+            {(space.launches ?? []).filter((l) => l.net >= nowSec - 1800).slice(0, 3).map((l) => (
+              <li key={`${l.rocket}-${l.mission}-${l.net}`} className="info-item">
+                <span className="info-row">
+                  <span className="info-main"><b>{l.rocket}</b> {l.mission}</span>
+                  <span className="info-side">{dayTime(l.net)}</span>
+                </span>
+                <span className="info-note">
+                  Vandenberg launch{l.status && l.status !== 'Go' ? ` (${l.status})` : ''}
+                  {l.sunEl <= 0 && l.sunEl >= -12 ? ' · twilight — best chance to see the plume'
+                    : l.sunEl < -12 ? ' · night launch — plume may glow low in the south'
+                    : ' · daytime — hard to see'}
+                </span>
+              </li>
+            ))}
           </ul>
         </section>
       )}
