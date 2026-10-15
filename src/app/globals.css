@@ -2930,3 +2930,11 @@ a.info-title:hover { color: var(--accent); }
 .gme-tx { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: .92em; }
 .gme-date { opacity: .65; font-variant-numeric: tabular-nums; }
 .gme-foot { margin-top: 12px; font-size: .85em; line-height: 1.5; }
+
+/* Kaiser popup */
+.kp-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; line-height: 1.45; }
+.kp-table { width: 100%; border-collapse: collapse; font-size: .88em; min-width: 640px; }
+.kp-table th, .kp-table td { padding: 6px 8px; border-bottom: 1px solid rgba(128,128,128,.25); vertical-align: top; text-align: left; }
+.kp-table thead th { position: sticky; top: 0; background: var(--bg-elev-2); font-size: .9em; }
+.kp-table tbody th[scope="row"] { font-weight: 500; color: var(--text-muted); width: 20%; }
+.kp-table .kp-sec th { background: rgba(100,149,237,.14); color: var(--accent-cool); text-transform: uppercase; letter-spacing: .5px; font-size: .78em; }

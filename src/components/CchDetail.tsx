@@ -19,8 +19,9 @@ interface Props {
 // these documents at stable URLs (they rotate through wp-content
 // paths), and Ctrl+F search only works when a PDF is open in a viewer
 // — bundling sidesteps both problems.
-type DocGroup = 'coverage' | 'directories' | 'pharmacy' | 'forms' | 'privacy' | 'outreach';
+type DocGroup = 'employee' | 'coverage' | 'directories' | 'pharmacy' | 'forms' | 'privacy' | 'outreach';
 const GROUP_LABEL: Record<DocGroup, string> = {
+  employee:    'County employee benefits',
   coverage:    'Health-plan coverage',
   directories: 'Provider directories',
   pharmacy:    'Pharmacy',
@@ -30,6 +31,11 @@ const GROUP_LABEL: Record<DocGroup, string> = {
 };
 
 const CCH_DOCS: Array<{ slug: string; group: DocGroup; label: string; file: string; note: string }> = [
+  // ---- County employee benefits
+  { slug: 'employee-guide-2027',  group: 'employee', label: '2027 Employee Benefits Guide (Blue Book)',
+    file: '/img/cch/ccc-2027-employee-benefits-guide.pdf',
+    note: 'County-wide 2027 open-enrollment guide: eligibility, medical/dental/vision, FSA, plan comparison charts. Open enrollment Oct 12–30, 2026.' },
+
   // ---- Health-plan coverage (Evidence of Coverage, member handbooks)
   { slug: 'medi-cal-eoc',         group: 'coverage', label: 'Medi-Cal — Evidence of Coverage (2026)',
     file: '/img/cch/medi-cal-eoc-2026.pdf',
@@ -89,7 +95,7 @@ const CCH_DOCS: Array<{ slug: string; group: DocGroup; label: string; file: stri
 ];
 
 // Stable group display order — drives the section headings in render.
-const GROUP_ORDER: DocGroup[] = ['coverage', 'directories', 'pharmacy', 'forms', 'privacy', 'outreach'];
+const GROUP_ORDER: DocGroup[] = ['employee', 'coverage', 'directories', 'pharmacy', 'forms', 'privacy', 'outreach'];
 
 export default function CchDetail({ label, tooltip, data }: Props) {
   const [open, setOpen] = useUrlBool('cch');

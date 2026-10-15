@@ -21,6 +21,7 @@ import QuakesDetail from './QuakesDetail';
 import OutbreaksDetail from './OutbreaksDetail';
 import type { OutbreaksPayload } from '@/lib/outbreaks';
 import CchDetail from './CchDetail';
+import KaiserDetail from './KaiserDetail';
 import type { CchPayload } from '@/lib/cch';
 import TrainsDetail from './TrainsDetail';
 import type { TrainsPayload } from '@/lib/trains';
@@ -176,6 +177,9 @@ export default async function CivicStrip() {
   const cchTooltip = cch?.general?.overallRating
     ? `CCRMC CMS overall rating: ${cch.general.overallRating}/5 ★. Click for scorecards + CCHS docs.`
     : 'Contra Costa Health — CCRMC scorecards (CMS Hospital Compare) + reference docs.';
+  // Kaiser Permanente — County employee plan comparison + plan documents (static).
+  const kaiserLabelHtml = `<span class="civic-strip-val dodger">Kaiser</span>`;
+  const kaiserTooltip = 'Kaiser Permanente plans for County employees (2027): plan comparison, open enrollment, plan documents.';
   // Amtrak — MTZ arrivals + departures (railrat.net, refreshed 15min).
   const trainsLabelHtml = `<span class="civic-strip-val dodger">Trains</span>`;
   const trainsTooltip = trains
@@ -240,6 +244,7 @@ export default async function CivicStrip() {
         housing={housing}
       />
       <CchDetail     tooltip={cchTooltip}     label={cchLabelHtml}     data={cch} />
+      <KaiserDetail  tooltip={kaiserTooltip}  label={kaiserLabelHtml} />
       <RecallsDetail
         tooltip={recallsTooltip}
         label={recallsLabelHtml}
