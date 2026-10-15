@@ -11,7 +11,7 @@
 /* --- Tokens ------------------------------------------------------------- */
 
 :root {
-  --bg:           #070707;
+  --bg:           #000;
   --bg-elev:      #0d0d0d;
   --bg-elev-2:    #1a1a1a;
   --border:       #222;
@@ -27,9 +27,9 @@
   --link:         cornflowerblue;
   --link-hover:   #fff;
   --hdr-h:        56px;
-  --strip-h:      28px;
-  --row2-h:       26px;
-  --civic-h:      24px;
+  --strip-h:      24px;
+  --row2-h:       22px;
+  --civic-h:      20px;
   --top-stack-h:  calc(var(--strip-h) + var(--row2-h) + var(--civic-h));
   --ftr-h:        20px;
   --maxw:         1400px;
