@@ -106,11 +106,17 @@ function rollForward(y: number, m: number, d: number, h: number, mn: number, yea
   return ts;
 }
 
+// Failures from the current scrape run, surfaced via getScrapeLog() so the
+// cron job can persist them (Railway logs aren't always at hand).
+let scrapeLog: string[] = [];
+export function getScrapeLog(): string[] { return scrapeLog; }
+
 async function safeFetch(url: string, init?: RequestInit): Promise<string | null> {
   try {
     const r = await fetch(url, { ...init, headers: { ...COMMON_HEADERS, ...(init?.headers || {}) }, cache: 'no-store' });
     if (!r.ok) {
       console.warn(`[scrape] ${url} → ${r.status}`);
+      scrapeLog.push(`${r.status} ${url.slice(0, 110)}`);
       return null;
     }
     return await r.text();
@@ -123,6 +129,7 @@ async function safeFetch(url: string, init?: RequestInit): Promise<string | null
       ? ` (cause: ${(e.cause as Error)?.message ?? String(e.cause)})`
       : '';
     console.warn(`[scrape] ${url} threw: ${msg}${cause}`);
+    scrapeLog.push(`threw ${url.slice(0, 90)}: ${msg}${cause}`.slice(0, 220));
     return null;
   }
 }
@@ -1381,6 +1388,7 @@ const SCRAPERS: Array<[string, () => Promise<LocalEvent[]>]> = [
 ];
 
 export async function scrapeAllLocalEvents(): Promise<LocalEvent[]> {
+  scrapeLog = [];
   const results = await Promise.all(
     SCRAPERS.map(async ([name, fn]) => {
       try {
@@ -1401,6 +1409,7 @@ export async function scrapeAllLocalEvents(): Promise<LocalEvent[]> {
     .sort()
     .join(' ');
   console.log(`[scrape] local_events counts: ${summary}`);
+  scrapeLog.unshift(`counts: ${summary}`);
   const flat = results.flatMap((r) => r.events);
   // Drop past events (>6h ago), dedupe by id, sort ascending by start.
   const cutoff = Math.floor(Date.now() / 1000) - 6 * 3600;

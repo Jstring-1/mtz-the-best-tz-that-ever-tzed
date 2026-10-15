@@ -436,6 +436,9 @@ async function localEvents(json: Record<string, unknown>) {
   const { scrapeAllLocalEvents } = await import('./scrape-events');
   const events = await scrapeAllLocalEvents();
   json['local_events'] = events;
+  // Per-scraper counts + HTTP failures from this run, for /admin debugging.
+  const { getScrapeLog } = await import('./scrape-events');
+  json['local_events_diag'] = { at: new Date().toISOString(), log: getScrapeLog().slice(0, 40) };
   // Housekeeping: purge any Del Cielo Livermore-location entries that
   // were stored before the LVM filter landed. Scraper now drops them,
   // so they'd otherwise sit until their end_at aged past 90 days.
