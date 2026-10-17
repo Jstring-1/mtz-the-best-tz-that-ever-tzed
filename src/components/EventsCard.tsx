@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import Modal from './Modal';
 import MiniMap from './MiniMap';
-import { useUrlEnum, useUrlString } from '@/lib/useUrlState';
+import { useUrlBool, useUrlEnum, useUrlString } from '@/lib/useUrlState';
 
 // Unified event row used inside the card. We convert both Ticketmaster
 // events and locally-scraped venue events into this shape in page.tsx.
@@ -42,6 +42,13 @@ function segGroup(seg?: string, genre?: string): Exclude<RegFilter, 'all'> | 'ot
   return 'other';
 }
 
+// Standing jams and open mics: the generated recurring listings, plus any
+// other event whose title says so (Luigi's open mic, Campbell Theater's, etc.).
+const JAM_RE = /\b(open mic|jam|karaoke|songbird|sing-?along)\b/i;
+function isJam(e: UEvent): boolean {
+  return e.id.startsWith('local-openmic-') || JAM_RE.test(e.title);
+}
+
 const EVENT_TABS = ['local', 'regional', 'municipal'] as const;
 const EVENT_FILTERS = ['all', 'music', 'stage', 'comedy', 'sports'] as const;
 
@@ -49,6 +56,7 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
   const [tab, setTab] = useUrlEnum<Tab>('etab', EVENT_TABS, 'local');
   const [regFilter, setRegFilter] = useUrlEnum<RegFilter>('efilter', EVENT_FILTERS, 'all');
   const [venue, setVenue] = useUrlString('evenue');
+  const [jamsOnly, setJamsOnly] = useUrlBool('ejam');
   const [eventId, setEventId] = useUrlString('event');
   const open = useMemo(
     () => (eventId ? events.find((e) => e.id === eventId) ?? null : null),
@@ -56,7 +64,9 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
   );
   const setOpen = (e: UEvent | null) => setEventId(e?.id ?? null);
 
-  const local     = events.filter((e) => e.source === 'local');
+  const localAll  = events.filter((e) => e.source === 'local');
+  const jamCount  = localAll.filter(isJam).length;
+  const local     = jamsOnly ? localAll.filter(isJam) : localAll;
   const municipal = events.filter((e) => e.source === 'municipal');
   // Regional tab = Ticketmaster + Foopee (Bay Area punk/indie calendar).
   const regional  = events.filter((e) => e.source === 'ticketmaster' || e.source === 'regional');
@@ -129,8 +139,19 @@ export default function EventsCard({ events, tz }: { events: UEvent[]; tz: strin
           ))}
         </div>
       )}
-      {tab === 'local' && localVenues.length > 1 && (
-        <div className="event-tabs reg-filter" aria-label="Venue filter">
+      {tab === 'local' && (localVenues.length > 1 || jamCount > 0) && (
+        <div className="event-tabs reg-filter" aria-label="Local filters">
+          {jamCount > 0 && (
+            <button
+              type="button"
+              aria-pressed={jamsOnly}
+              className={`event-tab ${jamsOnly ? 'on' : ''}`}
+              onClick={() => setJamsOnly(!jamsOnly)}
+              title="Show only standing jams, open mics and karaoke nights"
+            >
+              Jams &amp; open mics <span className="count">{jamCount}</span>
+            </button>
+          )}
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.72em', color: 'var(--text-muted)' }}>
             Venue:{' '}
             <select
